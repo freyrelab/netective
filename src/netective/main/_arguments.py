@@ -3,7 +3,7 @@ __all__ = ['_parse_arguments']
 import os
 import argparse
 
-from _globals import *
+from netective.utils import concat_path
 
 def _parse_arguments():
 
