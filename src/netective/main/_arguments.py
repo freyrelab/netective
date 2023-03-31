@@ -50,3 +50,4 @@ def _parse_arguments():
     args.output = os.path.abspath(args.output)
 
     return args
+
