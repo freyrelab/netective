@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Utility functions for the netective package."""
 
-__all__ = ['concat_path', 'run_parallel', 'validate_network', 'parse_nets', 'struc_props_call', 'struc_props', 'save_strucs']
+__all__ = ['concat_path', 'run_parallel', 'validate_network', 'parse_nets']
 
 import os
 import networkx as nx

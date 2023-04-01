@@ -1,0 +1,8 @@
+# command: python C:\Users\jmere\Documents\GitHub\FreyreLab\netective\src\netective\cli\netective.py --path ['.\\data\\merenets\\Bacteroid Network S. meliloti 1021.txt', '.\\data\\merenets\\E. coli K12 93 TFs.txt', '.\\data\\merenets\\Free-living Network S. meliloti 1021.txt'] --norm False --comments # --delimiter 	 --output C:\Users\jmere\Documents\GitHub\FreyreLab\netective --output_file structural_properties_merenets_er
+	Density	Regulators	Self regulations	Max. out connectivity	3-Feedback loops	Feedforward circuits	Complex feedforward circuits	Genes in the giant component	Diameter	Average shortest path length	Average clustering coefficient	R^2 C(k)	R^2 P(k)
+Bacteroid Network S. meliloti 1021.txt	0.011344839424487375	357.0	204.0	16.0	24.0	165.0	9.0	357.0	7.0	3.2580020772353886	0.05155652792969714	0.037251132992165314	0.7290478524775772
+Bacteroid Network S. meliloti 1021.txt_ER_avg	0.01143846946100309	354.0	0.0	10.0	25.0	72.0	0.5	358.0	5.0	3.0215091623241475	0.024346862561617715	0.019112316351943937	0.6634781634012682
+Free-living Network S. meliloti 1021.txt	0.006632015073201289	643.0	252.0	23.0	28.0	393.0	5.0	643.0	7.0	3.3617340833224323	0.055377477858762195	0.35714653025908105	0.7165489546680304
+Free-living Network S. meliloti 1021.txt_ER_avg	0.006566710767228848	632.5	0.0	12.0	22.5	74.0	0.0	643.0	6.0	3.270630756335906	0.013342652181974432	0.15168167836361152	0.5970445430650992
+E. coli K12 93 TFs.txt	0.0012586969889101492	2171.0	0.0	14.0	0.0	0.0	0.0	2263.0	8.0	3.5123778401088046	0.0	0.0	0.9512168929036128
+E. coli K12 93 TFs.txt_ER_avg	0.0012982469433869877	2142.0	0.0	11.0	8.5	23.5	0.0	2252.5	8.5	4.578346700941167	0.003017787863159577	-0.1502258270536273	0.6396215082416272
