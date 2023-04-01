@@ -111,7 +111,7 @@ def struc_props(G: DiGraph | nb.RegNet, net_id: str, norm: bool) -> dict[str, fl
     # kc = G.k_clustering(kdir='out')
     # CK = nb.Ck(kc.values())
     # print(net_id, CK.kappa)
-    # props['Kappa'] = round(CK.kappa)
+    # props['Kappa'] = round(CK.kappa) # TODO: # missing = np.nan() con qué remplazar valores que son np.nan() (JF)
 
 
     if norm:
@@ -191,8 +191,8 @@ def struc_props_call(G: DiGraph | nb.RegNet, net_id: str, norm: bool, erdos_reny
         m = G.number_of_edges()
         for i in range(erdos_renyi):
             ER = nb.RegNet(fast_gnp_random_graph(n, m/(n**2), directed=True))
-            _, props = struc_props(ER, f'{net_id}_ER_{i}', norm)
-            for k, v in props.items():
+            _, props_i = struc_props(ER, f'{net_id}_ER_{i}', norm)
+            for k, v in props_i.items():
                 props_er[k].append(v)
             
         props_er_avg = {prop: sum(vals)/len(vals) for prop, vals in props_er.items()}
