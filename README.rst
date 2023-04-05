@@ -1,5 +1,9 @@
 .. image:: ./assets/on_black.png
-    :align: center
+    :align: left
+    :height: 100px
+    :width: 200 px
+    :scale: 50 %
+    :alt: logo
     
 =========
 netective
