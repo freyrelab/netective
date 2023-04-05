@@ -1,7 +1,6 @@
 .. image:: ./assets/on_black.png
     :align: left
-    :height: 10px
-    :width: 20 px
+    :scale: 10 %
     :alt: logo
     
 =========
