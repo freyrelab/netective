@@ -32,7 +32,7 @@ def _max_loops(n:int, r:int, tfs:int ,r_tfs:int) -> int:
 
 
 
-def struc_props(G: DiGraph | nb.RegNet, net_id: str, norm: bool) -> dict[str, float, int]:
+def struc_props(G: DiGraph | nb.RegNet, net_id: str, norm: bool, verbose:bool =False) -> dict[str, float, int]:
 
     """
     Computes the structural properties of a network.
@@ -60,8 +60,9 @@ def struc_props(G: DiGraph | nb.RegNet, net_id: str, norm: bool) -> dict[str, fl
 
     G = validate_network(G)
     
-    print(f'Processing {net_id}...', flush=True)
-    print(f'{net_id} has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.', flush=True)
+    if verbose:
+        print(f'Processing {net_id}...', flush=True)
+        print(f'{net_id} has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.', flush=True)
 
     G.remove_isolates()
     n_genes = len(G)
@@ -116,7 +117,8 @@ def struc_props(G: DiGraph | nb.RegNet, net_id: str, norm: bool) -> dict[str, fl
 
     if norm:
 
-        print(f'norm: {norm}')
+        if verbose:
+            print(f'norm: {norm}')
 
         warn('Normalization for clustering coefficient not implemented yet')
 
@@ -140,14 +142,14 @@ def struc_props(G: DiGraph | nb.RegNet, net_id: str, norm: bool) -> dict[str, fl
             'Average clustering coefficient': props['Average clustering coefficient'],  # TODO: This still needs to be normalized
             'R^2 C(k)': props['R^2 C(k)'],   # already normalized
             'R^2 P(k)': props['R^2 P(k)'],   # already normalized
-            'Kappa': props['Kappa']/n_genes,    #  Kapa over the k/kmax space
+            # 'Kappa': props['Kappa']/n_genes,    #  Kapa over the k/kmax space
         }
     
         props = props_n
     
     return net_id, props
 
-def struc_props_call(G: DiGraph | nb.RegNet, net_id: str, norm: bool, erdos_renyi: int) -> list(tuple(str, dict)):
+def struc_props_call(G: DiGraph | nb.RegNet, net_id: str, norm: bool, erdos_renyi: int, verbose:bool = False) -> list(tuple(str, dict)):
 
     """
     Call the function struc_props with erdos_renyi random graphs with the same number of nodes and edges as G.

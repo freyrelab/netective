@@ -16,6 +16,7 @@ def _parse_arguments():
     parser.add_argument('--erdos_renyi', metavar='erdos_renyi', type=int, default=1000, help='number of Erdos-Renyi networks to generate for each network, default is 1000')
     parser.add_argument('--output', metavar='output', type=str, default=os.getcwd(), help='path to output directory, default is current directory')
     parser.add_argument('--output_file', metavar='output_file', type=str, default='structural_properties', help='name of output file, default is structural_properties')
+    parser.add_argument('--verbose', metavar='verbose', type=bool, default=False, help='whether to print progress, default is False')
 
     # TODO: https://stackoverflow.com/questions/52403065/argparse-optional-boolean implement
 
