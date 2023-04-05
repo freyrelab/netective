@@ -2,7 +2,6 @@
     :align: left
     :height: 10px
     :width: 20 px
-    :scale: 50 %
     :alt: logo
     
 =========
