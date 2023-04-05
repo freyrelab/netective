@@ -1,8 +1,8 @@
 .. image:: ./assets/on_black.png
-    :align: right
     :height: 100px
     :width: 97.379 px
     :alt: logo
+    :align: right
     
 =========
 netective
