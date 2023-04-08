@@ -1,6 +1,9 @@
-=========
-netective
-=========
+.. image:: ./assets/on_black.png
+    :height: 100px
+    :width: 97.379 px
+    :alt: netective logo
+    :align: right
+    
 
 Use structural and standard performance metrics to assess network inference
 
