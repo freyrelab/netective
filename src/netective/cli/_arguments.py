@@ -9,7 +9,7 @@ def _parse_arguments():
 
     parser = argparse.ArgumentParser(description='Assess the topology of a network with respect to other networks.')
 
-    parser.add_argument('--norm', metavar='norm', type=bool, default=False, help='whether to normalize structural properties, default is False')
+    parser.add_argument('--norm', metavar='norm', type=bool, default='biol', help='whether to normalize structural properties, default is biological normalization (biol)')
     parser.add_argument('--comments', metavar='comments', type=str, default='#', help='character used to indicate comments in the network file(s)')
     parser.add_argument('--delimiter', metavar='delimiter', type=str, default='\\t', help='character used to separate columns in the network file(s)')
     parser.add_argument('--workers', metavar='workers', type=int, default=1, help='number of workers to use, default is 1')
