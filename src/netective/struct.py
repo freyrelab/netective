@@ -81,7 +81,7 @@ class Structure(pd.Series):
         """
 
         super().__init__()      # DataFrame.__init__(self)
-        self.G = G
+        self.G = validate_network(G)    # network to compute the structural properties
         self.G_hash = None   # hash of the network to detect changes. None means that the properties have not been computed yet.
         self._norm = norm       # flag for scale factors
         self.verbose = verbose
@@ -128,7 +128,7 @@ class Structure(pd.Series):
         
         return self._props
 
-    def commpute_props(self) -> dict[str, float, int]:
+    def compute_props(self) -> dict[str, float, int]:
 
         """
         Computes the structural properties of a network.
@@ -143,13 +143,7 @@ class Structure(pd.Series):
 
         Returns:
             dict: Dictionary with the structural properties of the network.
-        
-        Raises:
-            TypeError: If G is not a DiGraph or a RegNet.
-            ValueError: If G has no edges.
         """
-
-        self.G = validate_network(self.G)
         
         if self.verbose:
             print(f'Processing {self.net_id}...', flush=True)
@@ -204,9 +198,14 @@ class Structure(pd.Series):
         kc = self.G.k_clustering(kdir='out')
         try:
             CK = nb.Ck(kc.values())
-            props['Kappa'] = round(CK.kappa)
+            if not np.isnan(CK.kappa):
+                props['Kappa'] = round(CK.kappa)
+            else:
+                props['Kappa'] = np.nan
         except ValueError:
-            warn(f'Kappa for {self.net_id}: {set(list(zip(*kc.values()))[1])}, cannot be calculated due to its non-hierarchical structure.')
+            print(self.net_id)
+            warn(f'Kappa for {self.net_id} cannot be calculated due to its non-hierarchical structure.')
+            # print(set(list(zip(*kc.values()))[1]))
             props['Kappa'] = np.nan
         
         props = pd.Series(props)
@@ -216,11 +215,15 @@ class Structure(pd.Series):
 
             if self.verbose:
                 print('Normalizing...', flush=True)
-
-            if _norm == 'biol':
-                _norm = self._bio_scale(props, n_genes)
             
-            props = props.multiply(_norm, fill_value=np.nan) # missing values are reported as NaN (non desired properties)
+            available_norms = ['biol']
+            if not isinstance(self._norm, (dict, pd.Series)) and self._norm not in available_norms:
+                raise ValueError(f'Normalization factor {self._norm} not recognized.')
+
+            if self._norm == 'biol':
+                self._norm = self._bio_scale(props)
+            
+            props = props.multiply(self._norm, fill_value=np.nan) # missing values are reported as NaN (non desired properties)
 
         return props
 
@@ -268,7 +271,13 @@ class Structure(pd.Series):
         return pd.Series(scalling_f)
 
 
-def struc_props_call(G: DiGraph | nb.RegNet, net_id: str, norm: bool, erdos_renyi: int, verbose:bool = False) -> list(tuple(str, dict)):
+def struc_props_call(
+        G: DiGraph | nb.RegNet,
+        net_id: str,
+        norm: None|str|dict[str, float],
+        erdos_renyi: int,
+        verbose:bool = False
+        ) -> list(tuple(str, dict)):
 
     """
     Call the function struc_props with erdos_renyi random graphs with the same number of nodes and edges as G.

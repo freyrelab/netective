@@ -97,8 +97,8 @@ def parse_nets(paths: list[str], comments: str='#', delimiter: str='\t') -> dict
             comments=comments,
             delimiter=delimiter,
             create_using=nx.DiGraph,
-            data=False,
-            encoding='utf-8'
+            data=False
+            # encoding='utf-8'
             )
 
     return networks
