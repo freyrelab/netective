@@ -38,7 +38,7 @@ class Structure(pd.Series):
     def __init__(
             self,
             G: DiGraph | nb.RegNet,
-            norm: None|str|dict[str, float]= None,
+            norm: None|str|pd.Series= None,
             net_id: str=None,
             verbose: bool=False,
             ):
@@ -55,7 +55,7 @@ class Structure(pd.Series):
         Args:
             G: DiGraph or RegNet.
                 Network to compute the structural properties.
-            norm: None|str|dict[str, float].
+            norm: None|str|pd.Series.
                 Normalization factor for each property.
                 Use None to disable normalization.
                 Use 'biol' to normalize by the biological scale factors.
@@ -84,28 +84,29 @@ class Structure(pd.Series):
         self.G = validate_network(G)    # network to compute the structural properties
         self.G_hash = None   # hash of the network to detect changes. None means that the properties have not been computed yet.
         self._norm = norm       # flag for scale factors
+        self._norm_hash = hash(norm)    # hash of the scale factors to detect a different normalization
         self.verbose = verbose
         self.net_id = net_id if net_id is not None else str(uuid.uuid4())
 
     
     @property
-    def norm(self) -> None|str|dict[str, float]:
+    def norm(self) -> None|str|pd.Series:
         """
         Normalization factor for each property.
 
         Returns:
-            None|str|dict[str, float]: Normalization factor for each property.
+            None|str|pd.Series: Normalization factor for each property.
         """
         return self._norm
     
     @norm.setter
-    def norm(self, norm: None|str|dict[str, float]):
+    def norm(self, norm: None|str|pd.Series):
         """
         Modifies the normalization factor for each property.
         Future calls to get_props() will use the new normalization factor.
 
         Args:
-            norm: None|str|dict[str, float].
+            norm: None|str|pd.Series.
                 Normalization factor for each property.
                 Use None to disable normalization.
                 Use 'biol' to normalize by the biological scale factors.
@@ -113,6 +114,7 @@ class Structure(pd.Series):
                 Missing properties are reported as NaN.
         """
         self._norm = norm
+        self._norm_hash = hash(norm)
 
     def get_props(self) -> pd.Series:
         """
@@ -122,7 +124,7 @@ class Structure(pd.Series):
             pd.Series: Series with the structural properties of the network.
         """
         # Compute the properties if they have not been computed yet or if the network has changed
-        if self.G_hash is None or hash(self.G) != self.G_hash:
+        if (self.G_hash is None or hash(self.G) != self.G_hash) or (hash(self._norm) != self._norm_hash):
             self._props = self.compute_props()
             self.G_hash = hash(self.G)
         
@@ -136,7 +138,7 @@ class Structure(pd.Series):
         Args:
             G: DiGraph or RegNet.
                 Network to compute the structural properties.
-            norm: None|str|dict[str, float].
+            norm: None|str|pd.Series.
                 Normalization factor for each property.
             net_id: str.
                 Name of the network. If None, a random uuid is assigned.
@@ -150,7 +152,6 @@ class Structure(pd.Series):
             print(f'{self.net_id} has {self.G.number_of_nodes()} nodes and {self.G.number_of_edges()} edges.', flush=True)
 
         self.G.remove_isolates()
-        n_genes = len(self.G)
         props = {}
         
         props['Density'] = self.G.density
@@ -211,13 +212,13 @@ class Structure(pd.Series):
         props = pd.Series(props)
         
         # Normalization
-        if self._norm:
+        if self._norm: #//TODO: check if self._norm is None
 
             if self.verbose:
                 print('Normalizing...', flush=True)
             
             available_norms = ['biol']
-            if not isinstance(self._norm, (dict, pd.Series)) and self._norm not in available_norms:
+            if not isinstance(self._norm, pd.Series) and self._norm not in available_norms:
                 raise ValueError(f'Normalization factor {self._norm} not recognized.')
 
             if self._norm == 'biol':
@@ -274,7 +275,7 @@ class Structure(pd.Series):
 def struc_props_call(
         G: DiGraph | nb.RegNet,
         net_id: str,
-        norm: None|str|dict[str, float],
+        norm: None|str|pd.Series,
         erdos_renyi: int,
         verbose:bool = False
         ) -> list(tuple(str, dict)):
