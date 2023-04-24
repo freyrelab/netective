@@ -1,0 +1,25 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+#exclude: 'tree.txt'
+exclude: '^docs|^tree|cache|^experimental'
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+-   repo: https://github.com/psf/black
+    rev: 22.3.0
+    hooks:
+    -   id: black
+-   repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.9.0  # Use the ref you want to point at
+    hooks:
+    #-   id: python-use-type-annotations
+    -   id: rst-backticks
+    -   id: rst-directive-colons
+    -   id: rst-inline-touching-normal
+    -   id: text-unicode-replacement-char
+    -   id: python-no-eval

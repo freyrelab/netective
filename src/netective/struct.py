@@ -13,7 +13,7 @@ import netbiol3 as nb
 from netective.utils import *
 
 
-def _max_loops(n:int, r:int, tfs:int ,r_tfs:int) -> int:
+def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
     """
     Computes the maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
 
@@ -22,27 +22,26 @@ def _max_loops(n:int, r:int, tfs:int ,r_tfs:int) -> int:
         r = number of elements in the motif
         tfs = number of TFs in the network
         r_tfs = number of TFs in the motif
-    
+
     Returns:
         int: maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
     """
-    putative = math.factorial(n) / math.factorial(n-r)
+    putative = math.factorial(n) / math.factorial(n - r)
     # fraccion de TFs al cuadrado para feed forward (el expoente es el numero de TFs en el motivo)
-    putative = putative * ( (tfs/n)**r_tfs )
-    
+    putative = putative * ((tfs / n) ** r_tfs)
+
     return putative
 
 
 class Structure(pd.Series):
-    
     def __init__(
-            self,
-            G: DiGraph | nb.RegNet,
-            norm: None|str|pd.Series= None,
-            net_id: str=None,
-            verbose: bool=False,
-            ):
-        
+        self,
+        G: DiGraph | nb.RegNet,
+        norm: None | str | pd.Series = None,
+        net_id: str = None,
+        verbose: bool = False,
+    ):
+
         """
         Object to compute, normalize, and store the structural properties of a network.
         Structure inherits from pandas.Series.
@@ -80,17 +79,18 @@ class Structure(pd.Series):
             >>> S.get_props()   # returns a Series object with the structural properties normalized by the biological scale factors
         """
 
-        super().__init__()      # DataFrame.__init__(self)
-        self.G = validate_network(G)    # network to compute the structural properties
-        self.G_hash = None   # hash of the network to detect changes. None means that the properties have not been computed yet.
-        self._norm = norm       # flag for scale factors
-        self._norm_hash = hash(norm)    # hash of the scale factors to detect a different normalization
+        super().__init__()  # DataFrame.__init__(self)
+        self.G = validate_network(G)  # network to compute the structural properties
+        self.G_hash = None  # hash of the network to detect changes. None means that the properties have not been computed yet.
+        self._norm = norm  # flag for scale factors
+        self._norm_hash = hash(
+            norm
+        )  # hash of the scale factors to detect a different normalization
         self.verbose = verbose
         self.net_id = net_id if net_id is not None else str(uuid.uuid4())
 
-    
     @property
-    def norm(self) -> None|str|pd.Series:
+    def norm(self) -> None | str | pd.Series:
         """
         Normalization factor for each property.
 
@@ -98,9 +98,9 @@ class Structure(pd.Series):
             None|str|pd.Series: Normalization factor for each property.
         """
         return self._norm
-    
+
     @norm.setter
-    def norm(self, norm: None|str|pd.Series):
+    def norm(self, norm: None | str | pd.Series):
         """
         Modifies the normalization factor for each property.
         Future calls to get_props() will use the new normalization factor.
@@ -124,10 +124,12 @@ class Structure(pd.Series):
             pd.Series: Series with the structural properties of the network.
         """
         # Compute the properties if they have not been computed yet or if the network has changed
-        if (self.G_hash is None or hash(self.G) != self.G_hash) or (hash(self._norm) != self._norm_hash):
+        if (self.G_hash is None or hash(self.G) != self.G_hash) or (
+            hash(self._norm) != self._norm_hash
+        ):
             self._props = self.compute_props()
             self.G_hash = hash(self.G)
-        
+
         return self._props
 
     def compute_props(self) -> dict[str, float, int]:
@@ -146,139 +148,160 @@ class Structure(pd.Series):
         Returns:
             dict: Dictionary with the structural properties of the network.
         """
-        
+
         if self.verbose:
-            print(f'Processing {self.net_id}...', flush=True)
-            print(f'{self.net_id} has {self.G.number_of_nodes()} nodes and {self.G.number_of_edges()} edges.', flush=True)
+            print(f"Processing {self.net_id}...", flush=True)
+            print(
+                f"{self.net_id} has {self.G.number_of_nodes()} nodes and {self.G.number_of_edges()} edges.",
+                flush=True,
+            )
 
         self.G.remove_isolates()
         props = {}
-        
-        props['Density'] = self.G.density
-        props['Regulators'] = self.G.regulators_count
-        props['Self regulations'] = self.G.selfinteractions_count
-        props['Max. out connectivity'] = self.G.kout_max
-        
+
+        props["Density"] = self.G.density
+        props["Regulators"] = self.G.regulators_count
+        props["Self regulations"] = self.G.selfinteractions_count
+        props["Max. out connectivity"] = self.G.kout_max
+
         # in-place
         self.G.remove_selfinteractions()
         self.G.remove_isolates()
-        
-        # Props without selfloops
-        props['3-Feedback loops'] = self.G.feedbacks3_count
-        props['Feedforward circuits'] = self.G.feedforwards_count
-        props['Complex feedforward circuits'] = self.G.complex_feedforwards_count
-        props['Genes in the giant component'] = self.G.giant_component_size
-        
 
-        props['Diameter'] = self.G.diameter()
-        props['Average shortest path length'] = self.G.average_path_length()
-        props['Average clustering coefficient'] = self.G.average_clustering_coefficient
-        
-        
+        # Props without selfloops
+        props["3-Feedback loops"] = self.G.feedbacks3_count
+        props["Feedforward circuits"] = self.G.feedforwards_count
+        props["Complex feedforward circuits"] = self.G.complex_feedforwards_count
+        props["Genes in the giant component"] = self.G.giant_component_size
+
+        props["Diameter"] = self.G.diameter()
+        props["Average shortest path length"] = self.G.average_path_length()
+        props["Average clustering coefficient"] = self.G.average_clustering_coefficient
+
         # C(k)
         kc = self.G.k_clustering()
 
         try:
             CK = nb.Ck(kc.values())
-            props['R^2 C(k)'] = CK.rsquared_adj
+            props["R^2 C(k)"] = CK.rsquared_adj
         except ValueError:
-            warn(f'Clusterings for {self.net_id}: {set(list(zip(*kc.values()))[1])}, cannot be fitted to a power law.')
-            props['R^2 C(k)'] = np.nan
-        
+            warn(
+                f"Clusterings for {self.net_id}: {set(list(zip(*kc.values()))[1])}, cannot be fitted to a power law."
+            )
+            props["R^2 C(k)"] = np.nan
+
         # P(k)
         k, _ = zip(*kc.values())
 
         try:
             PK = nb.Pk(k)
-            props['R^2 P(k)'] = PK.rsquared_adj
+            props["R^2 P(k)"] = PK.rsquared_adj
         except ValueError:
-            warn(f'Degrees for {self.net_id}: {set(list(zip(*kc.values()))[1])}, cannot be fitted to a power law.')
-            props['R^2 P(k)'] = np.nan
-        
+            warn(
+                f"Degrees for {self.net_id}: {set(list(zip(*kc.values()))[1])}, cannot be fitted to a power law."
+            )
+            props["R^2 P(k)"] = np.nan
+
         # Kappa value
-        kc = self.G.k_clustering(kdir='out')
+        kc = self.G.k_clustering(kdir="out")
         try:
             CK = nb.Ck(kc.values())
             if not np.isnan(CK.kappa):
-                props['Kappa'] = round(CK.kappa)
+                props["Kappa"] = round(CK.kappa)
             else:
-                props['Kappa'] = np.nan
+                props["Kappa"] = np.nan
         except ValueError:
             print(self.net_id)
-            warn(f'Kappa for {self.net_id} cannot be calculated due to its non-hierarchical structure.')
+            warn(
+                f"Kappa for {self.net_id} cannot be calculated due to its non-hierarchical structure."
+            )
             # print(set(list(zip(*kc.values()))[1]))
-            props['Kappa'] = np.nan
-        
+            props["Kappa"] = np.nan
+
         props = pd.Series(props)
-        
+
         # Normalization
-        if self._norm: #//TODO: check if self._norm is None
+        if self._norm:  # //TODO: check if self._norm is None
 
             if self.verbose:
-                print('Normalizing...', flush=True)
-            
-            available_norms = ['biol']
-            if not isinstance(self._norm, pd.Series) and self._norm not in available_norms:
-                raise ValueError(f'Normalization factor {self._norm} not recognized.')
+                print("Normalizing...", flush=True)
 
-            if self._norm == 'biol':
+            available_norms = ["biol"]
+            if (
+                not isinstance(self._norm, pd.Series)
+                and self._norm not in available_norms
+            ):
+                raise ValueError(f"Normalization factor {self._norm} not recognized.")
+
+            if self._norm == "biol":
                 self._norm = self._bio_scale(props)
-            
-            props = props.multiply(self._norm, fill_value=np.nan) # missing values are reported as NaN (non desired properties)
+
+            props = props.multiply(
+                self._norm, fill_value=np.nan
+            )  # missing values are reported as NaN (non desired properties)
 
         return props
 
-    
     def _bio_scale(self, props: pd.Series) -> pd.Series:
-        
+
         """
         USe the biological maximum theoretical values as scale factors."
-        
+
         Args:
             props: pd.Series.
                 Structural properties of the network.
             G: DiGraph or RegNet.
                 Network to compute the structural properties.
-                
+
         Returns:
             pd.Series: Scale factors for each property.
         """
 
-        warn('Normalization for clustering coefficient not implemented yet')
+        warn("Normalization for clustering coefficient not implemented yet")
 
         n_genes = self.G.number_of_nodes()
-        tfs = props['Regulators']
+        tfs = props["Regulators"]
         max_3tfs_loop = _max_loops(n=n_genes, r=3, tfs=tfs, r_tfs=3)
         max_2tfs_loop = _max_loops(n=n_genes, r=3, tfs=tfs, r_tfs=2)
-        largest_putative_path = props['Genes in the giant component']-1
+        largest_putative_path = props["Genes in the giant component"] - 1
 
         scalling_f = {
-            'Density': (n_genes/tfs),        # equivalent to E / (n**2 * (tfs/n)) # TODO: corrects previous mistake: G.density * (G.regulators_count / nGenes) << 1
-            'Regulators': 1/n_genes,                        # fraction of nodes that are regulators
-            'Self regulations': 1/tfs,  # fraction of regulators that self-regulate
-            'Max. out connectivity': 1/n_genes,        # fraction of nodes that are regulated by the most hub
-            '3-Feedback loops': 1/max_3tfs_loop,          # fraction of possible 3-feedback loops
-            'Feedforward circuits': 1/max_2tfs_loop,  # fraction of possible feedforward circuits
-            'Complex feedforward circuits': 1/max_2tfs_loop,  # fraction of possible complex feedforward circuits A->B->C, A->C, B->A
-            'Genes in the giant component': 1/n_genes,        # fraction of nodes in the giant component
-            'Diameter': 1 / largest_putative_path,                  # denominator is equivalent to (n-2+1) for the nodes in the giant component. n-2 (excluding sorce and target nodes) + 1 (we are coiunting edges). # TODO: corrects previous mistake: props['Diameter'] / (n_genes-2) 
-            'Average shortest path length': 1/largest_putative_path,  # denominator is equivalent to (n-2+1) for the nodes in the giant component. # TODO corrects previous mistake: / (n_genes-2) 
-            'Average clustering coefficient': 1,  # TODO: This still needs to be normalized
-            'R^2 C(k)':  1,   # already normalized
-            'R^2 P(k)': 1,   # already normalized
-            'Kappa': 1/n_genes,  # fraction of nodes that are regulated by the most hub
+            "Density": (
+                n_genes / tfs
+            ),  # equivalent to E / (n**2 * (tfs/n)) # TODO: corrects previous mistake: G.density * (G.regulators_count / nGenes) << 1
+            "Regulators": 1 / n_genes,  # fraction of nodes that are regulators
+            "Self regulations": 1 / tfs,  # fraction of regulators that self-regulate
+            "Max. out connectivity": 1
+            / n_genes,  # fraction of nodes that are regulated by the most hub
+            "3-Feedback loops": 1
+            / max_3tfs_loop,  # fraction of possible 3-feedback loops
+            "Feedforward circuits": 1
+            / max_2tfs_loop,  # fraction of possible feedforward circuits
+            "Complex feedforward circuits": 1
+            / max_2tfs_loop,  # fraction of possible complex feedforward circuits A->B->C, A->C, B->A
+            "Genes in the giant component": 1
+            / n_genes,  # fraction of nodes in the giant component
+            "Diameter": 1
+            / largest_putative_path,  # denominator is equivalent to (n-2+1) for the nodes in the giant component. n-2 (excluding sorce and target nodes) + 1 (we are coiunting edges). # TODO: corrects previous mistake: props['Diameter'] / (n_genes-2)
+            "Average shortest path length": 1
+            / largest_putative_path,  # denominator is equivalent to (n-2+1) for the nodes in the giant component. # TODO corrects previous mistake: / (n_genes-2)
+            "Average clustering coefficient": 1,  # TODO: This still needs to be normalized
+            "R^2 C(k)": 1,  # already normalized
+            "R^2 P(k)": 1,  # already normalized
+            "Kappa": 1
+            / n_genes,  # fraction of nodes that are regulated by the most hub
         }
 
         return pd.Series(scalling_f)
 
 
 def struc_props_call(
-        G: DiGraph | nb.RegNet,
-        net_id: str,
-        norm: None|str|pd.Series,
-        erdos_renyi: int,
-        verbose:bool = False
-        ) -> list(tuple(str, dict)):
+    G: DiGraph | nb.RegNet,
+    net_id: str,
+    norm: None | str | pd.Series,
+    erdos_renyi: int,
+    verbose: bool = False,
+) -> list(tuple(str, dict)):
 
     """
     Call the function struc_props with erdos_renyi random graphs with the same number of nodes and edges as G.
@@ -302,18 +325,16 @@ def struc_props_call(
         ValueError: if erdos_renyi is less than 0.
     """
 
-
-    
     S_bio = Structure(G, norm=norm, net_id=net_id, verbose=verbose)
     props = S_bio.get_props()
 
-    if erdos_renyi<0:
-        raise ValueError('erdos_renyi must be 0 or greater')
-    
-    elif erdos_renyi==0:
+    if erdos_renyi < 0:
+        raise ValueError("erdos_renyi must be 0 or greater")
+
+    elif erdos_renyi == 0:
         netid_props = [(net_id, props)]
-        
-    else:  
+
+    else:
         from collections import defaultdict
         from networkx import fast_gnp_random_graph
 
@@ -321,26 +342,27 @@ def struc_props_call(
         n = G.number_of_nodes()
         m = G.number_of_edges()
         for i in range(erdos_renyi):
-            ER = nb.RegNet(fast_gnp_random_graph(n, m/(n**2), directed=True))
-            S_er = Structure(ER, norm=norm, net_id=f'{net_id}_ER_{i}', verbose=verbose)
+            ER = nb.RegNet(fast_gnp_random_graph(n, m / (n**2), directed=True))
+            S_er = Structure(ER, norm=norm, net_id=f"{net_id}_ER_{i}", verbose=verbose)
             props_i = S_er.get_props()
             for k, v in props_i.items():
                 props_er[k].append(v)
-        
+
         # TODO: here you can make it robust to a threshold of nan values
-        props_er_avg = {prop: sum(vals)/len(vals) for prop, vals in props_er.items()}
-        netid_props = [(net_id, props), (f'{net_id}_ER_avg', props_er_avg)]
+        props_er_avg = {prop: sum(vals) / len(vals) for prop, vals in props_er.items()}
+        netid_props = [(net_id, props), (f"{net_id}_ER_avg", props_er_avg)]
 
     return netid_props
 
+
 def save_strucs(
-        df: pd.Series | pd.DataFrame,
-        output: str=os.getcwd(),
-        delimiter: str='\t',
-        cl: str=None,
-        output_file: str='structural_properties'
-        ) -> None:
-    
+    df: pd.Series | pd.DataFrame,
+    output: str = os.getcwd(),
+    delimiter: str = "\t",
+    cl: str = None,
+    output_file: str = "structural_properties",
+) -> None:
+
     """
     Save the structural properties in a file.
 
@@ -360,15 +382,15 @@ def save_strucs(
         None.
     """
 
-    exts = {',' : 'csv', '\t' : 'tsv'}
-    ext = exts.get(delimiter, 'txt')
-    file_p = concat_path(output, f'{output_file}.{ext}')
+    exts = {",": "csv", "\t": "tsv"}
+    ext = exts.get(delimiter, "txt")
+    file_p = concat_path(output, f"{output_file}.{ext}")
 
     # save output
     # rewrite file if it exists
-    with open(file_p, 'w') as f:
+    with open(file_p, "w") as f:
         # save command line
         print(cl, file=f)
-    
+
     # save structural properties
-    df.to_csv(file_p, sep=delimiter, mode='a')
+    df.to_csv(file_p, sep=delimiter, mode="a")

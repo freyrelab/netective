@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Utility functions for the netective package."""
 
-__all__ = ['concat_path', 'run_parallel', 'validate_network', 'parse_nets']
+__all__ = ["concat_path", "run_parallel", "validate_network", "parse_nets"]
 
 import os
 import networkx as nx
@@ -12,7 +12,6 @@ import concurrent.futures
 import netbiol3 as nb
 
 concat_path = os.path.join
-
 
 
 def run_parallel(f, my_iter, workers):
@@ -28,7 +27,7 @@ def run_parallel(f, my_iter, workers):
         Iterable with the inputs fot f.
         Each element of iterable will be unzipped before calling f.
     workers: Numer of processes to run in parallel.
-    
+
     Returns
     -------
     Results: zip object.
@@ -40,7 +39,7 @@ def run_parallel(f, my_iter, workers):
         with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
             futures = {}
             for arg in zip(*my_iter):
-                futures[executor.submit(f, *arg)] = arg[0] # arg[0] is the net_name
+                futures[executor.submit(f, *arg)] = arg[0]  # arg[0] is the net_name
 
             results = []
             for future in concurrent.futures.as_completed(futures):
@@ -49,25 +48,26 @@ def run_parallel(f, my_iter, workers):
 
     return results
 
+
 def validate_network(G: nx.DiGraph | nb.RegNet) -> nb.RegNet:
     """Validates the network and returns a RegNet object."""
     if isinstance(G, nx.DiGraph):
         G = nb.RegNet(G)
     elif not isinstance(G, nb.RegNet):
-        raise TypeError('G must be a DiGraph or a RegNet')
+        raise TypeError("G must be a DiGraph or a RegNet")
     if G.size() == 0:
-        raise ValueError(f'G must have at least one edge. It has {G.size()} edges.')
+        raise ValueError(f"G must have at least one edge. It has {G.size()} edges.")
     return G
 
 
-def parse_nets(paths: list[str], comments: str='#', delimiter: str='\t') -> dict:
+def parse_nets(paths: list[str], comments: str = "#", delimiter: str = "\t") -> dict:
 
     """Reads network files and returns a dictionary of networkx.DiGraphs.
 
     Firts column of the network file is considered as the source node and the
     second column is considered as the target node. The network file must be
     delimited by a tab character.
-    
+
     Args:
         paths (list[str]): List of paths to network files.
         comments (str, optional): Comment character. Defaults to '#'.
@@ -88,7 +88,7 @@ def parse_nets(paths: list[str], comments: str='#', delimiter: str='\t') -> dict
     networks = {}
 
     for net_path in paths:
-                    
+
         net_name = os.path.basename(net_path)
 
         # read network file (only DiGraphs with no metadata are supported)
@@ -99,8 +99,6 @@ def parse_nets(paths: list[str], comments: str='#', delimiter: str='\t') -> dict
             create_using=nx.DiGraph,
             data=False
             # encoding='utf-8'
-            )
+        )
 
     return networks
-
-
