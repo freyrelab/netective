@@ -1,0 +1,10 @@
+
+[cov]
+pytest<5.0.0
+pytest-cov[all]
+
+[lint]
+black
+
+[test]
+pytest

@@ -19,8 +19,17 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+test = ["pytest"]
+lint = [ "black"]
+cov = ["pytest < 5.0.0", "pytest-cov[all]"]
+
 [project.urls]
 "Homepage" = "https://github.com/JuanEscorcia/netective.git"
 
 [project.scripts]
 netective = "netective.cli.netective:main"
+
+[tool.pytest.ini_options]
+addopts = "--cov=netective"
+testpaths = ["tests"]

@@ -80,6 +80,7 @@ class Structure(pd.Series):
         """
 
         super().__init__()  # DataFrame.__init__(self)
+        print(net_id)
         self.G = validate_network(
             G
         )  # network to compute the structural properties
@@ -246,7 +247,7 @@ class Structure(pd.Series):
         kc = self.G.k_clustering()  # {node: (k, c)}
 
         CK = nb.Ck(kc.values())
-        props["R^2 C(k)"] = self._fit_powerlaw_ck(kc)
+        props["R^2 C(k)"] = self._fit_powerlaw_ck(CK)
 
         k, _ = zip(*kc.values())
         props["R^2 P(k)"] = self._fit_powerlaw_pk(k)
