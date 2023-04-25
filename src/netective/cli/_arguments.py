@@ -14,9 +14,8 @@ def _parse_arguments():
 
     parser.add_argument(
         "--norm",
-        metavar="norm",
-        type=str,
-        default="biol",
+        action="store_true",
+        default=False,
         help="whether to normalize structural properties, default is biological normalization (biol)",
     )
     parser.add_argument(
@@ -103,7 +102,9 @@ def _parse_arguments():
 
     # valid output path
     if not os.path.isdir(args.output):
-        raise NotADirectoryError(f"Output path {args.output} is not a valid directory.")
+        raise NotADirectoryError(
+            f"Output path {args.output} is not a valid directory."
+        )
     args.output = os.path.abspath(args.output)
 
     return args
