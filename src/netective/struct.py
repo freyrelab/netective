@@ -83,9 +83,7 @@ class Structure(pd.Series):
         self.G = validate_network(G)  # network to compute the structural properties
         self.G_hash = None  # hash of the network to detect changes. None means that the properties have not been computed yet.
         self._norm = norm  # flag for scale factors
-        self._norm_hash = hash(
-            norm
-        )  # hash of the scale factors to detect a different normalization
+        self._norm_hash = hash(norm)  # to detect a different normalization
         self.verbose = verbose
         self.net_id = net_id if net_id is not None else str(uuid.uuid4())
 
@@ -131,6 +129,59 @@ class Structure(pd.Series):
             self.G_hash = hash(self.G)
 
         return self._props
+
+    def _fit_powerlaw_ck(self, CK: tuple[int, float]) -> float | np.nan:
+        """Fits a power law to the clustering coefficient distribution of a network."""
+        try:
+            prop_ck = CK.rsquared_adj
+        except ValueError:
+            warn(f"Clusterings for {self.net_id} cannot be fitted to a power law.")
+            prop_ck = np.nan
+        return prop_ck
+
+    def _fit_powerlaw_pk(self, k: list[int]) -> float | np.nan:
+        """Fits a power law to the degree distribution of a network."""
+        try:
+            PK = nb.Pk(k)
+            prop_pk = PK.rsquared_adj
+        except ValueError:
+            warn(f"Degrees for {self.net_id} cannot be fitted to a power law.")
+            prop_pk = np.nan
+        return prop_pk
+
+    def _kappa(self, CK: tuple[int, float]) -> float | np.nan:
+        """Computes the kappa coefficient of a network."""
+        try:
+            if not np.isnan(CK.kappa):
+                props_kappa = round(CK.kappa)
+            else:
+                props_kappa = np.nan
+        except ValueError:
+            print(self.net_id)
+            warn(
+                f"Kappa for {self.net_id} cannot be calculated due to its non-hierarchical structure."
+            )
+            props_kappa = np.nan
+        return props_kappa
+
+    def _norm_props(self, props: pd.Series) -> pd.Series:
+        """Normalizes the structural properties of a network."""
+
+        if self.verbose:
+            print("Normalizing...", flush=True)
+
+        available_norms = ["biol"]
+        if not isinstance(self._norm, pd.Series) and self._norm not in available_norms:
+            raise ValueError(f"Normalization factor {self._norm} not recognized.")
+
+        if self._norm == "biol":
+            self._norm = self._bio_scale(props)
+
+        props = props.multiply(
+            self._norm, fill_value=np.nan
+        )  # missing values are reported as NaN (non desired properties)
+
+        return props
 
     def compute_props(self) -> dict[str, float, int]:
 
@@ -178,67 +229,26 @@ class Structure(pd.Series):
         props["Average shortest path length"] = self.G.average_path_length()
         props["Average clustering coefficient"] = self.G.average_clustering_coefficient
 
-        # C(k)
-        kc = self.G.k_clustering()
+        # C(k) and P(k)
+        kc = self.G.k_clustering()  # {node: (k, c)}
 
-        try:
-            CK = nb.Ck(kc.values())
-            props["R^2 C(k)"] = CK.rsquared_adj
-        except ValueError:
-            warn(
-                f"Clusterings for {self.net_id}: {set(list(zip(*kc.values()))[1])}, cannot be fitted to a power law."
-            )
-            props["R^2 C(k)"] = np.nan
+        CK = nb.Ck(kc.values())
+        props["R^2 C(k)"] = self._fit_powerlaw_ck(kc)
 
-        # P(k)
         k, _ = zip(*kc.values())
-
-        try:
-            PK = nb.Pk(k)
-            props["R^2 P(k)"] = PK.rsquared_adj
-        except ValueError:
-            warn(
-                f"Degrees for {self.net_id}: {set(list(zip(*kc.values()))[1])}, cannot be fitted to a power law."
-            )
-            props["R^2 P(k)"] = np.nan
+        props["R^2 P(k)"] = self._fit_powerlaw_pk(k)
 
         # Kappa value
         kc = self.G.k_clustering(kdir="out")
-        try:
-            CK = nb.Ck(kc.values())
-            if not np.isnan(CK.kappa):
-                props["Kappa"] = round(CK.kappa)
-            else:
-                props["Kappa"] = np.nan
-        except ValueError:
-            print(self.net_id)
-            warn(
-                f"Kappa for {self.net_id} cannot be calculated due to its non-hierarchical structure."
-            )
-            # print(set(list(zip(*kc.values()))[1]))
-            props["Kappa"] = np.nan
+        CK = nb.Ck(kc.values())
+        props["Kappa"] = self._kappa(CK)
 
+        # Convert to pd.Series
         props = pd.Series(props)
 
         # Normalization
         if self._norm:  # //TODO: check if self._norm is None
-
-            if self.verbose:
-                print("Normalizing...", flush=True)
-
-            available_norms = ["biol"]
-            if (
-                not isinstance(self._norm, pd.Series)
-                and self._norm not in available_norms
-            ):
-                raise ValueError(f"Normalization factor {self._norm} not recognized.")
-
-            if self._norm == "biol":
-                self._norm = self._bio_scale(props)
-
-            props = props.multiply(
-                self._norm, fill_value=np.nan
-            )  # missing values are reported as NaN (non desired properties)
+            props = self._norm_props(props)
 
         return props
 
