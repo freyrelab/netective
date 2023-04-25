@@ -80,7 +80,9 @@ class Structure(pd.Series):
         """
 
         super().__init__()  # DataFrame.__init__(self)
-        self.G = validate_network(G)  # network to compute the structural properties
+        self.G = validate_network(
+            G
+        )  # network to compute the structural properties
         self.G_hash = None  # hash of the network to detect changes. None means that the properties have not been computed yet.
         self._norm = norm  # flag for scale factors
         self._norm_hash = hash(norm)  # to detect a different normalization
@@ -135,7 +137,9 @@ class Structure(pd.Series):
         try:
             prop_ck = CK.rsquared_adj
         except ValueError:
-            warn(f"Clusterings for {self.net_id} cannot be fitted to a power law.")
+            warn(
+                f"Clusterings for {self.net_id} cannot be fitted to a power law."
+            )
             prop_ck = np.nan
         return prop_ck
 
@@ -171,8 +175,13 @@ class Structure(pd.Series):
             print("Normalizing...", flush=True)
 
         available_norms = ["biol"]
-        if not isinstance(self._norm, pd.Series) and self._norm not in available_norms:
-            raise ValueError(f"Normalization factor {self._norm} not recognized.")
+        if (
+            not isinstance(self._norm, pd.Series)
+            and self._norm not in available_norms
+        ):
+            raise ValueError(
+                f"Normalization factor {self._norm} not recognized."
+            )
 
         if self._norm == "biol":
             self._norm = self._bio_scale(props)
@@ -222,12 +231,16 @@ class Structure(pd.Series):
         # Props without selfloops
         props["3-Feedback loops"] = self.G.feedbacks3_count
         props["Feedforward circuits"] = self.G.feedforwards_count
-        props["Complex feedforward circuits"] = self.G.complex_feedforwards_count
+        props[
+            "Complex feedforward circuits"
+        ] = self.G.complex_feedforwards_count
         props["Genes in the giant component"] = self.G.giant_component_size
 
         props["Diameter"] = self.G.diameter()
         props["Average shortest path length"] = self.G.average_path_length()
-        props["Average clustering coefficient"] = self.G.average_clustering_coefficient
+        props[
+            "Average clustering coefficient"
+        ] = self.G.average_clustering_coefficient
 
         # C(k) and P(k)
         kc = self.G.k_clustering()  # {node: (k, c)}
@@ -276,11 +289,11 @@ class Structure(pd.Series):
         largest_putative_path = props["Genes in the giant component"] - 1
 
         scalling_f = {
-            "Density": (
-                n_genes / tfs
-            ),  # equivalent to E / (n**2 * (tfs/n)) # TODO: corrects previous mistake: G.density * (G.regulators_count / nGenes) << 1
+            "Density": n_genes
+            / tfs,  # equivalent to E / (n**2 * (tfs/n)) # TODO: corrects previous mistake: G.density * (G.regulators_count / nGenes) << 1
             "Regulators": 1 / n_genes,  # fraction of nodes that are regulators
-            "Self regulations": 1 / tfs,  # fraction of regulators that self-regulate
+            "Self regulations": 1
+            / tfs,  # fraction of regulators that self-regulate
             "Max. out connectivity": 1
             / n_genes,  # fraction of nodes that are regulated by the most hub
             "3-Feedback loops": 1
@@ -352,14 +365,20 @@ def struc_props_call(
         n = G.number_of_nodes()
         m = G.number_of_edges()
         for i in range(erdos_renyi):
-            ER = nb.RegNet(fast_gnp_random_graph(n, m / (n**2), directed=True))
-            S_er = Structure(ER, norm=norm, net_id=f"{net_id}_ER_{i}", verbose=verbose)
+            ER = nb.RegNet(
+                fast_gnp_random_graph(n, m / (n**2), directed=True)
+            )
+            S_er = Structure(
+                ER, norm=norm, net_id=f"{net_id}_ER_{i}", verbose=verbose
+            )
             props_i = S_er.get_props()
             for k, v in props_i.items():
                 props_er[k].append(v)
 
         # TODO: here you can make it robust to a threshold of nan values
-        props_er_avg = {prop: sum(vals) / len(vals) for prop, vals in props_er.items()}
+        props_er_avg = {
+            prop: sum(vals) / len(vals) for prop, vals in props_er.items()
+        }
         netid_props = [(net_id, props), (f"{net_id}_ER_avg", props_er_avg)]
 
     return netid_props
