@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import hashlib
 from warnings import warn
+from networkx import Graph
 from networkx import DiGraph
 
 import netbiol3 as nb
@@ -32,6 +33,104 @@ def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
     putative = putative * ((tfs / n) ** r_tfs)
 
     return putative
+
+
+class GraphObserver:
+
+    """A class to observe changes in a graph."""
+
+    def __init__(self, G: Graph | nb.RegNet, data: bool = False) -> None:
+        """
+        Initialize the GraphObserver class.
+
+        Args:
+            G (nx.Graph | nb.RegNet): The graph to observe.
+            data (bool): If True, the node/edge data will be considered when computing the hash.
+
+        """
+        self.G = G
+        self.data = data
+        self.graph_hash = self._compute_hash(self.G)
+
+    def _compute_hash(self, G: Graph | nb.RegNet) -> str:
+        """
+        Compute the hash of the graph.
+
+        Args:
+            G (nx.Graph | nb.RegNet): The graph to compute the hash.
+            data (bool): If True, the node/edge data will be considered when computing the hash.
+
+        Returns:
+            str: The hash of the graph.
+        """
+
+        hash = hashlib.sha1(
+            f"nodes: {G.nodes(data=self.data)},\
+            edges: {G.edges(data=self.data)}".encode(
+                "utf-8"
+            )
+        )
+        return hash.hexdigest()
+
+    def changed(
+        self, G: Graph | nb.RegNet = None, update_G: bool = False
+    ) -> bool:
+        """
+        Check if G has changed with reference to the last call.
+
+        Args:
+            G (nx.Graph | nb.RegNet): The graph to check. If None, the original graph will be used.
+            update_G (bool): If True, the graph will be updated to G. If False, the graph will not be updated.
+
+        Returns:
+            bool: True if the graph has changed, False otherwise.
+
+        Raises:
+            ValueError: If G is None and update_G is True.
+
+        Note:
+            If G is None and update_G is False, the original graph will be used (default behavior).
+
+            The following table shows the behavior of the function:
+            hash_org_G: hash of the original graph
+            hash_new_G: hash of the new graph
+
+            | G | update_G | return | update graph | update hash |
+            |---|----------|--------|--------------|-------------|
+            | None | False | hash_org_G == new_hash_org_G | False | True |
+            | not None | True | hash_org_G == hash_new_G | True | True |
+            | not None | False | hash_org_G == hash_new_G | False | False |
+            | None | True | ValueError | False | False |
+        """
+        if update_G and G is None:
+            raise ValueError("G cannot be None if update_G is True")
+
+        tmp_G = self.G if G is None else G
+        new_hash = self._compute_hash(tmp_G)
+
+        if new_hash != self.graph_hash:
+            change_flag = True
+
+            if G is None:
+                # update the hash of the original graph
+                self.graph_hash = new_hash
+
+            elif update_G:
+                # G and update_G
+                self.G = G
+                self.graph_hash = new_hash
+
+            # if not update_G and G is not None, no need to update the hash
+
+        else:
+            change_flag = False
+
+            if update_G:
+                # G and update_G
+                self.G = G
+                # no need to update the hash
+
+        return change_flag
 
 
 class NormObserver:
@@ -152,7 +251,8 @@ class Structure(pd.Series):
         self.G = validate_network(
             G
         )  # network to compute the structural properties
-        self.G_hash = None  # hash of the network to detect changes. None means that the properties have not been computed yet.
+        self.graph_observer = GraphObserver(G)
+        self.graph_observer.graph_hash = None  # hash of the network to detect changes. None means that the properties have not been computed yet.
         self.norm_observer = NormObserver(
             norm
         )  # object to observe changes in the normalization strategy
@@ -194,10 +294,10 @@ class Structure(pd.Series):
         """
         # Compute the properties if they have not been computed yet or if the network has changed
         if (
-            self.G_hash is None or hash(self.G) != self.G_hash
+            self.graph_observer.graph_hash is None
+            or self.graph_observer.changed(self.G, update_G=True)
         ) or self.norm_observer.change():
             self._props = self.compute_props()
-            self.G_hash = hash(self.G)
 
         return self._props
 
