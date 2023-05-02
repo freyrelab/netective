@@ -5,6 +5,7 @@ import math
 import uuid
 import numpy as np
 import pandas as pd
+import hashlib
 from warnings import warn
 from networkx import DiGraph
 
@@ -31,6 +32,73 @@ def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
     putative = putative * ((tfs / n) ** r_tfs)
 
     return putative
+
+
+class NormObserver:
+    """A class to observe changes in the normalization strategy."""
+
+    def __init__(self, norm):
+        """
+        Initialize the NormObserver class.
+
+        Args:
+            norm (None | str | pd.Series): The norm to observe.
+
+        """
+        self.norm = norm
+        self.norm_hash = self._compute_hash()
+
+    def _hash(self, str_norm):
+        """
+        Compute the SHA-1 hash of a string.
+        Implemented to DRY the code.
+
+        Args:
+            str_norm (str): The string to compute the hash.
+
+        Returns:
+            str: The hash of the string.
+        """
+        hash_object = hashlib.sha1(str_norm.encode("utf-8"))
+        return hash_object.hexdigest()
+
+    def _compute_hash(self):
+        """
+        Compute the SHA-1 hash of the current norm value
+
+        Args:
+            norm (None | str | pd.Series): The norm to compute the hash.
+
+        Returns:
+            str: The hash of the norm. If norm is None, return None.
+        """
+        if self.norm is None:
+            return None
+
+        elif isinstance(self.norm, str):
+            str_norm = self.norm
+            return self._hash(str_norm)
+
+        elif isinstance(self.norm, pd.Series):
+            # convert it to a flat string to be hashed
+            # self.norm.to_string(index=True, dtype=True, name=True, length=True, header=True)
+            str_norm = f"pd.Series: {self.norm}"
+            return self._hash(str_norm)
+
+    def change(self):
+        """
+        Check if norm has changed with reference to the last call.
+
+        Returns:
+            bool: True if the norm has changed, False otherwise.
+        """
+        new_hash = self._compute_hash()
+        if new_hash != self.norm_hash:
+            change_flag = True
+            self.norm_hash = new_hash
+        else:
+            change_flag = False
+        return change_flag
 
 
 class Structure(pd.Series):
@@ -85,8 +153,9 @@ class Structure(pd.Series):
             G
         )  # network to compute the structural properties
         self.G_hash = None  # hash of the network to detect changes. None means that the properties have not been computed yet.
-        self._norm = norm  # flag for scale factors
-        self._norm_hash = hash(norm)  # to detect a different normalization
+        self.norm_observer = NormObserver(
+            norm
+        )  # object to observe changes in the normalization strategy
         self.verbose = verbose
         self.net_id = net_id if net_id is not None else str(uuid.uuid4())
 
@@ -98,7 +167,7 @@ class Structure(pd.Series):
         Returns:
             None|str|pd.Series: Normalization factor for each property.
         """
-        return self._norm
+        return self.norm_observer.norm
 
     @norm.setter
     def norm(self, norm: None | str | pd.Series):
@@ -114,8 +183,7 @@ class Structure(pd.Series):
                 Use a dictionary to normalize by custom scale factors.
                 Missing properties are reported as NaN.
         """
-        self._norm = norm
-        self._norm_hash = hash(norm)
+        self.norm_observer.norm = norm
 
     def get_props(self) -> pd.Series:
         """
@@ -125,9 +193,9 @@ class Structure(pd.Series):
             pd.Series: Series with the structural properties of the network.
         """
         # Compute the properties if they have not been computed yet or if the network has changed
-        if (self.G_hash is None or hash(self.G) != self.G_hash) or (
-            hash(self._norm) != self._norm_hash
-        ):
+        if (
+            self.G_hash is None or hash(self.G) != self.G_hash
+        ) or self.norm_observer.change():
             self._props = self.compute_props()
             self.G_hash = hash(self.G)
 
@@ -177,18 +245,19 @@ class Structure(pd.Series):
 
         available_norms = ["biol"]
         if (
-            not isinstance(self._norm, pd.Series)
-            and self._norm not in available_norms
+            not isinstance(self.norm_observer.norm, pd.Series)
+            and self.norm_observer.norm not in available_norms
         ):
             raise ValueError(
-                f"Normalization factor {self._norm} not recognized."
+                f"Normalization factor {self.norm_observer.norm} not recognized."
             )
 
-        if self._norm == "biol":
-            self._norm = self._bio_scale(props)
+        if self.norm_observer.norm == "biol":
+            self.norm_observer.norm = self._bio_scale(props)
 
+        # else is a pd.Series with the normalization factors
         props = props.multiply(
-            self._norm, fill_value=np.nan
+            self.norm_observer.norm, fill_value=np.nan
         )  # missing values are reported as NaN (non desired properties)
 
         return props
@@ -261,7 +330,7 @@ class Structure(pd.Series):
         props = pd.Series(props)
 
         # Normalization
-        if self._norm:  # //TODO: check if self._norm is None
+        if self.norm_observer.norm is not None:
             props = self._norm_props(props)
 
         return props
