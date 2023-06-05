@@ -5,9 +5,11 @@ from __future__ import annotations
 __all__ = ["concat_path", "run_parallel", "validate_network", "parse_nets"]
 
 import os
+import numpy as np
 import networkx as nx
 from tqdm import tqdm
 import concurrent.futures
+from scipy.stats import kurtosis, skew
 
 import netbiol3 as nb
 
@@ -36,10 +38,14 @@ def run_parallel(f, my_iter, workers):
 
     len_iter = len(my_iter)
     with tqdm(total=len_iter) as pbar:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=workers
+        ) as executor:
             futures = {}
             for arg in zip(*my_iter):
-                futures[executor.submit(f, *arg)] = arg[0]  # arg[0] is the net_name
+                futures[executor.submit(f, *arg)] = arg[
+                    0
+                ]  # arg[0] is the net_name
 
             results = []
             for future in concurrent.futures.as_completed(futures):
@@ -56,11 +62,15 @@ def validate_network(G: nx.DiGraph | nb.RegNet) -> nb.RegNet:
     elif not isinstance(G, nb.RegNet):
         raise TypeError("G must be a DiGraph or a RegNet")
     if G.size() == 0:
-        raise ValueError(f"G must have at least one edge. It has {G.size()} edges.")
+        raise ValueError(
+            f"G must have at least one edge. It has {G.size()} edges."
+        )
     return G
 
 
-def parse_nets(paths: list[str], comments: str = "#", delimiter: str = "\t") -> dict:
+def parse_nets(
+    paths: list[str], comments: str = "#", delimiter: str = "\t"
+) -> dict:
 
     """Reads network files and returns a dictionary of networkx.DiGraphs.
 
@@ -102,3 +112,27 @@ def parse_nets(paths: list[str], comments: str = "#", delimiter: str = "\t") -> 
         )
 
     return networks
+
+
+def compute_moments(
+    data: np.ndarray, ddof: int = 1
+) -> tuple[float, float, float, float]:
+    """Computes the four first moments of a distribution.
+
+    Args:
+        data: An array containing the data points of the distribution.
+        ddof: The delta degrees of freedom. The divisor used in calculations is N - ddof,
+        where N represents the number of elements. By default ddof is 1 (for sample data).
+
+    Returns:
+        A tuple containing the mean, variance, skewness, and kurtosis of the distribution.
+
+    Note:
+        Uniform distributions have np.NAN as kurtosis and skewness.
+    """
+    mean = np.mean(data)
+    variance = np.var(data, ddof=ddof)
+    skewness = skew(data)
+    kurt = kurtosis(data)
+
+    return mean, variance, skewness, kurt
