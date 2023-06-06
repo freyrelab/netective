@@ -3,7 +3,7 @@ import pytest
 import netbiol3 as nb
 
 a = nb.Abasy(rest=False)
-from netective.struct import GraphObserver
+from netective.structure import GraphObserver
 
 
 def test_graph_observer():
