@@ -1,5 +1,5 @@
 import pandas as pd
-from netective.struct import NormObserver
+from netective.structure import NormObserver
 
 import pandas as pd
 

@@ -1,7 +1,7 @@
 from pandas import DataFrame
 
 from netective.cli import _arguments
-from netective.struct import struc_props_call, save_strucs
+from netective.structure import struc_props_call, save_strucs
 from netective.utils import *
 
 try:
