@@ -30,8 +30,9 @@ def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
     """
     putative = math.factorial(n) / math.factorial(n - r)
     # fraccion de TFs al cuadrado para feed forward (el expoente es el numero de TFs en el motivo)
-    putative = putative * ((tfs / n) ** r_tfs)
-
+    putative = putative * (
+        (tfs / n) ** r_tfs
+    )  # TODO: check this line to consider there shouldn't be replacement.
     return putative
 
 
