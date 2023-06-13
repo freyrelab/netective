@@ -3,7 +3,7 @@ import pandas as pd
 from io import BytesIO
 import networkx as nx
 from PIL import Image
-from netective.struct import Structure
+from netective.structure import Structure
 from netective.utils import parse_nets
 import os
 

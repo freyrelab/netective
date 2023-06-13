@@ -10,7 +10,8 @@ from warnings import warn
 from networkx import Graph
 from networkx import DiGraph
 
-import netbiol3 as nb
+from freyrelab.regnets import regnet as rn
+from freyrelab.nets import powerlaw as pl
 
 from netective.utils import *
 
@@ -40,12 +41,12 @@ class GraphObserver:
 
     """A class to observe changes in a graph."""
 
-    def __init__(self, G: Graph | nb.RegNet, data: bool = False) -> None:
+    def __init__(self, G: Graph | rn.RegNet, data: bool = False) -> None:
         """
         Initialize the GraphObserver class.
 
         Args:
-            G (nx.Graph | nb.RegNet): The graph to observe.
+            G (nx.Graph | rn.RegNet): The graph to observe.
             data (bool): If True, the node/edge data will be considered when computing the hash.
 
         """
@@ -53,12 +54,12 @@ class GraphObserver:
         self.data = data
         self.graph_hash = self._compute_hash(self.G)
 
-    def _compute_hash(self, G: Graph | nb.RegNet) -> str:
+    def _compute_hash(self, G: Graph | rn.RegNet) -> str:
         """
         Compute the hash of the graph.
 
         Args:
-            G (nx.Graph | nb.RegNet): The graph to compute the hash.
+            G (nx.Graph | rn.RegNet): The graph to compute the hash.
             data (bool): If True, the node/edge data will be considered when computing the hash.
 
         Returns:
@@ -74,13 +75,13 @@ class GraphObserver:
         return hash.hexdigest()
 
     def changed(
-        self, G: Graph | nb.RegNet = None, update_G: bool = False
+        self, G: Graph | rn.RegNet = None, update_G: bool = False
     ) -> bool:
         """
         Check if G has changed with reference to the last call.
 
         Args:
-            G (nx.Graph | nb.RegNet): The graph to check. If None, the original graph will be used.
+            G (nx.Graph | rn.RegNet): The graph to check. If None, the original graph will be used.
             update_G (bool): If True, the graph will be updated to G. If False, the graph will not be updated.
 
         Returns:
@@ -204,7 +205,7 @@ class NormObserver:
 class Structure(pd.Series):
     def __init__(
         self,
-        G: DiGraph | nb.RegNet,
+        G: DiGraph | rn.RegNet,
         norm: None | str | pd.Series = None,
         net_id: str = None,
         verbose: bool = False,
@@ -316,7 +317,7 @@ class Structure(pd.Series):
     def _fit_powerlaw_pk(self, k: list[int]) -> float | np.nan:
         """Fits a power law to the degree distribution of a network."""
         try:
-            PK = nb.Pk(k)
+            PK = pl.Pk(k)
             prop_pk = PK.rsquared_adj
         except ValueError:
             warn(f"Degrees for {self.net_id} cannot be fitted to a power law.")
@@ -416,7 +417,7 @@ class Structure(pd.Series):
         # C(k) and P(k)
         kc = self.G.k_clustering()  # {node: (k, c)}
 
-        CK = nb.Ck(kc.values())
+        CK = pl.Ck(kc.values())
         props["R^2 C(k)"] = self._fit_powerlaw_ck(CK)
 
         k, _ = zip(*kc.values())
@@ -424,7 +425,7 @@ class Structure(pd.Series):
 
         # Kappa value
         kc = self.G.k_clustering(kdir="out")
-        CK = nb.Ck(kc.values())
+        CK = pl.Ck(kc.values())
         props["Kappa"] = self._kappa(CK)
 
         # Convert to pd.Series
@@ -490,7 +491,7 @@ class Structure(pd.Series):
 
 
 def struc_props_call(
-    G: DiGraph | nb.RegNet,
+    G: DiGraph | rn.RegNet,
     net_id: str,
     norm: None | str | pd.Series,
     erdos_renyi: int,
@@ -536,7 +537,7 @@ def struc_props_call(
         n = G.number_of_nodes()
         m = G.number_of_edges()
         for i in range(erdos_renyi):
-            ER = nb.RegNet(
+            ER = rn.RegNet(
                 fast_gnp_random_graph(n, m / (n**2), directed=True)
             )
             S_er = Structure(
