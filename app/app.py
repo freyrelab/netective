@@ -3,17 +3,18 @@ import pandas as pd
 from io import BytesIO
 import networkx as nx
 from PIL import Image
-from netective.struct import Structure
+from netective.structure import Structure
 from netective.utils import parse_nets
 import os
 
 # Set up the user interface
 print("----------------------------path", os.getcwd())
-image = Image.open(r"./assets/on_black.png")
+image = Image.open(r"./assets/on_white.png")
 width, height = image.size
-st.image(image, width=int(width * 0.1))
+st.image(image, width=int(width * 0.15))
 st.title("Compute network structural properties")
 uploaded_file = st.file_uploader("Choose a file")
+
 
 # Define the backend functionality
 if uploaded_file is not None:

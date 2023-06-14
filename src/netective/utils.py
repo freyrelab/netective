@@ -11,7 +11,7 @@ from tqdm import tqdm
 import concurrent.futures
 from scipy.stats import kurtosis, skew
 
-import netbiol3 as nb
+from freyrelab.regnets import regnet as rn
 
 concat_path = os.path.join
 
@@ -55,11 +55,11 @@ def run_parallel(f, my_iter, workers):
     return results
 
 
-def validate_network(G: nx.DiGraph | nb.RegNet) -> nb.RegNet:
+def validate_network(G: nx.DiGraph | rn.RegNet) -> rn.RegNet:
     """Validates the network and returns a RegNet object."""
     if isinstance(G, nx.DiGraph):
-        G = nb.RegNet(G)
-    elif not isinstance(G, nb.RegNet):
+        G = rn.RegNet(G)
+    elif not isinstance(G, rn.RegNet):
         raise TypeError("G must be a DiGraph or a RegNet")
     if G.size() == 0:
         raise ValueError(

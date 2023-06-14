@@ -110,6 +110,12 @@ class NullGraphError(Exception):
     pass
 
 
+class EmptyGraphError(Exception):
+    """Exception raised for empty graph. Nodes with no edges."""
+
+    pass
+
+
 def check_raw_value(func):
     """Decorator to check if raw value is None. If it is, raise an error."""
 
@@ -578,3 +584,207 @@ class ClusteringCoefficient(_Property):
         return (
             self._raw_value
         )  # TODO: o cambiar a NotImplementedError??? El usuario debería de decidir qué hacer en este caso, dejar nan o el valor crudo.
+
+
+@return_distribution
+@use_direction
+@use_selfloops
+class In_Degree(_Property):
+    """In degree of the graph.
+
+    The in degree of each node is defined as the number of predecessors it has.
+
+    Methods:
+        compute: Compute the in connectivity of the graph.
+        norm_biol: Normalize the in connectivity of the graph to the number of parents.
+        norm_network: Normalize the in connectivity of the graph to the number of nodes.
+    """
+
+    __name__ = "In-Degree"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the in-degree of the graph.
+
+        Returns:
+            nparray: Array with in-degrees of every node in graph.
+        """
+        a = [x for a, x in self.G.in_degree()]
+        self._raw_value = np.array(a)
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> float:
+        """Normalize the nparray with the in-degrees of the graph to the number of parents"""
+        n_parents = len(get_parent_nodes(self.G))
+        try:
+            return self._raw_value * (1 / n_parents)
+        except ZeroDivisionError:
+            raise NormalizationError(
+                "Division by zero (no parent nodes). Cannot normalize with this approach."
+            )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize the nparray with the in-degrees of the graph to the number of nodes."""
+        return self._raw_value * (1 / self._n_nodes)
+
+
+@return_distribution
+@use_direction
+@use_selfloops
+class Out_Degree(_Property):
+    """Out degree of the graph.
+
+    The out degree of each node is defined as the number of successors it has.
+
+    Methods:
+        compute: Compute the out connectivity of the graph.
+        norm_biol: Normalize the out connectivity of the graph to the number of nodes.
+        norm_network: Normalize the out connectivity of the graph to the number of nodes.
+    """
+
+    __name__ = "Out-Degree"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the out-degree of the graph.
+
+        Returns:
+            nparray: Array with out-degrees of every node in graph.
+        """
+        self._raw_value = np.array([x for a, x in self.G.out_degree()])
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> float:
+        """Normalize the nparray with the out-degrees of the graph to the number of nodes"""
+        return self._raw_value * (1 / self._n_nodes)
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize the nparray with the out-degrees of the graph to the number of nodes."""
+        return self._raw_value * (1 / self._n_nodes)
+
+
+@return_distribution
+class Rich_Club(_Property):
+    """Rich Club Coefficient.
+
+    The Rich Club Coefficient for every degree in the graph is defined as the clustering coeffficient
+    of nodes with a higher degree than the degree being evaluated.
+
+    Methods:
+        compute: Compute the rich club coefficient of the graph.
+        norm_biol: NO IMPLEMENTATION.
+        norm_network: NO IMPLEMENTATION.
+    """
+
+    __name__ = "Rich Club Coefficient"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the Rich Club Coefficient.
+
+        Returns:
+            np.array: distribution of rich club coefficients, by degree in graph.
+        """
+        n_edges = self.G.number_of_edges()
+        if n_edges == 0:
+            raise EmptyGraphError(
+                "There are no edges. Can not form rich clubs with no edges."
+            )
+
+        self.G.remove_edges_from([(i, i) for i in range(self._n_nodes)])
+        dict_coeff = nx.rich_club_coefficient(
+            self.G.to_undirected(), normalized=False
+        )
+        self._raw_value = np.fromiter(dict_coeff.values(), dtype=float)
+
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self):
+        raise NormalizationError("No biological normalization implemented.")
+
+    @check_raw_value
+    def norm_network(self):
+        raise NormalizationError("No theoretical normalization implemented.")
+
+
+@return_distribution
+@use_selfloops
+class Subgraph_Centrality(_Property):
+    """Subgraph centrality.
+
+    Subgraph centrality is defined as the "sum" of closed walks of different lengths throught the network
+    starting and ending in each node.
+
+    Methods:
+        compute: Compute the subgraph centrality for every node in the graph.
+        norm_biol: NO IMPLEMENTATION.
+        norm_network: Normalize subgraph centrality for every node to the max theoretical value.
+    """
+
+    __name__ = "Subgraph Centrality"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the subgraph centrality for every node in the graph.
+
+        Returns:
+            nparray: subgraph centrality for every node.
+        """
+        n_edges = self.G.number_of_edges()
+        if n_edges == 0:
+            raise EmptyGraphError(
+                "There are no edges. Can not calculate subgraph centrality of nodes that do not form any edges."
+            )
+
+        self._raw_value = nx.subgraph_centrality(self.G.to_undirected())
+        self._raw_value = np.fromiter(self._raw_value.values(), dtype=float)
+
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self):
+        raise NormalizationError("No biological normalization implemented.")
+
+    @check_raw_value
+    def norm_network(self):
+        """Normalize the subgraph centrality of the graph to the max value, obtained from a complete graph of the same size"""
+
+        T = nx.DiGraph()
+        n_nodes = self._n_nodes
+        T.add_nodes_from(range(n_nodes))
+        T.add_edges_from(
+            [(i, j) for i in range(n_nodes) for j in range(n_nodes)]
+        )
+
+        max = Subgraph_Centrality(T)
+
+        return self._raw_value / max.compute()
