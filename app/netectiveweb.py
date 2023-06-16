@@ -100,7 +100,6 @@ def plot_distributions(dist_values):
 
     # Iterate over the dictionary items and create the subplots
     for i, (title, data) in enumerate(dist_values.items()):
-        print(i, title, len(axs))
         ax = (
             axs[i] if num_items > 1 else axs
         )  # Use a single axis if there's only one item
@@ -193,7 +192,10 @@ def pairwise_pearson_correlation(
             array2 = dict_data[name_dist2]
 
             # Calculate Pearson correlation coefficient and p-value
-            corr_coef, _ = pearsonr(array1, array2)
+            corr_coef, _ = pearsonr(
+                array1, array2
+            )  # TODO!!! genera error por nan o inf. Debes filtrar antes de calcular la correlación, en todos los vectores a comparar.
+            print(name_dist1, name_dist2, array1, array2, corr_coef)
 
             # Store the correlation coefficient in the DataFrame
             corr_df.loc[name_dist1, name_dist2] = corr_coef
