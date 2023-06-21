@@ -2,13 +2,21 @@ from __future__ import annotations
 
 """Utility functions for the netective package."""
 
-__all__ = ["concat_path", "run_parallel", "validate_network", "parse_nets"]
+__all__ = [
+    "concat_path",
+    "run_parallel",
+    "validate_network",
+    "parse_nets",
+    "flatten_list_of_iterables",
+    "compute_moments",
+]
 
 import os
 import numpy as np
 import networkx as nx
 from tqdm import tqdm
 import concurrent.futures
+from itertools import chain
 from scipy.stats import kurtosis, skew
 
 from freyrelab.regnets import regnet as rn
@@ -136,3 +144,7 @@ def compute_moments(
     kurt = kurtosis(data)
 
     return mean, variance, skewness, kurt
+
+
+def flatten_list_of_iterables(lst):
+    return list(chain.from_iterable(lst))

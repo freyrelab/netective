@@ -59,6 +59,12 @@ def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
     return putative
 
 
+# Auxiliary functions
+def remove_self_loops(G: nx.DiGraph, n_nodes):
+    G.remove_edges_from([(i, i) for i in range(n_nodes)])
+    return G
+
+
 # Parent class for all properties
 
 
@@ -152,6 +158,8 @@ class Density(_Property):
         norm_network: Normalize the density of the graph to the number of nodes.
     """
 
+    __name__ = "Density"
+
     def __init__(self, G: nx.DiGraph):
         """
         Args:
@@ -209,6 +217,8 @@ class Regulators(_Property):
         norm_network: Normalize the number of regulators of the graph to the number of nodes.
     """
 
+    __name__ = "Regulators"
+
     def __init__(self, G: nx.DiGraph):
         """
         Args:
@@ -247,6 +257,8 @@ class SelfRegulations(_Property):
         norm_biol: Normalize the number of self-regulations of the graph to the number of parents.
         norm_network: Normalize the number of self-regulations of the graph to the number of nodes.
     """
+
+    __name__ = "Self-Regulations"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -293,6 +305,8 @@ class MaxOutDegree(_Property):
         norm_network: Normalize the maximum out-degree of the graph to the number of nodes.
     """
 
+    __name__ = "Max Out-Degree"
+
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
 
@@ -302,7 +316,7 @@ class MaxOutDegree(_Property):
         Returns:
             int: Maximum out-degree of the graph.
         """
-        self._raw_value = max(self.G.out_degree())
+        self._raw_value = max(dict(self.G.out_degree()).values())
         return self._raw_value
 
     @check_raw_value
@@ -328,6 +342,8 @@ class MaxInDegree(_Property):
         norm_network: Normalize the maximum in-degree of the graph to the number of nodes.
     """
 
+    __name__ = "Max In-Dregree"
+
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
 
@@ -337,7 +353,7 @@ class MaxInDegree(_Property):
         Returns:
             int: Maximum in-degree of the graph.
         """
-        self._raw_value = max(self.G.in_degree())
+        self._raw_value = max(dict(self.G.in_degree()).values())
         return self._raw_value
 
     @check_raw_value
@@ -367,6 +383,8 @@ class FeedbackLoops_3(_Property):
         norm_biol: Normalize the number of feedback loops of length 3 to the number of parents.
         norm_network: Normalize the number of feedback loops of length 3 to the number of nodes.
     """
+
+    __name__ = "3-Feedback Loops"
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
@@ -404,6 +422,8 @@ class ComplexFeedForwardCircuits(_Property):
         norm_network: Normalize the number of complex feed-forward circuits to the number of nodes.
     """
 
+    __name__ = "Complex Feed-Forward Circuits"
+
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
 
@@ -436,6 +456,8 @@ class GenesintheGiantComponent(_Property):
         norm_network: Normalize the number of genes in the giant component to the number of nodes.
     """
 
+    __name__ = "Gene % in the Giant Component"
+
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
 
@@ -467,8 +489,10 @@ class Diameter(_Property):
         norm_network: Normalize the diameter of the graph to the number of nodes.
     """
 
+    __name__ = "Diameter"
+
     def __init__(self, G: nx.DiGraph):
-        G = self.G.giant_component
+        G = G.giant_component
         super().__init__(G)
 
     def compute(self) -> int:
@@ -511,12 +535,14 @@ class AverageShortestPathLength(_Property):
         norm_network: Normalize the average shortest path length of the graph to the number of nodes.
     """
 
+    __name__ = "Average Shortest Path Length"
+
     def __init__(self, G: nx.DiGraph):
-        G = self.G.giant_component
+        G = G.giant_component
         super().__init__(G)
 
     def compute(self) -> float:
-        self._raw_value = self.G.average_shortest_path_length()
+        self._raw_value = self.G.average_path_length()
         return self._raw_value
 
     @check_raw_value
@@ -541,11 +567,15 @@ class AverageClusteringCoefficient(_Property):
         norm_network: Normalize the average clustering coefficient of the graph to the number of nodes.
     """
 
+    __name__ = "Average Clustering Coefficient"
+
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
 
     def compute(self) -> float:
-        self._raw_value = self.G.average_clustering_coefficient
+        # self._raw_value = self.G.average_clustering_coefficient
+        clustering_values = self.G.clustering().values()
+        self._raw_value = np.fromiter(clustering_values, dtype=float).mean()
         return self._raw_value
 
     @check_raw_value
@@ -567,17 +597,19 @@ class ClusteringCoefficient(_Property):
         compute: Compute the clustering coefficient of the graph.
     """
 
+    __name__ = "Clustering Coefficient"
+
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
 
     def compute(self) -> float:
-        clustering_values = self.G.clustering_coefficients
-        self._raw_value = np.fromiter(clustering_values.values(), dtype=float)
+        clustering_values = self.G.clustering().values()
+        self._raw_value = np.fromiter(clustering_values, dtype=float)
         return self._raw_value
 
     def norm_biol(self) -> float:
         """Coeffients are considered already normalized."""
-        raise NotImplementedError  # TODO:!!! Change NormalizationError to NotImplementedError???
+        raise NotImplementedError
 
     def norm_network(self) -> float:
         """Coeffients are considered already normalized."""
@@ -707,16 +739,16 @@ class Rich_Club(_Property):
         Returns:
             np.array: distribution of rich club coefficients, by degree in graph.
         """
+        self.G.remove_edges_from(nx.selfloop_edges(self.G))
+        self.G = self.G.to_undirected()
+
         n_edges = self.G.number_of_edges()
         if n_edges == 0:
             raise EmptyGraphError(
                 "There are no edges. Can not form rich clubs with no edges."
             )
 
-        self.G.remove_edges_from([(i, i) for i in range(self._n_nodes)])
-        dict_coeff = nx.rich_club_coefficient(
-            self.G.to_undirected(), normalized=False
-        )
+        dict_coeff = nx.rich_club_coefficient(self.G, normalized=False)
         self._raw_value = np.fromiter(dict_coeff.values(), dtype=float)
 
         return self._raw_value
@@ -788,3 +820,187 @@ class Subgraph_Centrality(_Property):
         max = Subgraph_Centrality(T)
 
         return self._raw_value / max.compute()
+
+
+@return_distribution
+@use_selfloops
+class LocalityIndex(_Property):  # Hereda de la clase _Property
+    """Locality Index.
+
+    Measurement that reflects the internality of every connection of all neighbors immediate to each node.
+    It is calculated, for each node, as the number of links between that node's neighbors (including itself if there is a self-loop)
+    divided by the total number of edges each of those neighbors is involved in.
+
+    Methods:
+        compute: Compute the locality index for every node in the graph.
+        norm_biol: NO IMPLEMENTATION.
+        norm_network: Normalize locality index for every node. Already normalized.
+    """
+
+    __name__ = "Locality Index"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the locality index for every node in the graph.
+
+        Returns:
+            nparray: locality index for every node.
+        """
+        n_edges = self.G.number_of_edges()
+        if n_edges == 0:
+            raise EmptyGraphError(
+                "There are no edges. Can not calculate locality index of nodes that do not form any edges."
+            )
+
+        self.A = self.G.to_undirected()
+        self._raw_value = []
+
+        for node in self.A.nodes():
+            # If there is a self-loop, you can be your own neighbor, if not, a connection to you is considered in n_ext
+            neighbors = [x for x in self.A.neighbors(node)]
+
+            links_neighbors = [
+                self.A.number_of_edges(neighbors[i], neighbors[j])
+                for i in range(len(neighbors))
+                for j in range(i, len(neighbors))
+            ]
+
+            n_int = np.fromiter(links_neighbors, dtype=int).sum()
+
+            links_externals = [
+                self.A.number_of_edges(i, j)
+                for i in neighbors
+                for x, j in self.A.edges(i)
+                if j not in neighbors
+            ]
+
+            n_ext = np.fromiter(links_externals, dtype=int).sum()
+
+            self._raw_value.append(n_int / (n_int + n_ext))
+
+        self._raw_value = np.asarray(self._raw_value, dtype=float)
+
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self):
+        """NO IMPLEMENTATION."""
+        raise NormalizationError("No biological normalization implemented.")
+
+    @check_raw_value
+    def norm_network(self):
+        """Already normalized."""
+        return self._raw_value  # Already normalized [0,1]
+
+
+@return_distribution
+@use_direction
+class AverageOutDegreeNearestNeighbors(
+    _Property
+):  # Hereda de la clase _Property
+    """Average Out-Degree of Nearest Neighbors
+
+    Average out-degree of nearest neighbors is defined as de average of out-degrees of each memeber of a node's neighborhood.
+    In this case, the neighborhood of each node is the list of its successors.
+
+    Methods:
+        compute: Compute the average out-degree for each node in the graph.
+        norm_biol: Normalize the average out-degree of nearest neighbors to all nodes in the graph AND eliminate uninformative 0s.
+        norm_network: Normalize the average out-degree of nearest neighbors to all nodes in the graph.
+    """
+
+    __name__ = "Average Degree for Nearest Neighbors (Out-Out)"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the average out-degree of nearest neighbors using Networkx implementation.
+
+        Returns:
+            np.array: average out-degree for each node in the graph.
+        """
+        self.A = nx.DiGraph
+        self.A = remove_self_loops(self.G, self._n_nodes)
+        dict_av_degree = nx.average_neighbor_degree(
+            self.A, source="out", target="out"
+        )
+        self._raw_value = np.fromiter(dict_av_degree.values(), dtype=float)
+
+        return self._raw_value
+
+    @check_raw_value  # Decorator to check if raw value is None. If it is, raise an error.
+    def norm_biol(self) -> np.array:
+        """Normalize the average degree of nearest neighbors for every node in the graph to the number of nodes and exclude
+        0s from nodes that do not have a out-degree higher than 0. Relation between order of values and order of nodes is lost.
+        """
+        tfs = [
+            (self._raw_value[i] * (1 / (self._n_nodes - 1)))
+            for i in range(len(self._raw_value))
+            if self.A.out_degree[i] > 0
+        ]
+        self._norm_biol = np.fromiter(tfs, dtype=float)
+
+        return self._norm_biol
+
+    @check_raw_value
+    def norm_network(self) -> np.array:
+        """Normalize the average degree for nearest neighbors to the number of nodes (-1 because you can not be your own neighbor)"""
+        return self._raw_value * (1 / (self._n_nodes - 1))
+
+
+@return_distribution
+class AverageDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
+    """Average Degree of Nearest Neighbors.
+
+    The Average Degree of Nearest Neighbors here is considered for an undirected network, meaning the neighborhood for each node
+    is all nodes it has a connection with, regardless of direction.
+
+    Methods:
+        compute: Compute the average degree of nearest neighbors.
+        norm_biol: NO IMPLEMENTATION.
+        norm_network: Normalize the average degree of nearest neighbors to all nodes in the graph.
+    """
+
+    __name__ = "Average Degree for Nearest Neighbors (Undirected)"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the density of the graph.
+
+        Returns:
+            float: Density of the graph.
+        """
+        no_self_loops = nx.DiGraph
+        no_self_loops = remove_self_loops(self.G, self._n_nodes)
+        dict_av_degree = nx.average_neighbor_degree(
+            no_self_loops.to_undirected()
+        )
+        self._raw_value = np.fromiter(dict_av_degree.values(), dtype=float)
+
+        return self._raw_value
+
+    @check_raw_value  # Decorator to check if raw value is None. If it is, raise an error.
+    def norm_biol(self):
+        raise NormalizationError("No biological normalization implemented.")
+
+    @check_raw_value
+    def norm_network(self) -> np.array:
+        """Normalize the average degree for nearest neighbors to the number of nodes (-1 because you can not be your own neighbor)"""
+        return self._raw_value * (1 / (self._n_nodes - 1))
