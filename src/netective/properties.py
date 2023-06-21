@@ -5,6 +5,8 @@ import numpy as np
 import networkx as nx
 from abc import ABC, abstractmethod
 
+from freyrelab.nets.paths2 import ShortestPaths, Efficiency, ShortestDistances
+
 # Decorators for graph characteristics
 
 
@@ -60,9 +62,20 @@ def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
 
 
 # Auxiliary functions
-def remove_self_loops(G: nx.DiGraph, n_nodes):
-    G.remove_edges_from([(i, i) for i in range(n_nodes)])
+def remove_self_loops(G: nx.DiGraph):
+    G.remove_edges_from(nx.selfloop_edges(G))
     return G
+
+
+def get_entropy(elements: np.array):
+    """Get the entropy of an array of elements."""
+    entropy = (elements * np.log2(elements)).sum()
+    return entropy if entropy == 0 else -entropy
+
+
+def get_parent_nodes(G: nx.DiGraph):
+    """Get the parent nodes of a graph."""
+    return [i for i, k_out in G.out_degree() if k_out > 0]
 
 
 # Parent class for all properties
@@ -132,12 +145,6 @@ def check_raw_value(func):
             raise ValueError("Raw value is None. Call compute() method first.")
 
     return wrapper
-
-
-# Helper functions
-def get_parent_nodes(G: nx.DiGraph):
-    """Get the parent nodes of a graph."""
-    return [i for i, k_out in G.out_degree() if k_out > 0]
 
 
 # Properties
@@ -504,7 +511,7 @@ class Diameter(_Property):
         """Normalize the diameter of the graph to the number of parents in the giant component.
 
         The maximum diameter of a graph with n nodes is n-1.
-        When only considering the parents, the maximum diameter is n_parents - 1.
+        When only considering the parents, the maximum diameter is n_parents.
         Considering both, the maximum diameter is n_parents (every parent, then a leaf node).
 
         Note: the diameter of the giant component is not necessarily the same as the diameter of the graph.
@@ -524,7 +531,6 @@ class Diameter(_Property):
 
 @use_paths
 @return_scalar
-@use_direction
 @use_giant_component
 class AverageShortestPathLength(_Property):
     """Average shortest path length of the graph.
@@ -538,18 +544,33 @@ class AverageShortestPathLength(_Property):
     __name__ = "Average Shortest Path Length"
 
     def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        G = remove_self_loops(G)
+        if not G.number_of_edges():
+            raise EmptyGraphError("Graph has no edges.")
         G = G.giant_component
+        G = G.to_undirected()
         super().__init__(G)
 
-    def compute(self) -> float:
-        self._raw_value = self.G.average_path_length()
+    def compute(self) -> int:
+        """Compute the average shortest path length of the graph using the giant component.
+
+        Returns:
+            int: Average shortest path length of the graph.
+        """
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = shortest_distances_G.average_path_length
         return self._raw_value
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the average shortest path length of the graph to the number of parents in the giant component."""
-        n_parents = len(get_parent_nodes(self.G))
-        return self._raw_value / n_parents
+        # """Normalize the average shortest path length of the graph to the number of parents in the giant component."""
+        # n_parents = len(get_parent_nodes(self.G))
+        # return self._raw_value / n_parents
+        raise NotImplementedError
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -930,12 +951,13 @@ class AverageOutDegreeNearestNeighbors(
         Returns:
             np.array: average out-degree for each node in the graph.
         """
-        self.A = nx.DiGraph
-        self.A = remove_self_loops(self.G, self._n_nodes)
-        dict_av_degree = nx.average_neighbor_degree(
+        self.A = remove_self_loops(self.G)
+        self._dict_av_degree = nx.average_neighbor_degree(
             self.A, source="out", target="out"
         )
-        self._raw_value = np.fromiter(dict_av_degree.values(), dtype=float)
+        self._raw_value = np.fromiter(
+            self._dict_av_degree.values(), dtype=float
+        )
 
         return self._raw_value
 
@@ -944,14 +966,10 @@ class AverageOutDegreeNearestNeighbors(
         """Normalize the average degree of nearest neighbors for every node in the graph to the number of nodes and exclude
         0s from nodes that do not have a out-degree higher than 0. Relation between order of values and order of nodes is lost.
         """
-        tfs = [
-            (self._raw_value[i] * (1 / (self._n_nodes - 1)))
-            for i in range(len(self._raw_value))
-            if self.A.out_degree[i] > 0
-        ]
-        self._norm_biol = np.fromiter(tfs, dtype=float)
-
-        return self._norm_biol
+        parents_value = np.array(
+            [self._dict_av_degree[node] for node in get_parent_nodes(self.A)]
+        )
+        return parents_value * (1 / (self._n_nodes - 1))
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -988,7 +1006,7 @@ class AverageDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
             float: Density of the graph.
         """
         no_self_loops = nx.DiGraph
-        no_self_loops = remove_self_loops(self.G, self._n_nodes)
+        no_self_loops = remove_self_loops(self.G)
         dict_av_degree = nx.average_neighbor_degree(
             no_self_loops.to_undirected()
         )
@@ -1004,3 +1022,465 @@ class AverageDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
     def norm_network(self) -> np.array:
         """Normalize the average degree for nearest neighbors to the number of nodes (-1 because you can not be your own neighbor)"""
         return self._raw_value * (1 / (self._n_nodes - 1))
+
+
+@return_scalar
+@use_direction
+@use_selfloops
+class EntropyPKout(_Property):
+    """Entropy of degree distribution.
+
+    Entropy of the degree distribution is defined as the absolute valueof the sum of each probability to have a certain degree
+    multiplied by its own log2.
+
+    Methods:
+        compute: Compute the entropy of the degree distribution for a graph.
+        norm_biol: Normalize the entropy of the degree distribution to the max theoretical value.
+        norm_network: Normalize the entropy of the degree of distribution to the max theoretical value.
+    """
+
+    __name__ = "Entropy of Degree Distribution"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> float:
+        """Compute the entropy for the degree distribution of the graph.
+
+        Returns:
+            float: entropy of the degree distribution.
+        """
+
+        degrees = np.array([x for a, x in self.G.out_degree()])
+        uniques, counts = np.unique(degrees, return_counts=True)
+
+        # Frequencies are only determined to degrees existent in the network, degrees with a frequency of 0 are ignored
+        freq = counts * (1 / self._n_nodes)
+        self._raw_value = get_entropy(freq)
+
+        self.h_max = math.log2(self._n_nodes)
+
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> float:
+        """Normalize the entropy of the degree distribution to the max theoretical entropy."""
+        return self._raw_value / self.h_max
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize the entropy of the degree distribution to the max theoretical entropy"""
+        return self._raw_value / self.h_max
+
+
+@return_scalar
+@use_selfloops
+@use_direction
+class GiniIndex(_Property):
+    """Gini Index.
+
+    Measurement that reflects the inequiality of distribution of resources between entities. For networks, connections are
+    considered as resources and each node is an individual entity. Therefore, we calculate how well (Gini Index = 0) or
+    how unequal (Gini Index = 1) the distribution of links between nodes in the network is.
+    It is calculated thorugh the area under the curve of The Lorenz Curve, which is drawn by the cummulative percentage of
+    total connections which a certain fraction of nodes can have.
+
+    Methods:
+        compute: Compute the gini index for the graph.
+        norm_biol: Normalize gini index to consider distribution of resources only between regulators.
+        norm_network: Already normalized.
+    """
+
+    __name__ = "Gini Index"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> float:
+        """Compute the gini index for the graph.
+
+        Returns:
+            float: gini index of the entire graph.
+        """
+        self.t = self.G.number_of_edges()
+        if self.t == 0:
+            raise EmptyGraphError(
+                "There are no edges. Can not calculate Gini Index of a network with no edges."
+            )
+
+        b = [j for x, j in self.G.out_degree()]
+        b.sort()
+        area = 0
+
+        for i in range(self._n_nodes):
+            x = b[i] / self.t
+            y = (self._n_nodes - (i + 1) + 0.5) / self._n_nodes
+            area += x * y
+
+        self._raw_value = 1 - (2 * area)
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> float:
+        """Normalization is a recalculation only between nodes with an out-degree higher than 0.
+        Resources (connections) should not be distributed equally between all nodes in network, only between regulators"""
+        n_parents = len(get_parent_nodes(self.G))
+        b = [j for x, j in self.G.out_degree() if j != 0]
+        b.sort()
+        area = 0
+
+        for i in range(n_parents):
+            x = b[i] / self.t
+            y = (n_parents - (i + 1) + 0.5) / n_parents
+            area += x * y
+
+        self._norm_biol = 1 - (2 * area)
+        return self._norm_biol
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Already normalized."""
+        return self._raw_value  # Already normalized [0,1]
+
+
+@use_paths
+@use_giant_component
+@return_distribution
+class BetweennessCentrality(_Property):
+    """Betweenness Centrality.
+
+    Betweenness centrality is a computed using the giant component of the graph.
+    A high betweenness centrality indicates that a node is a bridge between different parts of the network.
+    """
+
+    __name__ = "Betweenness Centrality"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        G = remove_self_loops(G)
+        if not G.number_of_edges():
+            raise EmptyGraphError("Graph has no edges.")
+        G = G.giant_component
+        G = G.to_undirected()
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the betweenness centrality for each node in the graph.
+
+        Returns:
+            np.array: Betweenness centrality for each node in the graph.
+        """
+        shortest_paths = ShortestPaths(self.G)
+        betweenness = shortest_paths.betweenness()
+        self._raw_value = np.asarray(betweenness, dtype=float)
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Betweenness centrality cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> np.array:
+        """Normalize betweenness centrality by the combinatory number of pairs of nodes excluding the node itself.
+
+        Returns:
+            np.array: Normalized betweenness centrality for each node in the graph.
+        """
+        scale_factor = 2 / ((self._n_nodes - 1) * (self._n_nodes - 2))
+        return self._raw_value * scale_factor
+
+
+@use_paths
+@return_scalar
+@use_giant_component
+class GlobalEfficiency(_Property):
+    """Global efficiency of a graph.
+
+    The global efficiency of a graph is the average of the inverse of the shortest paths between all pairs of nodes.
+    """
+
+    __name__ = "Global Efficiency"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        G = remove_self_loops(G)
+        if not G.number_of_edges():
+            raise EmptyGraphError("Graph has no edges.")
+        G = G.to_undirected()
+        super().__init__(G)
+
+    def compute(self) -> float:
+        """Compute the global efficiency of the graph.
+
+        Returns:
+            float: Global efficiency of the graph.
+        """
+        shortest_distances_G = ShortestDistances(self.G)
+        efficiency = Efficiency(self.G, shortest_distances_G)
+        self._raw_value = efficiency.global_efficiency
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "global efficiency cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Global efficiency is already normalized between 0 and 1."""
+        # Already normalized
+        return self._raw_value
+
+
+@use_paths
+@return_distribution
+@use_giant_component
+class Eccentricity(_Property):
+    """Eccentricity.
+
+    Eccentricity is a computed using the giant component of the graph.
+    The eccentricity of a node is the largest shortest distance between that node and any other node in the graph.
+    """
+
+    __name__ = "Eccentricity"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        G = remove_self_loops(G)
+        if not G.number_of_edges():
+            raise EmptyGraphError("Graph has no edges.")
+        G = G.giant_component
+        G = G.to_undirected()
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the eccentricity for each node in the graph.
+
+        Returns:
+            np.array: Eccentricity for each node in the graph.
+        """
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = np.fromiter(
+            shortest_distances_G.eccentricity().values(), dtype=float
+        )
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Eccentricity cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> np.array:
+        """Normalize using the theoretical longest diameter in the graph using the giant component."""
+        return self._raw_value / (self._n_nodes - 1)
+
+
+@use_paths
+@return_scalar
+@use_giant_component
+class Radius(_Property):
+    """Radius.
+
+    Radius is a computed using the giant component of the graph.
+    The radius of a graph is the minimum eccentricity in the graph.
+    """
+
+    __name__ = "Radius"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        G = remove_self_loops(G)
+        if not G.number_of_edges():
+            raise EmptyGraphError("Graph has no edges.")
+        G = G.giant_component
+        G = G.to_undirected()
+        super().__init__(G)
+
+    def compute(self) -> int:
+        """Compute the radius of the graph.
+
+        Returns:
+            int: Radius of the graph.
+        """
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = shortest_distances_G.radius
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Radius cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize using the theoretical longest diameter in the graph using the giant component."""
+        return self._raw_value / (self._n_nodes - 1)
+
+
+@use_paths
+@return_scalar
+@use_giant_component
+class Center(_Property):
+    """Center.
+
+    Center is a computed using the giant component of the graph.
+    The center of a graph is the set of nodes with eccentricity equal to the radius.
+    This class returns the number of nodes in the center.
+    """
+
+    __name__ = "Center"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        G = remove_self_loops(G)
+        if not G.number_of_edges():
+            raise EmptyGraphError("Graph has no edges.")
+        G = G.giant_component
+        G = G.to_undirected()
+        super().__init__(G)
+
+    def compute(self) -> int:
+        """Compute the center for each node in the graph.
+
+        Returns:
+            int: Center for each node in the graph.
+        """
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = len(shortest_distances_G.center)
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Center cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> np.array:
+        """Normalize using the number of nodes in the giant component."""
+        return self._raw_value / self._n_nodes
+
+
+@use_paths
+@return_scalar
+@use_giant_component
+class Periphery(_Property):
+    """Periphery.
+
+    Periphery is a computed using the giant component of the graph.
+    The periphery of a graph is the set of nodes with eccentricity equal to the diameter.
+    This class returns the number of nodes in the periphery.
+    """
+
+    __name__ = "Periphery"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        G = remove_self_loops(G)
+        if not G.number_of_edges():
+            raise EmptyGraphError("Graph has no edges.")
+        G = G.giant_component
+        G = G.to_undirected()
+        super().__init__(G)
+
+    def compute(self) -> int:
+        """Compute the periphery for each node in the graph.
+
+        Returns:
+            int: Periphery for each node in the graph.
+        """
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = len(shortest_distances_G.periphery)
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Periphery cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> int:
+        """Normalize using the number of nodes in the giant component."""
+        return self._raw_value / self._n_nodes
+
+
+@use_paths
+@return_scalar
+@use_giant_component
+class AverageLocalEfficiency(_Property):
+    """Average Local Efficiency.
+
+    Average Local Efficiency is a computed using the giant component of the graph.
+    The average local efficiency of a graph is the average of the local efficiency of each node in the graph.
+    The local efficiency of a node is the global efficiency computed over the neighborhood of the node.
+    """
+
+    __name__ = "Average Local Efficiency"
+
+    def __init__(self, G: nx.DiGraph):
+        """
+        Args:
+            G (nx.DiGraph): Graph.
+        """
+        G = remove_self_loops(G)
+        if not G.number_of_edges():
+            raise EmptyGraphError("Graph has no edges.")
+        G = G.giant_component
+        G = G.to_undirected()
+        super().__init__(G)
+
+    def compute(self) -> float:
+        """Compute the average local efficiency for each node in the graph.
+
+        Returns:
+            float: Average local efficiency for each node in the graph.
+        """
+        shortest_distances_G = ShortestDistances(self.G)
+        efficiency = Efficiency(self.G, shortest_distances_G)
+        self._raw_value = efficiency.local_efficiency
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Average Local Efficiency cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Average Local Efficiency is already normalized between 0 and 1."""
+        # Already normalized
+        return self._raw_value
