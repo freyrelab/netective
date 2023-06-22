@@ -54,7 +54,11 @@ child_classes = get_child_classes(parent_class)
 
 
 def get_instances(G, child_classes):
-    instances = {x.__name__: x(G) for x in child_classes}
+    instances = {}
+    for x in child_classes:
+        instance = x(G)
+        instances[x.CLASS_NAME] = instance
+    # instances = {x.__name__: x(G) for x in child_classes}
     return instances
 
 
@@ -82,16 +86,16 @@ def plot_distributions(dist_values):
 
     # Determine the grid shape based on the number of items
     num_items = len(dist_values)
-    grid_shape = (
-        int(np.sqrt(num_items)) + 1,
-        int(np.ceil(np.sqrt(num_items))) + 1,
-    )
-
+    # grid_shape = (
+    #     int(np.sqrt(num_items)) + 1,
+    #     int(np.ceil(np.sqrt(num_items))) + 1,
+    # )
+    grid_shape = (int(num_items / 2) + 1, 2)
     # Create the figure and subplots
     fig, axs = plt.subplots(
         nrows=grid_shape[0],
         ncols=grid_shape[1],
-        figsize=(3 * grid_shape[0], 1.5 * grid_shape[1]),
+        figsize=(1.5 * grid_shape[0], 5 * grid_shape[1]),
     )
 
     # Flatten the axes array if it's more than 1D
@@ -122,26 +126,59 @@ def plot_scalars(data_dict):
     labels = list(data_dict.keys())
     values = list(data_dict.values())
 
+    # Calculate the threshold for determining if log scale should be used
+    threshold = 0.05 * max(values)
+
+    # Count the number of values below the threshold
+    num_below_threshold = sum(value < threshold for value in values)
+
+    # Determine if log scale should be used based on the conditions
+    use_log_scale = num_below_threshold > (len(values) / 3)
+
     with sns.axes_style("darkgrid"):
-        # Create the figure and axes
-        fig, axs = plt.subplots(figsize=(2, 0.3 * len(labels)))
+        # Calculate the desired figure size based on the number of bars
+        figsize = (2, 0.3 * len(labels))
+        # if figsize[1] > 6.5:
+        #     figsize = (figsize[0], 6.5)
+
+        # Create the figure and axes with adjusted size
+        fig, axs = plt.subplots(figsize=figsize)
 
         # Create a horizontal bar plot using seaborn
+        if use_log_scale:
+            # Convert values to logarithmic scale
+            # values = np.log10(values)
+            plt.xscale("log", base=2)
+            # axs.set_xlim([np.log10(threshold), np.log10(max(values))])
+            # axs.set_xticks([np.log10(threshold), np.log10(max(values))])
+
         sns.barplot(x=values, y=labels, ax=axs, color="#384265")
 
         # Add annotations to the bars
-        for i, value in enumerate(values):
+        for i, value in enumerate(data_dict.values()):
             if isinstance(value, float):
                 if value.is_integer():
                     value = int(value)
                 else:
                     value = round(value, 2) if value >= 0.01 else value
-            plt.text(
-                value,
-                i,
-                str(value) if value >= 0.01 else f"{value:.2E}",
-                va="center",
-            )
+            if use_log_scale:
+                plt.text(
+                    value if value >= threshold else 1 + abs(value),
+                    i,
+                    str(value)
+                    if value >= 0.01 or value == 0
+                    else f"{value:.2E}",
+                    va="center",
+                )
+            else:
+                plt.text(
+                    value,
+                    i,
+                    str(value)
+                    if value >= 0.01 or value == 0
+                    else f"{value:.2E}",
+                    va="center",
+                )
 
         # Customize the plot
         axs.set_xlabel("Values")

@@ -165,7 +165,7 @@ class Density(_Property):
         norm_network: Normalize the density of the graph to the number of nodes.
     """
 
-    __name__ = "Density"
+    CLASS_NAME = "Density"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -224,7 +224,7 @@ class Regulators(_Property):
         norm_network: Normalize the number of regulators of the graph to the number of nodes.
     """
 
-    __name__ = "Regulators"
+    CLASS_NAME = "Regulators"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -265,7 +265,7 @@ class SelfRegulations(_Property):
         norm_network: Normalize the number of self-regulations of the graph to the number of nodes.
     """
 
-    __name__ = "Self-Regulations"
+    CLASS_NAME = "Self-Regulations"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -312,7 +312,7 @@ class MaxOutDegree(_Property):
         norm_network: Normalize the maximum out-degree of the graph to the number of nodes.
     """
 
-    __name__ = "Max Out-Degree"
+    CLASS_NAME = "Max Out-Degree"
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
@@ -349,7 +349,7 @@ class MaxInDegree(_Property):
         norm_network: Normalize the maximum in-degree of the graph to the number of nodes.
     """
 
-    __name__ = "Max In-Dregree"
+    CLASS_NAME = "Max In-Dregree"
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
@@ -391,7 +391,7 @@ class FeedbackLoops_3(_Property):
         norm_network: Normalize the number of feedback loops of length 3 to the number of nodes.
     """
 
-    __name__ = "3-Feedback Loops"
+    CLASS_NAME = "3-Feedback Loops"
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
@@ -429,7 +429,7 @@ class ComplexFeedForwardCircuits(_Property):
         norm_network: Normalize the number of complex feed-forward circuits to the number of nodes.
     """
 
-    __name__ = "Complex Feed-Forward Circuits"
+    CLASS_NAME = "Complex Feed-Forward Circuits"
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
@@ -463,7 +463,7 @@ class GenesintheGiantComponent(_Property):
         norm_network: Normalize the number of genes in the giant component to the number of nodes.
     """
 
-    __name__ = "Gene % in the Giant Component"
+    CLASS_NAME = "Gene % in the Giant Component"
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
@@ -496,7 +496,7 @@ class Diameter(_Property):
         norm_network: Normalize the diameter of the graph to the number of nodes.
     """
 
-    __name__ = "Diameter"
+    CLASS_NAME = "Diameter"
 
     def __init__(self, G: nx.DiGraph):
         G = G.giant_component
@@ -541,7 +541,7 @@ class AverageShortestPathLength(_Property):
         norm_network: Normalize the average shortest path length of the graph to the number of nodes.
     """
 
-    __name__ = "Average Shortest Path Length"
+    CLASS_NAME = "Average Shortest Path Length"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -588,7 +588,7 @@ class AverageClusteringCoefficient(_Property):
         norm_network: Normalize the average clustering coefficient of the graph to the number of nodes.
     """
 
-    __name__ = "Average Clustering Coefficient"
+    CLASS_NAME = "Average Clustering Coefficient"
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
@@ -618,7 +618,7 @@ class ClusteringCoefficient(_Property):
         compute: Compute the clustering coefficient of the graph.
     """
 
-    __name__ = "Clustering Coefficient"
+    CLASS_NAME = "Clustering Coefficient"
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
@@ -653,7 +653,7 @@ class In_Degree(_Property):
         norm_network: Normalize the in connectivity of the graph to the number of nodes.
     """
 
-    __name__ = "In-Degree"
+    CLASS_NAME = "In-Degree"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -703,7 +703,7 @@ class Out_Degree(_Property):
         norm_network: Normalize the out connectivity of the graph to the number of nodes.
     """
 
-    __name__ = "Out-Degree"
+    CLASS_NAME = "Out-Degree"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -745,7 +745,7 @@ class Rich_Club(_Property):
         norm_network: NO IMPLEMENTATION.
     """
 
-    __name__ = "Rich Club Coefficient"
+    CLASS_NAME = "Rich Club Coefficient"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -797,7 +797,7 @@ class Subgraph_Centrality(_Property):
         norm_network: Normalize subgraph centrality for every node to the max theoretical value.
     """
 
-    __name__ = "Subgraph Centrality"
+    CLASS_NAME = "Subgraph Centrality"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -858,7 +858,7 @@ class LocalityIndex(_Property):  # Hereda de la clase _Property
         norm_network: Normalize locality index for every node. Already normalized.
     """
 
-    __name__ = "Locality Index"
+    CLASS_NAME = "Locality Index"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -936,7 +936,7 @@ class AverageOutDegreeNearestNeighbors(
         norm_network: Normalize the average out-degree of nearest neighbors to all nodes in the graph.
     """
 
-    __name__ = "Average Degree for Nearest Neighbors (Out-Out)"
+    CLASS_NAME = "Average Degree for Nearest Neighbors (Out-Out)"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -990,7 +990,7 @@ class AverageDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
         norm_network: Normalize the average degree of nearest neighbors to all nodes in the graph.
     """
 
-    __name__ = "Average Degree for Nearest Neighbors (Undirected)"
+    CLASS_NAME = "Average Degree for Nearest Neighbors (Undirected)"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1039,7 +1039,7 @@ class EntropyPKout(_Property):
         norm_network: Normalize the entropy of the degree of distribution to the max theoretical value.
     """
 
-    __name__ = "Entropy of Degree Distribution"
+    CLASS_NAME = "Entropy of Degree Distribution"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1095,7 +1095,7 @@ class GiniIndex(_Property):
         norm_network: Already normalized.
     """
 
-    __name__ = "Gini Index"
+    CLASS_NAME = "Gini Index"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1110,6 +1110,10 @@ class GiniIndex(_Property):
         Returns:
             float: gini index of the entire graph.
         """
+        if nx.is_regular(self.G):
+            # perfect equality
+            return 0
+
         self.t = self.G.number_of_edges()
         if self.t == 0:
             raise EmptyGraphError(
@@ -1133,10 +1137,12 @@ class GiniIndex(_Property):
         """Normalization is a recalculation only between nodes with an out-degree higher than 0.
         Resources (connections) should not be distributed equally between all nodes in network, only between regulators"""
         n_parents = len(get_parent_nodes(self.G))
+        if n_parents == self._n_nodes:
+            return self._raw_value
+
         b = [j for x, j in self.G.out_degree() if j != 0]
         b.sort()
         area = 0
-
         for i in range(n_parents):
             x = b[i] / self.t
             y = (n_parents - (i + 1) + 0.5) / n_parents
@@ -1161,7 +1167,7 @@ class BetweennessCentrality(_Property):
     A high betweenness centrality indicates that a node is a bridge between different parts of the network.
     """
 
-    __name__ = "Betweenness Centrality"
+    CLASS_NAME = "Betweenness Centrality"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1212,7 +1218,7 @@ class GlobalEfficiency(_Property):
     The global efficiency of a graph is the average of the inverse of the shortest paths between all pairs of nodes.
     """
 
-    __name__ = "Global Efficiency"
+    CLASS_NAME = "Global Efficiency"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1259,7 +1265,7 @@ class Eccentricity(_Property):
     The eccentricity of a node is the largest shortest distance between that node and any other node in the graph.
     """
 
-    __name__ = "Eccentricity"
+    CLASS_NAME = "Eccentricity"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1307,7 +1313,7 @@ class Radius(_Property):
     The radius of a graph is the minimum eccentricity in the graph.
     """
 
-    __name__ = "Radius"
+    CLASS_NAME = "Radius"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1354,7 +1360,7 @@ class Center(_Property):
     This class returns the number of nodes in the center.
     """
 
-    __name__ = "Center"
+    CLASS_NAME = "Center"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1401,7 +1407,7 @@ class Periphery(_Property):
     This class returns the number of nodes in the periphery.
     """
 
-    __name__ = "Periphery"
+    CLASS_NAME = "Periphery"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1448,7 +1454,7 @@ class AverageLocalEfficiency(_Property):
     The local efficiency of a node is the global efficiency computed over the neighborhood of the node.
     """
 
-    __name__ = "Average Local Efficiency"
+    CLASS_NAME = "Average Local Efficiency"
 
     def __init__(self, G: nx.DiGraph):
         """
