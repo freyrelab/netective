@@ -137,11 +137,12 @@ def compute_moments(
 
     Note:
         Uniform distributions have np.NAN as kurtosis and skewness.
+        Nan will be propagated
     """
-    mean = np.mean(data)
-    variance = np.var(data, ddof=ddof)
-    skewness = skew(data)
-    kurt = kurtosis(data)
+    mean = np.nanmean(data)
+    variance = np.nanvar(data, ddof=ddof)
+    skewness = skew(data, nan_policy='ommit')
+    kurt = kurtosis(data, nan_policy='ommit')
 
     return mean, variance, skewness, kurt
 
