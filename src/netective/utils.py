@@ -17,6 +17,7 @@ import networkx as nx
 from tqdm import tqdm
 import concurrent.futures
 from itertools import chain
+from collections import defaultdict
 from scipy.stats import kurtosis, skew
 
 from freyrelab.regnets import regnet as rn
@@ -51,13 +52,14 @@ def run_parallel(f, my_iter, workers):
         ) as executor:
             futures = {}
             for arg in zip(*my_iter):
-                futures[executor.submit(f, *arg)] = arg[
-                    1
-                ]  # arg[0] is the net_name
+                name = arg[1]
+                futures[executor.submit(f, *arg)] = name
 
-            results = []
+            results = defaultdict(dict)
             for future in concurrent.futures.as_completed(futures):
-                results.extend(future.result())
+                scalar, dist = future.result()
+                results["scalars"].update(scalar)
+                results["distributions"].update(dist)
                 pbar.update(1)
 
     return results
@@ -141,8 +143,8 @@ def compute_moments(
     """
     mean = np.nanmean(data)
     variance = np.nanvar(data, ddof=ddof)
-    skewness = skew(data, nan_policy="ommit")
-    kurt = kurtosis(data, nan_policy="ommit")
+    skewness = skew(data, nan_policy="omit")
+    kurt = kurtosis(data, nan_policy="omit")
 
     return mean, variance, skewness, kurt
 

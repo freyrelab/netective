@@ -25,22 +25,24 @@ def remove_self_loops(G: nx.DiGraph):
     print(type(G))
     G.remove_edges_from(nx.selfloop_edges(G))
 
+
 def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
+
 
 # Get properties selected Fxn
 def get_child_classes(parent_class, properties):
     child_classes = []
     all_properties = []
-    print(f'Properties used for analysis: ', end=' ')
-    if properties == 'all':
+    print(f"Properties used for analysis: ", end=" ")
+    if properties == "all":
         for name, obj in inspect.getmembers(properties_2):
             if (
                 inspect.isclass(obj)
                 and issubclass(obj, parent_class)
                 and obj != parent_class
             ):
-                print(obj.CLASS_NAME, end=' ')
+                print(obj.CLASS_NAME, end=" ")
                 child_classes.append(obj)
                 all_properties.append(obj.CLASS_NAME)
     else:
@@ -51,7 +53,7 @@ def get_child_classes(parent_class, properties):
                 and obj != parent_class
                 and name in properties
             ):
-                print(name, end=' ')
+                print(name, end=" ")
                 child_classes.append(obj)
                 all_properties.append(obj.CLASS_NAME)
             if (
@@ -61,19 +63,34 @@ def get_child_classes(parent_class, properties):
                 and obj.CLASS_NAME not in all_properties
             ):
                 all_properties.append(obj.CLASS_NAME)
-    print('\n')
+    print("\n")
     if len(child_classes) == 0:
-        raise Exception(f'Sorry, no matches for properties inquired.\nList of available properties is: {all_properties}')
+        raise Exception(
+            f"Sorry, no matches for properties inquired.\nList of available properties is: {all_properties}"
+        )
     return child_classes
+
 
 # Get Instances Fxns
 def get_instances_no_paths(G, child_classes):
     instances = {x.CLASS_NAME: x(G) for x in child_classes if not x._use_paths}
     return instances
 
-def get_instances_paths(G, child_classes, net_shortest_paths, net_shortest_distances):
-    instances = {x.CLASS_NAME: x(G, net_shortest_paths = net_shortest_paths, net_shortest_distances = net_shortest_distances) for x in child_classes if x._use_paths}
+
+def get_instances_paths(
+    G, child_classes, net_shortest_paths, net_shortest_distances
+):
+    instances = {
+        x.CLASS_NAME: x(
+            G,
+            net_shortest_paths=net_shortest_paths,
+            net_shortest_distances=net_shortest_distances,
+        )
+        for x in child_classes
+        if x._use_paths
+    }
     return instances
+
 
 # Get Properties and Normalize Values Fxns
 def normalize_props(instances, G, norm):
@@ -95,10 +112,11 @@ def normalize_props(instances, G, norm):
 
     return norm_scalar_values, norm_dist_values
 
+
 def get_props(G, norm, child_classes):
     # Properties that do not use paths object
     instances = get_instances_no_paths(G, child_classes)
-    
+
     # Paths objects
     remove_self_loops(G)
     G = G.giant_component
@@ -106,42 +124,47 @@ def get_props(G, norm, child_classes):
     net_shortest_paths = ShortestPaths(G)
     net_shortest_distances = ShortestDistances(G)
     dist_values = {}
-    
+
     # Properties that use paths object
     # They use the giant component from an undirected graph with no selfloops
-    instances.update(get_instances_paths(G, child_classes, net_shortest_paths, net_shortest_distances))
-    
+    instances.update(
+        get_instances_paths(
+            G, child_classes, net_shortest_paths, net_shortest_distances
+        )
+    )
+
     scalar_values = {
-        x.CLASS_NAME : x.compute()
+        x.CLASS_NAME: x.compute()
         for name, x in instances.items()
-        if x._return_type == 'scalar'
+        if x._return_type == "scalar"
     }
 
     dist_values = {
-        x.CLASS_NAME : x.compute()
+        x.CLASS_NAME: x.compute()
         for name, x in instances.items()
-        if x._return_type == 'distribution'
+        if x._return_type == "distribution"
     }
 
     if norm is not None:
         scalar_values, dist_values = normalize_props(instances, G, norm=norm)
-    
+
     dist_values = {
         k: v for k, v in dist_values.items() if not np.isnan(v).all()
     }
 
     return scalar_values, dist_values
 
+
 def plot_distributions(dist_values):
     # Determine the grid shape based on the number of items
     num_items = len(dist_values)
-    if num_items > 1: 
+    if num_items > 1:
         grid_shape = (
             int(np.sqrt(num_items)) + 1,
             int(np.ceil(np.sqrt(num_items))) + 1,
         )
     else:
-        grid_shape = (1,1)
+        grid_shape = (1, 1)
 
     # Create the figure and subplots
     fig, axs = plt.subplots(
@@ -201,9 +224,10 @@ def plot_scalars(data_dict):
         # Customize the plot
         axs.set_xlabel("Values")
         axs.set_ylabel("")
-        axs.set_title('Network Level Properties', loc='left')
+        axs.set_title("Network Level Properties", loc="left")
 
     return fig, axs
+
 
 # Plotting Fxns
 def create_symmetric_heatmap(dataframe, title: str):
@@ -226,6 +250,7 @@ def create_symmetric_heatmap(dataframe, title: str):
 
     # Return the figure and axes
     return g.fig, g.ax_heatmap
+
 
 # Comparison Fxn
 def pairwise_pearson_correlation(
@@ -260,9 +285,10 @@ def pairwise_pearson_correlation(
 
     return corr_df
 
-#Main Fxns
 
-    # Analyzing one network
+# Main Fxns
+
+# Analyzing one network
 def main_single(G, norm, child_classes):
     scalar_values, dist_values = get_props(G, norm, child_classes)
     if len(dist_values) != 0:
@@ -273,10 +299,14 @@ def main_single(G, norm, child_classes):
         fig_scalar.show()
 
     # Analyzing more than one network
+
+
 def main_multiple(networks, norm, properties):
     # Iterate over the uploaded files and perform the necessary operations
     for name, G in networks.items():
-        scalar_arrays, dist_moments_arrays = compute_props(G, name, norm, properties)
+        scalar_arrays, dist_moments_arrays = compute_props(
+            G, name, norm, properties
+        )
 
     # Scalar properties
     if len(scalar_arrays) > 0:
@@ -285,14 +315,17 @@ def main_multiple(networks, norm, properties):
             df, title=f"Network-level properties"
         )
         fig_scalar.show()
-    
-    #Distribution properties
+
+    # Distribution properties
     if len(dist_moments_arrays) > 0:
         df = pairwise_pearson_correlation(dist_moments_arrays)
-        fig_dist, _ = create_symmetric_heatmap(df, title=f"Node-level properties")
+        fig_dist, _ = create_symmetric_heatmap(
+            df, title=f"Node-level properties"
+        )
         fig_dist.show()
 
-def compute_props(G, name, norm, properties):
+
+def compute_props(G, name, norm, properties="all"):
     scalar_arrays = {}
     dist_moments_arrays = {}
 
@@ -302,31 +335,64 @@ def compute_props(G, name, norm, properties):
     # props
     scalar_values, dist_values = get_props(G, norm, child_classes)
     # scalar properties
-    scalar_arrays[name] = np.asarray(
-        list(scalar_values.values())
-    )
-    dist_moments = [
-        compute_moments(array) for array in dist_values.values()
-    ]
+    scalar_arrays[name] = np.asarray(list(scalar_values.values()))
+    dist_moments = [compute_moments(array) for array in dist_values.values()]
     dist_moments_arrays[name] = np.asarray(
         flatten_list_of_iterables(dist_moments)
     )
     return scalar_arrays, dist_moments_arrays
 
+
 # User Fxns
-    # Characterization of one network
-def characterization(G: RegNet, norm=None, properties=['AverageClusteringCoefficient', 'AverageDegreeNearestNeighbors', 'AverageLocalEfficiency', 'AverageOutDegreeNearestNeighbors', 'AverageShortestPathLength', 'BetweennessCentrality', 'Center', 'ClusteringCoefficient', 'ComplexFeedForwardCircuits', 'Density', 'Diameter', 'Eccentricity', 'EntropyPKout', 'FeedbackLoops_3', 'GenesintheGiantComponent', 'GiniIndex', 'GlobalEfficiency', 'InDegree', 'LocalityIndex', 'MaxInDegree', 'MaxOutDegree', 'OutDegree', 'Periphery', 'Radius', 'Regulators', 'RichClub', 'SelfRegulations', 'SubgraphCentrality'],):
-    if norm == 'network' or norm == 'biological' or norm is None:
+# Characterization of one network
+def characterization(
+    G: RegNet,
+    norm=None,
+    properties=[
+        "AverageClusteringCoefficient",
+        "AverageDegreeNearestNeighbors",
+        "AverageLocalEfficiency",
+        "AverageOutDegreeNearestNeighbors",
+        "AverageShortestPathLength",
+        "BetweennessCentrality",
+        "Center",
+        "ClusteringCoefficient",
+        "ComplexFeedForwardCircuits",
+        "Density",
+        "Diameter",
+        "Eccentricity",
+        "EntropyPKout",
+        "FeedbackLoops_3",
+        "GenesintheGiantComponent",
+        "GiniIndex",
+        "GlobalEfficiency",
+        "InDegree",
+        "LocalityIndex",
+        "MaxInDegree",
+        "MaxOutDegree",
+        "OutDegree",
+        "Periphery",
+        "Radius",
+        "Regulators",
+        "RichClub",
+        "SelfRegulations",
+        "SubgraphCentrality",
+    ],
+):
+    if norm == "network" or norm == "biological" or norm is None:
         parent_class = properties_2._Property
         selected_child_classes = get_child_classes(parent_class, properties)
         main_single(G, norm, selected_child_classes)
     else:
-        raise Exception('Normalization not valid')
-    
+        raise Exception("Normalization not valid")
+
     # Comparison of multiple networks
-def comparison(networks: dict, norm:None=None, properties: str | list='all') -> None:
-    if norm == 'network' or norm == 'biological' or norm is None:
+
+
+def comparison(
+    networks: dict, norm: None = None, properties: str | list = "all"
+) -> None:
+    if norm == "network" or norm == "biological" or norm is None:
         main_multiple(networks, norm, properties)
     else:
-        raise Exception('Normalization not valid')
-
+        raise Exception("Normalization not valid")
