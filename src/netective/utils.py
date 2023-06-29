@@ -34,7 +34,7 @@ def run_parallel(f, my_iter, workers):
     f: function.
         Function to be executed in parallel.
     my_iter: Iterable.
-        Iterable with the inputs fot f.
+        Iterable with the inputs for f.
         Each element of iterable will be unzipped before calling f.
     workers: Numer of processes to run in parallel.
 
@@ -52,7 +52,7 @@ def run_parallel(f, my_iter, workers):
             futures = {}
             for arg in zip(*my_iter):
                 futures[executor.submit(f, *arg)] = arg[
-                    0
+                    1
                 ]  # arg[0] is the net_name
 
             results = []
@@ -141,8 +141,8 @@ def compute_moments(
     """
     mean = np.nanmean(data)
     variance = np.nanvar(data, ddof=ddof)
-    skewness = skew(data, nan_policy='ommit')
-    kurt = kurtosis(data, nan_policy='ommit')
+    skewness = skew(data, nan_policy="ommit")
+    kurt = kurtosis(data, nan_policy="ommit")
 
     return mean, variance, skewness, kurt
 
