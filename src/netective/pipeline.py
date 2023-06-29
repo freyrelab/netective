@@ -1,4 +1,5 @@
 # Imports
+from __future__ import annotations
 import os
 import pandas as pd
 from io import BytesIO
@@ -27,31 +28,51 @@ def remove_self_loops(G: nx.DiGraph):
 def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
 
+# Get properties selected Fxn
 def get_child_classes(parent_class, properties):
     child_classes = []
-    real = ['AverageClusteringCoefficient', 'AverageDegreeNearestNeighbors', 'AverageLocalEfficiency', 'AverageOutDegreeNearestNeighbors', 'AverageShortestPathLength', 'BetweennessCentrality', 'Center', 'ClusteringCoefficient', 'ComplexFeedForwardCircuits', 'Density', 'Diameter', 'Eccentricity', 'EntropyPKout', 'FeedbackLoops_3', 'GenesintheGiantComponent', 'GiniIndex', 'GlobalEfficiency', 'InDegree', 'LocalityIndex', 'MaxInDegree', 'MaxOutDegree', 'OutDegree', 'Periphery', 'Radius', 'Regulators', 'RichClub', 'SelfRegulations', 'SubgraphCentrality']
+    all_properties = []
     print(f'Properties used for analysis: ', end=' ')
-    for name, obj in inspect.getmembers(properties_2):
-        if (
-            inspect.isclass(obj)
-            and issubclass(obj, parent_class)
-            and obj != parent_class
-            and name in properties
-        ):
-            print(name, end=' ')
-            child_classes.append(obj)
+    if properties == 'all':
+        for name, obj in inspect.getmembers(properties_2):
+            if (
+                inspect.isclass(obj)
+                and issubclass(obj, parent_class)
+                and obj != parent_class
+            ):
+                print(obj.CLASS_NAME, end=' ')
+                child_classes.append(obj)
+                all_properties.append(obj.CLASS_NAME)
+    else:
+        for name, obj in inspect.getmembers(properties_2):
+            if (
+                inspect.isclass(obj)
+                and issubclass(obj, parent_class)
+                and obj != parent_class
+                and name in properties
+            ):
+                print(name, end=' ')
+                child_classes.append(obj)
+                all_properties.append(obj.CLASS_NAME)
+            if (
+                inspect.isclass(obj)
+                and issubclass(obj, parent_class)
+                and obj != parent_class
+                and obj.CLASS_NAME not in all_properties
+            ):
+                all_properties.append(obj.CLASS_NAME)
     print('\n')
     if len(child_classes) == 0:
-        raise Exception(f'Sorry, no matches for properties inquired.\nList of available properties is: {real}')
+        raise Exception(f'Sorry, no matches for properties inquired.\nList of available properties is: {all_properties}')
     return child_classes
 
 # Get Instances Fxns
 def get_instances_no_paths(G, child_classes):
-    instances = {x.__name__: x(G) for x in child_classes if not x._use_paths}
+    instances = {x.CLASS_NAME: x(G) for x in child_classes if not x._use_paths}
     return instances
 
 def get_instances_paths(G, child_classes, net_shortest_paths, net_shortest_distances):
-    instances = {x.__name__: x(G, net_shortest_paths = net_shortest_paths, net_shortest_distances = net_shortest_distances) for x in child_classes if x._use_paths}
+    instances = {x.CLASS_NAME: x(G, net_shortest_paths = net_shortest_paths, net_shortest_distances = net_shortest_distances) for x in child_classes if x._use_paths}
     return instances
 
 # Get Properties and Normalize Values Fxns
@@ -66,16 +87,15 @@ def normalize_props(instances, G, norm):
         )
         try:
             if norm == "network":
-                dict_[x.__name__] = x.norm_network()
+                dict_[x.CLASS_NAME] = x.norm_network()
             elif norm == "biological":
-                dict_[x.__name__] = x.norm_biol()
+                dict_[x.CLASS_NAME] = x.norm_biol()
         except (NotImplementedError, properties_2.NormalizationError):
-            dict_[x.__name__] = np.nan
+            dict_[x.CLASS_NAME] = np.nan
 
     return norm_scalar_values, norm_dist_values
 
 def get_props(G, norm, child_classes):
-
     # Properties that do not use paths object
     instances = get_instances_no_paths(G, child_classes)
     
@@ -92,13 +112,13 @@ def get_props(G, norm, child_classes):
     instances.update(get_instances_paths(G, child_classes, net_shortest_paths, net_shortest_distances))
     
     scalar_values = {
-        x.__name__ : x.compute()
+        x.CLASS_NAME : x.compute()
         for name, x in instances.items()
         if x._return_type == 'scalar'
     }
 
     dist_values = {
-        x.__name__ : x.compute()
+        x.CLASS_NAME : x.compute()
         for name, x in instances.items()
         if x._return_type == 'distribution'
     }
@@ -253,7 +273,45 @@ def main_single(G, norm, child_classes):
         fig_scalar.show()
 
     # Analyzing more than one network
+def main_multiple(networks, norm, properties):
+    # Iterate over the uploaded files and perform the necessary operations
+    for name, G in networks.items():
+        scalar_arrays, dist_moments_arrays = compute_props(G, name, norm, properties)
 
+    # Scalar properties
+    if len(scalar_arrays) > 0:
+        df = pairwise_pearson_correlation(scalar_arrays)
+        fig_scalar, _ = create_symmetric_heatmap(
+            df, title=f"Network-level properties"
+        )
+        fig_scalar.show()
+    
+    #Distribution properties
+    if len(dist_moments_arrays) > 0:
+        df = pairwise_pearson_correlation(dist_moments_arrays)
+        fig_dist, _ = create_symmetric_heatmap(df, title=f"Node-level properties")
+        fig_dist.show()
+
+def compute_props(G, name, norm, properties):
+    scalar_arrays = {}
+    dist_moments_arrays = {}
+
+    parent_class = properties_2._Property
+    child_classes = get_child_classes(parent_class, properties)
+
+    # props
+    scalar_values, dist_values = get_props(G, norm, child_classes)
+    # scalar properties
+    scalar_arrays[name] = np.asarray(
+        list(scalar_values.values())
+    )
+    dist_moments = [
+        compute_moments(array) for array in dist_values.values()
+    ]
+    dist_moments_arrays[name] = np.asarray(
+        flatten_list_of_iterables(dist_moments)
+    )
+    return scalar_arrays, dist_moments_arrays
 
 # User Fxns
     # Characterization of one network
@@ -262,6 +320,13 @@ def characterization(G: RegNet, norm=None, properties=['AverageClusteringCoeffic
         parent_class = properties_2._Property
         selected_child_classes = get_child_classes(parent_class, properties)
         main_single(G, norm, selected_child_classes)
+    else:
+        raise Exception('Normalization not valid')
+    
+    # Comparison of multiple networks
+def comparison(networks: dict, norm:None=None, properties: str | list='all') -> None:
+    if norm == 'network' or norm == 'biological' or norm is None:
+        main_multiple(networks, norm, properties)
     else:
         raise Exception('Normalization not valid')
 
