@@ -642,7 +642,7 @@ class ClusteringCoefficient(_Property):
 @return_distribution
 @use_direction
 @use_selfloops
-class In_Degree(_Property):
+class InDegree(_Property):
     """In degree of the graph.
 
     The in degree of each node is defined as the number of predecessors it has.
@@ -692,7 +692,7 @@ class In_Degree(_Property):
 @return_distribution
 @use_direction
 @use_selfloops
-class Out_Degree(_Property):
+class OutDegree(_Property):
     """Out degree of the graph.
 
     The out degree of each node is defined as the number of successors it has.
@@ -733,7 +733,7 @@ class Out_Degree(_Property):
 
 
 @return_distribution
-class Rich_Club(_Property):
+class RichClub(_Property):
     """Rich Club Coefficient.
 
     The Rich Club Coefficient for every degree in the graph is defined as the clustering coeffficient
@@ -785,7 +785,7 @@ class Rich_Club(_Property):
 
 @return_distribution
 @use_selfloops
-class Subgraph_Centrality(_Property):
+class SubgraphCentrality(_Property):
     """Subgraph centrality.
 
     Subgraph centrality is defined as the "sum" of closed walks of different lengths throught the network
@@ -838,7 +838,7 @@ class Subgraph_Centrality(_Property):
             [(i, j) for i in range(n_nodes) for j in range(n_nodes)]
         )
 
-        max = Subgraph_Centrality(T)
+        max = SubgraphCentrality(T)
 
         return self._raw_value / max.compute()
 
