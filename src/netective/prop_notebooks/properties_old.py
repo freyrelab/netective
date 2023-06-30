@@ -485,9 +485,9 @@ class GenesintheGiantComponent(_Property):
 
 @use_paths
 @return_scalar
+@use_direction
 @use_giant_component
 class Diameter(_Property):
-    
     """Diameter of the graph.
 
     Methods:
@@ -498,12 +498,12 @@ class Diameter(_Property):
 
     CLASS_NAME = "Diameter"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
-        self._shortest_distances = kwargs['net_shortest_distances']
+    def __init__(self, G: nx.DiGraph):
+        G = G.giant_component
         super().__init__(G)
 
     def compute(self) -> int:
-        self._raw_value = self._shortest_distances.diameter
+        self._raw_value = self.G.diameter()
         return self._raw_value
 
     @check_raw_value
@@ -517,11 +517,8 @@ class Diameter(_Property):
         Note: the diameter of the giant component is not necessarily the same as the diameter of the graph.
         we are using the diameter of the giant component here given that the computation of the diameter is performed on the giant component.
         """
-        """
         n_parents = len(get_parent_nodes(self.G))
         return self._raw_value / n_parents
-        """
-        raise NotImplementedError
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -546,14 +543,16 @@ class AverageShortestPathLength(_Property):
 
     CLASS_NAME = "Average Shortest Path Length"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.DiGraph):
         """
         Args:
             G (nx.DiGraph): Graph.
         """
+        G = remove_self_loops(G)
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        G = G.giant_component
+        G = G.to_undirected()
         super().__init__(G)
 
     def compute(self) -> int:
@@ -562,7 +561,8 @@ class AverageShortestPathLength(_Property):
         Returns:
             int: Average shortest path length of the graph.
         """
-        self._raw_value = self._shortest_distances.average_path_length
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = shortest_distances_G.average_path_length
         return self._raw_value
 
     @check_raw_value
@@ -642,7 +642,7 @@ class ClusteringCoefficient(_Property):
 @return_distribution
 @use_direction
 @use_selfloops
-class InDegree(_Property):
+class In_Degree(_Property):
     """In degree of the graph.
 
     The in degree of each node is defined as the number of predecessors it has.
@@ -692,7 +692,7 @@ class InDegree(_Property):
 @return_distribution
 @use_direction
 @use_selfloops
-class OutDegree(_Property):
+class Out_Degree(_Property):
     """Out degree of the graph.
 
     The out degree of each node is defined as the number of successors it has.
@@ -733,7 +733,7 @@ class OutDegree(_Property):
 
 
 @return_distribution
-class RichClub(_Property):
+class Rich_Club(_Property):
     """Rich Club Coefficient.
 
     The Rich Club Coefficient for every degree in the graph is defined as the clustering coeffficient
@@ -785,7 +785,7 @@ class RichClub(_Property):
 
 @return_distribution
 @use_selfloops
-class SubgraphCentrality(_Property):
+class Subgraph_Centrality(_Property):
     """Subgraph centrality.
 
     Subgraph centrality is defined as the "sum" of closed walks of different lengths throught the network
@@ -838,7 +838,7 @@ class SubgraphCentrality(_Property):
             [(i, j) for i in range(n_nodes) for j in range(n_nodes)]
         )
 
-        max = SubgraphCentrality(T)
+        max = Subgraph_Centrality(T)
 
         return self._raw_value / max.compute()
 
@@ -1110,6 +1110,10 @@ class GiniIndex(_Property):
         Returns:
             float: gini index of the entire graph.
         """
+        if nx.is_regular(self.G):
+            # perfect equality
+            return 0
+
         self.t = self.G.number_of_edges()
         if self.t == 0:
             raise EmptyGraphError(
@@ -1133,10 +1137,12 @@ class GiniIndex(_Property):
         """Normalization is a recalculation only between nodes with an out-degree higher than 0.
         Resources (connections) should not be distributed equally between all nodes in network, only between regulators"""
         n_parents = len(get_parent_nodes(self.G))
+        if n_parents == self._n_nodes:
+            return self._raw_value
+
         b = [j for x, j in self.G.out_degree() if j != 0]
         b.sort()
         area = 0
-
         for i in range(n_parents):
             x = b[i] / self.t
             y = (n_parents - (i + 1) + 0.5) / n_parents
@@ -1163,14 +1169,16 @@ class BetweennessCentrality(_Property):
 
     CLASS_NAME = "Betweenness Centrality"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.DiGraph):
         """
         Args:
             G (nx.DiGraph): Graph.
         """
+        G = remove_self_loops(G)
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_paths = kwargs['net_shortest_paths']
+        G = G.giant_component
+        G = G.to_undirected()
         super().__init__(G)
 
     def compute(self) -> np.array:
@@ -1179,7 +1187,8 @@ class BetweennessCentrality(_Property):
         Returns:
             np.array: Betweenness centrality for each node in the graph.
         """
-        betweenness = self._shortest_paths.betweenness()
+        shortest_paths = ShortestPaths(self.G)
+        betweenness = shortest_paths.betweenness()
         self._raw_value = np.asarray(betweenness, dtype=float)
         return self._raw_value
 
@@ -1211,14 +1220,15 @@ class GlobalEfficiency(_Property):
 
     CLASS_NAME = "Global Efficiency"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.DiGraph):
         """
         Args:
             G (nx.DiGraph): Graph.
         """
+        G = remove_self_loops(G)
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        G = G.to_undirected()
         super().__init__(G)
 
     def compute(self) -> float:
@@ -1227,7 +1237,8 @@ class GlobalEfficiency(_Property):
         Returns:
             float: Global efficiency of the graph.
         """
-        efficiency = Efficiency(self.G, self._shortest_distances)
+        shortest_distances_G = ShortestDistances(self.G)
+        efficiency = Efficiency(self.G, shortest_distances_G)
         self._raw_value = efficiency.global_efficiency
         return self._raw_value
 
@@ -1256,14 +1267,16 @@ class Eccentricity(_Property):
 
     CLASS_NAME = "Eccentricity"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.DiGraph):
         """
         Args:
             G (nx.DiGraph): Graph.
         """
+        G = remove_self_loops(G)
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        G = G.giant_component
+        G = G.to_undirected()
         super().__init__(G)
 
     def compute(self) -> np.array:
@@ -1272,8 +1285,9 @@ class Eccentricity(_Property):
         Returns:
             np.array: Eccentricity for each node in the graph.
         """
+        shortest_distances_G = ShortestDistances(self.G)
         self._raw_value = np.fromiter(
-            self._shortest_distances.eccentricity().values(), dtype=float
+            shortest_distances_G.eccentricity().values(), dtype=float
         )
         return self._raw_value
 
@@ -1301,14 +1315,16 @@ class Radius(_Property):
 
     CLASS_NAME = "Radius"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.DiGraph):
         """
         Args:
             G (nx.DiGraph): Graph.
         """
+        G = remove_self_loops(G)
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        G = G.giant_component
+        G = G.to_undirected()
         super().__init__(G)
 
     def compute(self) -> int:
@@ -1317,7 +1333,8 @@ class Radius(_Property):
         Returns:
             int: Radius of the graph.
         """
-        self._raw_value = self._shortest_distances.radius
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = shortest_distances_G.radius
         return self._raw_value
 
     @check_raw_value
@@ -1345,14 +1362,16 @@ class Center(_Property):
 
     CLASS_NAME = "Center"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.DiGraph):
         """
         Args:
             G (nx.DiGraph): Graph.
         """
+        G = remove_self_loops(G)
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        G = G.giant_component
+        G = G.to_undirected()
         super().__init__(G)
 
     def compute(self) -> int:
@@ -1361,7 +1380,8 @@ class Center(_Property):
         Returns:
             int: Center for each node in the graph.
         """
-        self._raw_value = len(self._shortest_distances.center)
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = len(shortest_distances_G.center)
         return self._raw_value
 
     @check_raw_value
@@ -1389,14 +1409,16 @@ class Periphery(_Property):
 
     CLASS_NAME = "Periphery"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.DiGraph):
         """
         Args:
             G (nx.DiGraph): Graph.
         """
+        G = remove_self_loops(G)
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        G = G.giant_component
+        G = G.to_undirected()
         super().__init__(G)
 
     def compute(self) -> int:
@@ -1405,7 +1427,8 @@ class Periphery(_Property):
         Returns:
             int: Periphery for each node in the graph.
         """
-        self._raw_value = len(self._shortest_distances.periphery)
+        shortest_distances_G = ShortestDistances(self.G)
+        self._raw_value = len(shortest_distances_G.periphery)
         return self._raw_value
 
     @check_raw_value
@@ -1433,14 +1456,16 @@ class AverageLocalEfficiency(_Property):
 
     CLASS_NAME = "Average Local Efficiency"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.DiGraph):
         """
         Args:
             G (nx.DiGraph): Graph.
         """
+        G = remove_self_loops(G)
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        G = G.giant_component
+        G = G.to_undirected()
         super().__init__(G)
 
     def compute(self) -> float:
@@ -1449,7 +1474,8 @@ class AverageLocalEfficiency(_Property):
         Returns:
             float: Average local efficiency for each node in the graph.
         """
-        efficiency = Efficiency(self.G, self._shortest_distances)
+        shortest_distances_G = ShortestDistances(self.G)
+        efficiency = Efficiency(self.G, shortest_distances_G)
         self._raw_value = efficiency.local_efficiency
         return self._raw_value
 

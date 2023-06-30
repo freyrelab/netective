@@ -17,7 +17,7 @@ import freyrelab
 from freyrelab.regnets.regnet import RegNet
 from freyrelab.nets.paths2 import ShortestPaths, Efficiency, ShortestDistances
 
-from netective import properties_2
+from netective import properties
 from netective.utils import compute_moments
 
 # Auxiliar Fxns
@@ -31,12 +31,12 @@ def flatten_list_of_iterables(lst):
 
 
 # Get properties selected Fxn
-def get_child_classes(parent_class, properties):
+def get_child_classes(parent_class, selected_props):
     child_classes = []
     all_properties = []
     print(f"Properties used for analysis: ", end=" ")
-    if properties == "all":
-        for name, obj in inspect.getmembers(properties_2):
+    if selected_props == "all":
+        for name, obj in inspect.getmembers(properties):
             if (
                 inspect.isclass(obj)
                 and issubclass(obj, parent_class)
@@ -46,12 +46,12 @@ def get_child_classes(parent_class, properties):
                 child_classes.append(obj)
                 all_properties.append(obj.CLASS_NAME)
     else:
-        for name, obj in inspect.getmembers(properties_2):
+        for name, obj in inspect.getmembers(properties):
             if (
                 inspect.isclass(obj)
                 and issubclass(obj, parent_class)
                 and obj != parent_class
-                and name in properties
+                and name in selected_props
             ):
                 print(name, end=" ")
                 child_classes.append(obj)
@@ -107,7 +107,7 @@ def normalize_props(instances, G, norm):
                 dict_[x.CLASS_NAME] = x.norm_network()
             elif norm == "biological":
                 dict_[x.CLASS_NAME] = x.norm_biol()
-        except (NotImplementedError, properties_2.NormalizationError):
+        except (NotImplementedError, properties.NormalizationError):
             dict_[x.CLASS_NAME] = np.nan
 
     return norm_scalar_values, norm_dist_values
@@ -329,7 +329,7 @@ def compute_props(G, name, norm, properties="all"):
     scalar_arrays = {}
     dist_moments_arrays = {}
 
-    parent_class = properties_2._Property
+    parent_class = properties._Property
     child_classes = get_child_classes(parent_class, properties)
 
     # props
@@ -345,10 +345,10 @@ def compute_props(G, name, norm, properties="all"):
 
 # User Fxns
     # Characterization of one network
-def characterization(G: RegNet, net_name: str, norm:None=None, properties: str | list='all') -> None:
+def characterization(G: RegNet, net_name: str, norm:None=None, selected_props: str | list='all') -> None:
     if norm == 'network' or norm == 'biological' or norm is None:
-        parent_class = properties_2._Property
-        selected_child_classes = get_child_classes(parent_class, properties)
+        parent_class = properties._Property
+        selected_child_classes = get_child_classes(parent_class, selected_props)
         main_single(G, norm, selected_child_classes)
     else:
         raise Exception('Normalization not valid.')
