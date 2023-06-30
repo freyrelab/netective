@@ -112,6 +112,9 @@ def normalize_props(instances, G, norm):
 
 
 def get_props(G, norm, child_classes):
+
+    G = RegNet(G)
+
     # Properties that do not use paths object
     instances = get_instances_no_paths(G, child_classes)
 
