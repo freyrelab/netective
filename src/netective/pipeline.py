@@ -344,51 +344,16 @@ def compute_props(G, name, norm, properties="all"):
 
 
 # User Fxns
-# Characterization of one network
-def characterization(
-    G: RegNet,
-    norm=None,
-    properties=[
-        "AverageClusteringCoefficient",
-        "AverageDegreeNearestNeighbors",
-        "AverageLocalEfficiency",
-        "AverageOutDegreeNearestNeighbors",
-        "AverageShortestPathLength",
-        "BetweennessCentrality",
-        "Center",
-        "ClusteringCoefficient",
-        "ComplexFeedForwardCircuits",
-        "Density",
-        "Diameter",
-        "Eccentricity",
-        "EntropyPKout",
-        "FeedbackLoops_3",
-        "GenesintheGiantComponent",
-        "GiniIndex",
-        "GlobalEfficiency",
-        "InDegree",
-        "LocalityIndex",
-        "MaxInDegree",
-        "MaxOutDegree",
-        "OutDegree",
-        "Periphery",
-        "Radius",
-        "Regulators",
-        "RichClub",
-        "SelfRegulations",
-        "SubgraphCentrality",
-    ],
-):
-    if norm == "network" or norm == "biological" or norm is None:
+    # Characterization of one network
+def characterization(G: RegNet, net_name: str, norm:None=None, properties: str | list='all') -> None:
+    if norm == 'network' or norm == 'biological' or norm is None:
         parent_class = properties_2._Property
         selected_child_classes = get_child_classes(parent_class, properties)
         main_single(G, norm, selected_child_classes)
     else:
-        raise Exception("Normalization not valid")
+        raise Exception('Normalization not valid.')
 
-    # Comparison of multiple networks
-
-
+# Comparison of multiple networks
 def comparison(
     networks: dict, norm: None = None, properties: str | list = "all"
 ) -> None:
