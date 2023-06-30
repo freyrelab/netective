@@ -47,20 +47,22 @@ def run_parallel(f, my_iter, workers):
 
     len_iter = len(my_iter)
     with tqdm(total=len_iter) as pbar:
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=workers
-        ) as executor:
-            futures = {}
-            for arg in zip(*my_iter):
-                name = arg[1]
-                futures[executor.submit(f, *arg)] = name
+        try:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+                futures = {}
+                for arg in zip(*my_iter):
+                    name = arg[1]
+                    futures[executor.submit(f, *arg)] = name
 
-            results = defaultdict(dict)
-            for future in concurrent.futures.as_completed(futures):
-                scalar, dist = future.result()
-                results["scalars"].update(scalar)
-                results["distributions"].update(dist)
-                pbar.update(1)
+                results = defaultdict(dict)
+                for future in concurrent.futures.as_completed(futures):
+                    scalar, dist = future.result()
+                    results["scalars"].update(scalar)
+                    results["distributions"].update(dist)
+                    pbar.update(1)
+        except NotImplementedError as e:
+            print()
+            print(e.message)
 
     return results
 
@@ -72,15 +74,11 @@ def validate_network(G: nx.DiGraph | rn.RegNet) -> rn.RegNet:
     elif not isinstance(G, rn.RegNet):
         raise TypeError("G must be a DiGraph or a RegNet")
     if G.size() == 0:
-        raise ValueError(
-            f"G must have at least one edge. It has {G.size()} edges."
-        )
+        raise ValueError(f"G must have at least one edge. It has {G.size()} edges.")
     return G
 
 
-def parse_nets(
-    paths: list[str], comments: str = "#", delimiter: str = "\t"
-) -> dict:
+def parse_nets(paths: list[str], comments: str = "#", delimiter: str = "\t") -> dict:
 
     """Reads network files and returns a dictionary of networkx.DiGraphs.
 
@@ -124,9 +122,7 @@ def parse_nets(
     return networks
 
 
-def compute_moments(
-    data: np.ndarray, ddof: int = 1
-) -> tuple[float, float, float, float]:
+def compute_moments(data: np.ndarray, ddof: int = 1) -> tuple[float, float, float, float]:
     """Computes the four first moments of a distribution.
 
     Args:

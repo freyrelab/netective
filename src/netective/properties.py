@@ -412,9 +412,7 @@ class FeedbackLoops_3(_Property):
     @check_raw_value
     def norm_network(self) -> float:
         """Normalize the number of feedback loops of length 3 to the number of nodes."""
-        max_feedbacks3 = (
-            self._n_nodes * (self._n_nodes - 1) * (self._n_nodes - 2)
-        )  # TODO: verify
+        max_feedbacks3 = self._n_nodes * (self._n_nodes - 1) * (self._n_nodes - 2)  # TODO: verify
         return self._raw_value / max_feedbacks3
 
 
@@ -446,9 +444,7 @@ class ComplexFeedForwardCircuits(_Property):
 
     def norm_network(self) -> float:
         """Normalize the number of complex feed-forward circuits to the number of nodes."""
-        max_complex_ff = (
-            self._n_nodes * (self._n_nodes - 1) * (self._n_nodes - 2)
-        )  # TODO: verify
+        max_complex_ff = self._n_nodes * (self._n_nodes - 1) * (self._n_nodes - 2)  # TODO: verify
         return self._raw_value / max_complex_ff
 
 
@@ -487,7 +483,7 @@ class GenesintheGiantComponent(_Property):
 @return_scalar
 @use_giant_component
 class Diameter(_Property):
-    
+
     """Diameter of the graph.
 
     Methods:
@@ -499,7 +495,7 @@ class Diameter(_Property):
     CLASS_NAME = "Diameter"
 
     def __init__(self, G: nx.DiGraph, **kwargs):
-        self._shortest_distances = kwargs['net_shortest_distances']
+        self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
     def compute(self) -> int:
@@ -553,7 +549,7 @@ class AverageShortestPathLength(_Property):
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
     def compute(self) -> int:
@@ -765,9 +761,7 @@ class RichClub(_Property):
 
         n_edges = self.G.number_of_edges()
         if n_edges == 0:
-            raise EmptyGraphError(
-                "There are no edges. Can not form rich clubs with no edges."
-            )
+            raise EmptyGraphError("There are no edges. Can not form rich clubs with no edges.")
 
         dict_coeff = nx.rich_club_coefficient(self.G, normalized=False)
         self._raw_value = np.fromiter(dict_coeff.values(), dtype=float)
@@ -834,9 +828,7 @@ class SubgraphCentrality(_Property):
         T = nx.DiGraph()
         n_nodes = self._n_nodes
         T.add_nodes_from(range(n_nodes))
-        T.add_edges_from(
-            [(i, j) for i in range(n_nodes) for j in range(n_nodes)]
-        )
+        T.add_edges_from([(i, j) for i in range(n_nodes) for j in range(n_nodes)])
 
         max = SubgraphCentrality(T)
 
@@ -922,9 +914,7 @@ class LocalityIndex(_Property):  # Hereda de la clase _Property
 
 @return_distribution
 @use_direction
-class AverageOutDegreeNearestNeighbors(
-    _Property
-):  # Hereda de la clase _Property
+class AverageOutDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
     """Average Out-Degree of Nearest Neighbors
 
     Average out-degree of nearest neighbors is defined as de average of out-degrees of each memeber of a node's neighborhood.
@@ -952,12 +942,8 @@ class AverageOutDegreeNearestNeighbors(
             np.array: average out-degree for each node in the graph.
         """
         self.A = remove_self_loops(self.G)
-        self._dict_av_degree = nx.average_neighbor_degree(
-            self.A, source="out", target="out"
-        )
-        self._raw_value = np.fromiter(
-            self._dict_av_degree.values(), dtype=float
-        )
+        self._dict_av_degree = nx.average_neighbor_degree(self.A, source="out", target="out")
+        self._raw_value = np.fromiter(self._dict_av_degree.values(), dtype=float)
 
         return self._raw_value
 
@@ -966,9 +952,7 @@ class AverageOutDegreeNearestNeighbors(
         """Normalize the average degree of nearest neighbors for every node in the graph to the number of nodes and exclude
         0s from nodes that do not have a out-degree higher than 0. Relation between order of values and order of nodes is lost.
         """
-        parents_value = np.array(
-            [self._dict_av_degree[node] for node in get_parent_nodes(self.A)]
-        )
+        parents_value = np.array([self._dict_av_degree[node] for node in get_parent_nodes(self.A)])
         return parents_value * (1 / (self._n_nodes - 1))
 
     @check_raw_value
@@ -1007,9 +991,7 @@ class AverageDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
         """
         no_self_loops = nx.DiGraph
         no_self_loops = remove_self_loops(self.G)
-        dict_av_degree = nx.average_neighbor_degree(
-            no_self_loops.to_undirected()
-        )
+        dict_av_degree = nx.average_neighbor_degree(no_self_loops.to_undirected())
         self._raw_value = np.fromiter(dict_av_degree.values(), dtype=float)
 
         return self._raw_value
@@ -1170,7 +1152,7 @@ class BetweennessCentrality(_Property):
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_paths = kwargs['net_shortest_paths']
+        self._shortest_paths = kwargs["net_shortest_paths"]
         super().__init__(G)
 
     def compute(self) -> np.array:
@@ -1218,7 +1200,7 @@ class GlobalEfficiency(_Property):
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
     def compute(self) -> float:
@@ -1233,9 +1215,7 @@ class GlobalEfficiency(_Property):
 
     @check_raw_value
     def norm_biol(self) -> None:
-        raise NormalizationError(
-            "global efficiency cannot be normalized by biological properties."
-        )
+        raise NormalizationError("global efficiency cannot be normalized by biological properties.")
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -1263,7 +1243,7 @@ class Eccentricity(_Property):
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
     def compute(self) -> np.array:
@@ -1272,16 +1252,12 @@ class Eccentricity(_Property):
         Returns:
             np.array: Eccentricity for each node in the graph.
         """
-        self._raw_value = np.fromiter(
-            self._shortest_distances.eccentricity().values(), dtype=float
-        )
+        self._raw_value = np.fromiter(self._shortest_distances.eccentricity().values(), dtype=float)
         return self._raw_value
 
     @check_raw_value
     def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Eccentricity cannot be normalized by biological properties."
-        )
+        raise NormalizationError("Eccentricity cannot be normalized by biological properties.")
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -1308,7 +1284,7 @@ class Radius(_Property):
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
     def compute(self) -> int:
@@ -1322,9 +1298,7 @@ class Radius(_Property):
 
     @check_raw_value
     def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Radius cannot be normalized by biological properties."
-        )
+        raise NormalizationError("Radius cannot be normalized by biological properties.")
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -1352,7 +1326,7 @@ class Center(_Property):
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
     def compute(self) -> int:
@@ -1366,9 +1340,7 @@ class Center(_Property):
 
     @check_raw_value
     def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Center cannot be normalized by biological properties."
-        )
+        raise NormalizationError("Center cannot be normalized by biological properties.")
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -1396,7 +1368,7 @@ class Periphery(_Property):
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
     def compute(self) -> int:
@@ -1410,9 +1382,7 @@ class Periphery(_Property):
 
     @check_raw_value
     def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Periphery cannot be normalized by biological properties."
-        )
+        raise NormalizationError("Periphery cannot be normalized by biological properties.")
 
     @check_raw_value
     def norm_network(self) -> int:
@@ -1440,7 +1410,7 @@ class AverageLocalEfficiency(_Property):
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
-        self._shortest_distances = kwargs['net_shortest_distances']
+        self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
     def compute(self) -> float:
