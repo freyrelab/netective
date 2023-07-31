@@ -9,14 +9,15 @@ from netective.utils import concat_path
 def _parse_arguments():
 
     parser = argparse.ArgumentParser(
-        description="Assess the topology of a network with respect to other networks."
+        description="Assess the topology of a network. If more than one network is given (directory with multiple networks), a comparison between them based on their topology is done."
     )
 
     parser.add_argument(
         "--norm",
-        action="store_true",
-        default=False,
-        help="whether to normalize structural properties, default is biological normalization (biol)",
+        metavar= "normalization",
+        default=None,
+        help="whether to normalize structural properties, default is None.",
+        choices=[None, 'network', 'biological']
     )
     parser.add_argument(
         "--comments",
@@ -35,16 +36,17 @@ def _parse_arguments():
     parser.add_argument(
         "--workers",
         metavar="workers",
-        type=int,
-        default=1,
+        type=str,
+        default='1',
         help="number of workers to use, default is 1",
+        choices=['auto', '1','int representing number of workers']
     )
     parser.add_argument(
         "--erdos_renyi",
         metavar="erdos_renyi",
         type=int,
-        default=1000,
-        help="number of Erdos-Renyi networks to generate for each network, default is 1000",
+        default=10,
+        help="number of Erdos-Renyi networks to generate for each network, default is 10",
     )
     parser.add_argument(
         "--output",
@@ -66,6 +68,13 @@ def _parse_arguments():
         type=bool,
         default=False,
         help="whether to print progress, default is False",
+    )
+    parser.add_argument(
+        "--keep_props",
+        metavar="keep properties",
+        type=bool,
+        default=False,
+        help="whether to save dataframes of the properties values for each network analyzed, default is False"
     )
 
     # TODO: https://stackoverflow.com/questions/52403065/argparse-optional-boolean implement

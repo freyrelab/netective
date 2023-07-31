@@ -112,6 +112,7 @@ def normalize_props(instances, G, norm):
 
 
 def get_props(G, norm, child_classes):
+    G = RegNet(G)
     # Properties that do not use paths object
     instances = get_instances_no_paths(G, child_classes)
 
@@ -281,6 +282,7 @@ def compute_props(G, name, norm, props="all"):
         scalar_arrays[name] = np.asarray(list(scalar_values.values()))
         dist_moments = [compute_moments(array) for array in dist_values.values()]
         dist_moments_arrays[name] = np.asarray(flatten_list_of_iterables(dist_moments))
+        print(dist_moments_arrays)
         return scalar_arrays, dist_moments_arrays
 
     # This is a general exception handler to catch any error that may occur in the parallelized code
@@ -324,7 +326,7 @@ def characterize_network(
 
 # Comparison of multiple networks
 def compare_networks(
-    networks: dict, norm: str | None = None, selected_props: str | list = "all", workers="auto"
+    networks: dict, norm: str | None = None, selected_props: str | list = "all", workers: str | int = "auto"
 ) -> Tuple[plt.figure.Figure, plt.figure.Figure]:
 
     """Module-level function to compare multiple networks.

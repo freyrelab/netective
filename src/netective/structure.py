@@ -15,6 +15,8 @@ from freyrelab.nets import powerlaw as pl
 
 from netective.utils import *
 
+import matplotlib.pyplot as plt
+
 
 def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
     """
@@ -557,7 +559,8 @@ def struc_props_call(
 
 
 def save_strucs(
-    df: pd.Series | pd.DataFrame,
+    fig_scalar,
+    fig_dist,
     output: str = os.getcwd(),
     delimiter: str = "\t",
     cl: str = None,
@@ -585,13 +588,17 @@ def save_strucs(
 
     exts = {",": "csv", "\t": "tsv"}
     ext = exts.get(delimiter, "txt")
-    file_p = concat_path(output, f"{output_file}.{ext}")
+    # file_p = concat_path(output, f"{output_file}.{ext}")
+
+    file_p_s = concat_path(output, 'network_level_comp.png')
+    file_p_d = concat_path(output, 'node_level_comp.png')
 
     # save output
     # rewrite file if it exists
-    with open(file_p, "w") as f:
+    # with open(file_p, "w") as f:
         # save command line
-        print(cl, file=f)
+        # print(cl, file=f)
 
     # save structural properties
-    df.to_csv(file_p, sep=delimiter, mode="a")
+    fig_scalar.savefig(file_p_s, dpi=300)
+    fig_dist.savefig(file_p_d, dpi=300)
