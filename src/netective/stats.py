@@ -44,9 +44,11 @@ class NetworkInferenceStats:
         self.__allow_self_loops = allow_self_loops
         self.__score = False
 
+        # Validate the number of columns in the inference file
         with open(inference) as f:
             first_line = f.readline()
             self.__num_columns = len(first_line.split())
+
         if self.__num_columns not in [2, 3]:
             raise ValueError(
                 f"Inference file must have 2 or 3 columns. {self.__num_columns} columns were found."
@@ -58,7 +60,10 @@ class NetworkInferenceStats:
                     "Inference file has 3 columns, but greater_is_better was not provided."
                 )
         elif self.__num_columns == 2 and self.__greater_is_better is not None:
-            raise ValueError("Inference file has 2 columns, but greater_is_better was provided.")
+            raise ValueError(
+                "Inference file only has 2 columns, but greater_is_better was provided."
+            )
+
         elif self.__num_columns == 2:
             # If the inference is not scored, lower index = better inference
             # the order of the edges will be used
@@ -69,13 +74,13 @@ class NetworkInferenceStats:
 
     def __str__(self) -> str:
         if self._num_columns == 3:
-            return f'BinClassEval to evaluate the inference {self.inference} against {self.gold_standard} {"" if self.directed else "not "}\
+            return f'NetworkInferenceStats to evaluate the inference {self.inference} against {self.gold_standard} {"" if self.directed else "not "}\
                 considering direction and {"higher" if self.greater_is_better else "lower"} scores are better.'
         else:  # self._num_columns == 2
-            return f'BinClassEval to evaluate the inference {self.inference} against {self.gold_standard} {"" if self.directed else "not "}\
+            return f'NetworkInferenceStats to evaluate the inference {self.inference} against {self.gold_standard} {"" if self.directed else "not "}\
                 considering direction.'
 
-    def __eq__(self, other: BinClassEval) -> bool:
+    def __eq__(self, other: NetworkInferenceStats) -> bool:
         raise NotImplementedError
 
     @property
@@ -102,21 +107,25 @@ class NetworkInferenceStats:
     def allow_self_loops(self) -> bool:
         return self.__allow_self_loops
 
-    def __read_gold_standard(self, gold_standard_file) -> Tuple[set, set]:
+    def __read_gold_standard(self, gold_standard_file) -> Tuple[set[tuple[str, str]], set[str]]:
         """Reads the gold standard file and returns a set of edges and a set of genes."""
         gold_standard_edges = set()
         gold_standard_geneset = set()
         with open(gold_standard_file) as f:
             for line in f:
                 source, target = line.split()
+
+                if not self.allow_self_loops and source == target:
+                    continue
+
                 gold_standard_edges.add((source, target))
                 gold_standard_geneset.add(source)
                 gold_standard_geneset.add(target)
 
         return gold_standard_edges, gold_standard_geneset
 
-    def __read_inference(self, inference_file) -> list:
-        """Reads the inference file and returns a set of edges ordered by relevance."""
+    def __read_inference(self, inference_file) -> list[list[tuple[str, str]]]:
+        """Reads the inference file and returns a list of edges ordered by relevance."""
         inference_edges = defaultdict(list)
 
         with open(inference_file) as f:
@@ -130,20 +139,25 @@ class NetworkInferenceStats:
                     # lower index = better inference
                     inference_edges[i].append((source, target))
 
-        # TODO: !!! Ya generalo anonimizado !!!  para ahorrar memoria
+        if not self.allow_self_loops:
+            inference_edges = {
+                score: [edge for edge in edges if edge[0] != edge[1]]
+                for score, edges in inference_edges.items()
+            }
+
         return [
             edges
             for score, edges in sorted(inference_edges.items(), reverse=self.greater_is_better)
         ]
 
-    def __universe(self, gold_standard_geneset: set) -> set:
+    def __universe(self, gold_standard_geneset: set) -> set[tuple[str, str]]:
         """Returns the universe of potential edges between genes in the gold standard.
 
         The universe in compute following the rules:
         - If the inference is directed and self-loops are allowed, the universe is the cartesian product of the gold standard geneset.
-        - If the inference is directed and self-loops are not allowed, the universe is permutations of the gold standard geneset.
-        - If the inference is undirected and self-loops are allowed, the universe is combinations with replacement of the gold standard geneset.
-        - If the inference is undirected and self-loops are not allowed, the universe is combinations without replacement of the gold standard geneset.
+        - If the inference is directed and self-loops are not allowed, the universe is the permutations of the gold standard geneset.
+        - If the inference is undirected and self-loops are allowed, the universe is the combinations with replacement of the gold standard geneset.
+        - If the inference is undirected and self-loops are not allowed, the universe is the combinations without replacement of the gold standard geneset.
         """
         if self.directed and self.allow_self_loops:
             return set(product(gold_standard_geneset, repeat=2))
@@ -163,14 +177,24 @@ class NetworkInferenceStats:
         universe = self.__universe(gold_standard_geneset)
         size_universe = len(universe)
 
+        if not self.directed:
+            # If the inference is not directed, we use frozensets to ignore gene order in the edges
+            gold_standard_edges = {frozenset(edge) for edge in gold_standard_edges}
+            inference_edges = [{frozenset(edge) for edge in edges} for edges in inference_edges]
+            universe = {frozenset(edge) for edge in universe}
+            # The size of the universe should not change, repetition are considered in __universe
+
         # Universe is used as reference
         edge_to_id = {edge: i for i, edge in enumerate(universe)}
         gold_standard_edges = {edge_to_id[edge] for edge in gold_standard_edges}
-        inference_edges = [{edge_to_id[edge] for edge in edges} for edges in inference_edges]
+        # The get method is used to only keep edges between genes in the gold standard geneset
+        # TODO: The used may want to know the fraction of the inference used for the evaluation
+        inference_edges = [{edge_to_id.get(edge) for edge in edges} for edges in inference_edges]
 
-        # erase universe
+        # erase universe, mapping and gold standard geneset
         del universe
-        del edge_to_id
+        del edge_to_id  # TODO: user may want to keep this mapping
+        del gold_standard_geneset
         # call garbage collector
         gc.collect()
 

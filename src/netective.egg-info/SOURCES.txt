@@ -3,8 +3,12 @@ pyproject.toml
 setup.cfg
 setup.py
 src/netective/__init__.py
+src/netective/_arguments.py
+src/netective/netective_test.py
+src/netective/pipeline.py
+src/netective/properties.py
 src/netective/stats.py
-src/netective/structure.py
+src/netective/structure_.py
 src/netective/utils.py
 src/netective.egg-info/PKG-INFO
 src/netective.egg-info/SOURCES.txt
@@ -13,8 +17,11 @@ src/netective.egg-info/entry_points.txt
 src/netective.egg-info/requires.txt
 src/netective.egg-info/top_level.txt
 src/netective/cli/__init__.py
-src/netective/cli/_arguments.py
-src/netective/cli/netective.py
+src/netective/prop_notebooks/properties_old.py
+src/netective/structure/dataviz.py
+src/netective/structure/pipeline.py
+src/netective/structure/properties.py
+src/netective/structure/structure.py
 tests/test_graph_observer.py
 tests/test_norm_observer.py
 tests/test_structure.py
