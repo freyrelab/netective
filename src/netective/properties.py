@@ -1313,7 +1313,7 @@ class Center(_Property):
     """Center.
 
     Center is a computed using the giant component of the graph.
-    The center of a graph is the set of nodes with eccentricity equal to the radius.
+    The center of a graph is the cardinality of the set of nodes with eccentricity equal to the radius.
     This class returns the number of nodes in the center.
     """
 
@@ -1355,7 +1355,7 @@ class Periphery(_Property):
     """Periphery.
 
     Periphery is a computed using the giant component of the graph.
-    The periphery of a graph is the set of nodes with eccentricity equal to the diameter.
+    The periphery of a graph is the cardinality of the set of nodes with eccentricity equal to the diameter.
     This class returns the number of nodes in the periphery.
     """
 
