@@ -335,17 +335,10 @@ class Structure:
         """
 
         # super().__init__()  # DataFrame.__init__(self)
-        print(net_id)
-        print(f"init_1 --- G has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
-        edges_before = G.edges()
-        self.G = validate_network(G.copy())  # network to compute the structural properties
-        print(f"lost edges: {set(edges_before) - set(self.G.edges())}")
-        print(f"num edges_before: {len(edges_before)}, num edges_after: {len(self.G.edges())}")
-        print(f"\nwtf DiGraph, len edges={len(G.edges())}, num edges={G.number_of_edges()}")
-        print(
-            f"\nwtf Regnet, len edges={len(self.G.edges())}, num edges={self.G.number_of_edges()}"
-        )
-        print(f"init_2 --- G has {self.G.number_of_nodes()} nodes and {len(G.edges())} edges.")
+        self._original_G = G  # original network
+        self.G = validate_network(
+            self._original_G.copy()
+        )  # network to compute the structural properties
         self.graph_observer = GraphObserver(
             G
         )  # note that it observes the original graph, not the copy
@@ -386,8 +379,6 @@ class Structure:
     def _normalize_props(self, instances, norm):
         """Normalizes the structural properties of a network."""
 
-        print(f"_normalize_props --- graph_observer.graph_hash: {self.graph_observer.graph_hash}")
-
         if self.verbose:
             print("Normalizing...", flush=True)
 
@@ -397,6 +388,8 @@ class Structure:
             # TODO: why using x.CLASS_NAME instead of name?
             # TODO: toma la normalización de normalizaciones disponibles
             dict_ = norm_scalar_values if x._return_type == "scalar" else norm_dist_values
+            if norm not in NORM_OPTIONS:
+                raise properties.NormalizationError(f"Invalid normalization method: {norm}")
             try:
                 if norm == "network":
                     dict_[x.CLASS_NAME] = x.norm_network()
@@ -426,8 +419,6 @@ class Structure:
             dict: Dictionary with the structural properties of the network.
         """
 
-        print(f"_compute_props --- graph_observer.graph_hash: {self.graph_observer.graph_hash}")
-
         if self.verbose:
             print(f"Processing {self.net_id}...", flush=True)
             print(
@@ -435,8 +426,7 @@ class Structure:
                 flush=True,
             )
 
-            # Get Instances Fxns
-
+        # Get Instances Fxns
         def get_instances_no_paths(H, child_classes):
             instances = {x.CLASS_NAME: x(H.copy()) for x in child_classes if not x._use_paths}
             return instances
@@ -456,7 +446,7 @@ class Structure:
         # Properties that do not use paths object
         instances = get_instances_no_paths(self.G, child_classes)
 
-        # TODO: checar si no afecta las instancias anteriores el remover self loops.
+        # TODO!!! agregar instancias para redes sin self-loops y direccion. Revisar si conviene hacer compbinatoria.
         # Paths objects
         remove_self_loops(self.G)
         self.G = self.G.giant_component
@@ -508,23 +498,33 @@ class Structure:
         Returns:
             pd.Series: Series with the structural properties of the network.
         """
-
-        print(f"get_props --- graph_observer.graph_hash: {self.graph_observer.graph_hash}")
-        print(
-            f"get_props --- G has {self.G.number_of_nodes()} nodes and {self.G.number_of_edges()} edges."
-        )
         # Compute the properties if they have not been computed yet or if the network has changed
+        # print(
+        #         f", is None?: {self.graph_observer.graph_hash is None}, graph changed: {self.graph_observer.changed(self._original_G, update_G=True)}, norm changed: {self.norm_observer.change()}"
+        #     )
         if (
-            self.graph_observer.graph_hash is None or self.graph_observer.changed()
+            self.graph_observer.graph_hash is None
+            or self.graph_observer.changed(self._original_G, update_G=True)
         ) or self.norm_observer.change():
-            print(f"get_props__2 --- graph_observer.graph_hash: {self.graph_observer.graph_hash}")
-            print(
-                f", is None?: {self.graph_observer.graph_hash is None}, graph changed: {self.graph_observer.changed()}, norm changed: {self.norm_observer.change()}"
-            )
-            print(f"get_props__3 --- graph_observer.graph_hash: {self.graph_observer.graph_hash}")
+            if self.verbose:
+                print(
+                    "The network or the normalization method has changed. Computing its properties...",
+                    flush=True,
+                )
+                # TODO!!!: conservar los raw!
+                # TODO: incluir un verbose cuando semodifica la normalización. O usar en su lugar un warning?
+
+            # TODO!!!!: quita parche, primera corrida es None y self.graph_observer.changed(self._original_G no entra por bypass.
+            if self.graph_observer.graph_hash is None:
+                self.graph_observer.changed(self._original_G, update_G=True)
+
+            print(f"hash: {self.graph_observer.graph_hash}")
+            self.G = validate_network(
+                self._original_G.copy()
+            )  # to make sure the network is valid and use the actual modified network
             try:
-                self.__scalar_arrays = {}
-                self.__dist_moments_arrays = {}
+                self._scalar_arrays = {}
+                self._dist_moments_arrays = {}
 
                 if child_classes is None:
                     child_classes = get_child_classes(PARENT_CLASS, props)
@@ -534,13 +534,13 @@ class Structure:
 
                 print(scalar_values)
                 # scalar properties
-                self.__scalar_arrays[self.net_id] = np.asarray(list(scalar_values.values()))
+                self._scalar_arrays[self.net_id] = np.asarray(list(scalar_values.values()))
                 dist_moments = [compute_moments(array) for array in dist_values.values()]
-                self.__dist_moments_arrays[self.net_id] = np.asarray(
+                self._dist_moments_arrays[self.net_id] = np.asarray(
                     flatten_list_of_iterables(dist_moments)
                 )
-                print(self.__dist_moments_arrays)
-                return self.__scalar_arrays, self.__dist_moments_arrays
+                print(self._dist_moments_arrays)
+                return self._scalar_arrays, self._dist_moments_arrays
 
             # This is a general exception handler to catch any error that may occur in the parallelized code
             except Exception as e:
@@ -549,7 +549,7 @@ class Structure:
                     f"\n\nError occurred. Original traceback is\n{tracebackString}\n"
                 )
 
-        return self.__scalar_arrays, self.__dist_moments_arrays
+        return self._scalar_arrays, self._dist_moments_arrays
 
 
 def struc_props_call(
