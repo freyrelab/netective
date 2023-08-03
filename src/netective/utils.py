@@ -69,8 +69,12 @@ def run_parallel(f, my_iter, workers):
 
 def validate_network(G: nx.DiGraph | rn.RegNet) -> rn.RegNet:
     """Validates the network and returns a RegNet object."""
+    print(f"validate --- G has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
     if isinstance(G, nx.DiGraph):
         G = rn.RegNet(G)
+        print(
+            f"validate RegNet --- G has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges."
+        )
     elif not isinstance(G, rn.RegNet):
         raise TypeError("G must be a DiGraph or a RegNet")
     if G.size() == 0:

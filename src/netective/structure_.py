@@ -76,9 +76,7 @@ class GraphObserver:
         )
         return hash.hexdigest()
 
-    def changed(
-        self, G: Graph | rn.RegNet = None, update_G: bool = False
-    ) -> bool:
+    def changed(self, G: Graph | rn.RegNet = None, update_G: bool = False) -> bool:
         """
         Check if G has changed with reference to the last call.
 
@@ -252,9 +250,7 @@ class Structure(pd.Series):
 
         super().__init__()  # DataFrame.__init__(self)
         print(net_id)
-        self.G = validate_network(
-            G
-        )  # network to compute the structural properties
+        self.G = validate_network(G)  # network to compute the structural properties
         self.graph_observer = GraphObserver(G)
         self.graph_observer.graph_hash = None  # hash of the network to detect changes. None means that the properties have not been computed yet.
         self.norm_observer = NormObserver(
@@ -310,9 +306,7 @@ class Structure(pd.Series):
         try:
             prop_ck = CK.rsquared_adj
         except ValueError:
-            warn(
-                f"Clusterings for {self.net_id} cannot be fitted to a power law."
-            )
+            warn(f"Clusterings for {self.net_id} cannot be fitted to a power law.")
             prop_ck = np.nan
         return prop_ck
 
@@ -352,9 +346,7 @@ class Structure(pd.Series):
             not isinstance(self.norm_observer.norm, pd.Series)
             and self.norm_observer.norm not in available_norms
         ):
-            raise ValueError(
-                f"Normalization factor {self.norm_observer.norm} not recognized."
-            )
+            raise ValueError(f"Normalization factor {self.norm_observer.norm} not recognized.")
 
         if self.norm_observer.norm == "biol":
             self.norm_observer.norm = self._bio_scale(props)
@@ -405,16 +397,12 @@ class Structure(pd.Series):
         # Props without selfloops
         props["3-Feedback loops"] = self.G.feedbacks3_count
         props["Feedforward circuits"] = self.G.feedforwards_count
-        props[
-            "Complex feedforward circuits"
-        ] = self.G.complex_feedforwards_count
+        props["Complex feedforward circuits"] = self.G.complex_feedforwards_count
         props["Genes in the giant component"] = self.G.giant_component_size
 
         props["Diameter"] = self.G.diameter()
         props["Average shortest path length"] = self.G.average_path_length()
-        props[
-            "Average clustering coefficient"
-        ] = self.G.average_clustering_coefficient
+        props["Average clustering coefficient"] = self.G.average_clustering_coefficient
 
         # C(k) and P(k)
         kc = self.G.k_clustering()  # {node: (k, c)}
@@ -466,18 +454,14 @@ class Structure(pd.Series):
             "Density": n_genes
             / tfs,  # equivalent to E / (n**2 * (tfs/n)) # TODO: corrects previous mistake: G.density * (G.regulators_count / nGenes) << 1
             "Regulators": 1 / n_genes,  # fraction of nodes that are regulators
-            "Self regulations": 1
-            / tfs,  # fraction of regulators that self-regulate
+            "Self regulations": 1 / tfs,  # fraction of regulators that self-regulate
             "Max. out connectivity": 1
             / n_genes,  # fraction of nodes that are regulated by the most hub
-            "3-Feedback loops": 1
-            / max_3tfs_loop,  # fraction of possible 3-feedback loops
-            "Feedforward circuits": 1
-            / max_2tfs_loop,  # fraction of possible feedforward circuits
+            "3-Feedback loops": 1 / max_3tfs_loop,  # fraction of possible 3-feedback loops
+            "Feedforward circuits": 1 / max_2tfs_loop,  # fraction of possible feedforward circuits
             "Complex feedforward circuits": 1
             / max_2tfs_loop,  # fraction of possible complex feedforward circuits A->B->C, A->C, B->A
-            "Genes in the giant component": 1
-            / n_genes,  # fraction of nodes in the giant component
+            "Genes in the giant component": 1 / n_genes,  # fraction of nodes in the giant component
             "Diameter": 1
             / largest_putative_path,  # denominator is equivalent to (n-2+1) for the nodes in the giant component. n-2 (excluding sorce and target nodes) + 1 (we are coiunting edges). # TODO: corrects previous mistake: props['Diameter'] / (n_genes-2)
             "Average shortest path length": 1
@@ -485,8 +469,7 @@ class Structure(pd.Series):
             "Average clustering coefficient": 1,  # TODO: This still needs to be normalized
             "R^2 C(k)": 1,  # already normalized
             "R^2 P(k)": 1,  # already normalized
-            "Kappa": 1
-            / n_genes,  # fraction of nodes that are regulated by the most hub
+            "Kappa": 1 / n_genes,  # fraction of nodes that are regulated by the most hub
         }
 
         return pd.Series(scalling_f)
@@ -539,20 +522,14 @@ def struc_props_call(
         n = G.number_of_nodes()
         m = G.number_of_edges()
         for i in range(erdos_renyi):
-            ER = rn.RegNet(
-                fast_gnp_random_graph(n, m / (n**2), directed=True)
-            )
-            S_er = Structure(
-                ER, norm=norm, net_id=f"{net_id}_ER_{i}", verbose=verbose
-            )
+            ER = rn.RegNet(fast_gnp_random_graph(n, m / (n**2), directed=True))
+            S_er = Structure(ER, norm=norm, net_id=f"{net_id}_ER_{i}", verbose=verbose)
             props_i = S_er.get_props()
             for k, v in props_i.items():
                 props_er[k].append(v)
 
         # TODO: here you can make it robust to a threshold of nan values
-        props_er_avg = {
-            prop: sum(vals) / len(vals) for prop, vals in props_er.items()
-        }
+        props_er_avg = {prop: sum(vals) / len(vals) for prop, vals in props_er.items()}
         netid_props = [(net_id, props), (f"{net_id}_ER_avg", props_er_avg)]
 
     return netid_props
@@ -590,14 +567,14 @@ def save_strucs(
     ext = exts.get(delimiter, "txt")
     # file_p = concat_path(output, f"{output_file}.{ext}")
 
-    file_p_s = concat_path(output, 'network_level_comp.png')
-    file_p_d = concat_path(output, 'node_level_comp.png')
+    file_p_s = concat_path(output, "network_level_comp.png")
+    file_p_d = concat_path(output, "node_level_comp.png")
 
     # save output
     # rewrite file if it exists
     # with open(file_p, "w") as f:
-        # save command line
-        # print(cl, file=f)
+    # save command line
+    # print(cl, file=f)
 
     # save structural properties
     fig_scalar.savefig(file_p_s, dpi=300)

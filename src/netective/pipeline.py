@@ -6,10 +6,8 @@ TODO: quitar redundancia de parent_class = properties._Property
 # Imports
 from __future__ import annotations
 
-import os
 import inspect
 import traceback
-from io import BytesIO
 from typing import Tuple
 from warnings import warn
 from itertools import chain
@@ -17,7 +15,6 @@ from multiprocessing import cpu_count
 
 import numpy as np
 import pandas as pd
-from PIL import Image
 import networkx as nx
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -326,7 +323,10 @@ def characterize_network(
 
 # Comparison of multiple networks
 def compare_networks(
-    networks: dict, norm: str | None = None, selected_props: str | list = "all", workers: str | int = "auto"
+    networks: dict,
+    norm: str | None = None,
+    selected_props: str | list = "all",
+    workers: str | int = "auto",
 ) -> Tuple[plt.figure.Figure, plt.figure.Figure]:
 
     """Module-level function to compare multiple networks.
