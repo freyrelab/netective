@@ -91,7 +91,6 @@ def compare_networks(
 
     # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
     # passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
-    # TODO: refactor to pass only child_classes, how to pass keyword arguments to get_props in run_parallel?
     child_classes = get_child_classes(PARENT_CLASS, selected_props)
 
     # prepare data
