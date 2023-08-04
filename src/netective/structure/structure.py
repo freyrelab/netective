@@ -8,6 +8,7 @@ import hashlib
 import traceback
 import numpy as np
 import pandas as pd
+from typing import Tuple
 from warnings import warn
 from networkx import Graph
 from itertools import chain
@@ -35,7 +36,7 @@ def flatten_list_of_iterables(lst):
 
 
 # Comparison Fxn
-def pairwise_pearson_correlation(dict_data):
+def pairwise_pearson_correlation(dict_data: dict[str, dict[str, float]]):
     # TODO: make this general for any correlation... # shouldn't be here...
     # Get the keys (name_dists) from the dictionary
     name_dists = list(dict_data.keys())
@@ -48,8 +49,8 @@ def pairwise_pearson_correlation(dict_data):
         for j in range(i, len(name_dists)):
             name_dist1 = name_dists[i]
             name_dist2 = name_dists[j]
-            array1 = dict_data[name_dist1]
-            array2 = dict_data[name_dist2]
+            array1 = np.asarray(list(dict_data[name_dist1].values()))
+            array2 = np.asarray(list(dict_data[name_dist2].values()))
 
             mask = np.isfinite(array1) & np.isfinite(array2)
             filtered_array1 = array1[mask]
@@ -480,7 +481,9 @@ class Structure:
 
         return self.scalar_values, self.dist_values
 
-    def get_props(self, props="all", child_classes=None) -> pd.Series:
+    def get_props(
+        self, props: str | list = "all", child_classes: list = None
+    ) -> Tuple[dict[str, dict], dict[str, dict]]:
         """
         Computes the structural properties of a network.
         Either props or child_classes must be provided.
@@ -495,8 +498,10 @@ class Structure:
             child_classes: list.
                 List of property classes to compute all the properties of those classes.
 
+
         Returns:
-            pd.Series: Series with the structural properties of the network.
+            If keep_names is True, it returns a dictionary with the property names as keys.
+            Otherwise, it returns a flattened array with the values.
         """
         # Compute the properties if they have not been computed yet or if the network has changed
         # print(
@@ -532,14 +537,11 @@ class Structure:
                 # props
                 scalar_values, dist_values = self._compute_props(child_classes)
 
-                print(scalar_values)
-                # scalar properties
-                self._scalar_arrays[self.net_id] = np.asarray(list(scalar_values.values()))
-                dist_moments = [compute_moments(array) for array in dist_values.values()]
-                self._dist_moments_arrays[self.net_id] = np.asarray(
-                    flatten_list_of_iterables(dist_moments)
-                )
-                print(self._dist_moments_arrays)
+                self._scalar_arrays[self.net_id] = scalar_values
+                self._dist_moments_arrays[self.net_id] = {
+                    prop_name: compute_moments(array) for prop_name, array in dist_values.items()
+                }
+
                 return self._scalar_arrays, self._dist_moments_arrays
 
             # This is a general exception handler to catch any error that may occur in the parallelized code
@@ -581,7 +583,7 @@ def struc_props_call(
     Raises:
         ValueError: if erdos_renyi is less than 0.
     """
-
+    # TODO!! UPDATE
     S_bio = Structure(G, norm=norm, net_id=net_id, verbose=verbose)
     props = S_bio.get_props()
 
@@ -621,6 +623,8 @@ def save_strucs(
     output_file: str = "structural_properties",
 ) -> None:
 
+    # TODO!! UPDATE
+
     """
     Save the structural properties in a file.
 
@@ -656,3 +660,136 @@ def save_strucs(
     # save structural properties
     fig_scalar.savefig(file_p_s, dpi=300)
     fig_dist.savefig(file_p_d, dpi=300)
+
+
+# User Fxns
+# Characterization of one network
+def characterize_network(
+    G: RegNet,
+    name: str,
+    norm: str | None = None,
+    selected_props: str | list = "all",
+    child_classes: list = None,
+    verbose: bool = False,
+    return_prop_dicts: bool = False,
+) -> None | Tuple[dict, dict]:
+    """Module-level function to characterize a single network.
+
+    Args:
+        G (RegNet): Network to characterize.
+        norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
+        selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
+        child_classes (list, optional): List of child classes to compute. Defaults to None. Use either selected_props or child_classes.
+            if child_classes is not None, selected_props is ignored.
+        verbose (bool, optional): If True, print messages. Defaults to False.
+
+    Returns:
+        dict: Dictionary with the properties of the network if return_prop_dicts is True.
+        None: If return_prop_dicts is False. The figures are shown.
+
+    Raises:
+        Exception: Raised if the normalization is not valid.
+
+    """
+
+    struc = Structure(G, norm=norm, net_id=name, verbose=verbose)
+    if child_classes is not None:
+        scalar_values, dist_values = struc.get_props(child_classes=child_classes)
+    else:
+        scalar_values, dist_values = struc.get_props(props=selected_props)
+
+    if len(dist_values) == 0 and len(scalar_values) == 0:
+        raise ValueError("Not enough data, try with more properties or another normalization")
+
+    print(f"1:   {scalar_values}")
+
+    if return_prop_dicts:
+        return scalar_values, dist_values
+
+    print(f"2:   {dist_values}")
+    if len(dist_values) != 0:
+        fig_dist, _ = plot_distributions(dist_values[name])
+        fig_dist.show()
+    if len(scalar_values) != 0:
+        print(scalar_values)
+        fig_scalar, _ = plot_scalars(scalar_values[name])
+        fig_scalar.show()
+
+
+# Comparison of multiple networks
+def compare_networks(
+    networks: dict,
+    norm: str | None = None,
+    selected_props: str | list = "all",
+    workers: str | int = "auto",
+    return_prop_dicts: bool = False,
+) -> Tuple[dict, dict] | Tuple[plt.Figure, plt.Figure]:
+
+    """Module-level function to compare multiple networks.
+
+    Returns a tuple of figures, one for the scalar properties and one for the distributions if return_prop_dicts is False.
+    Otherwise, it returns a tuple of dictionaries, one for the scalar properties and one for the distributions.
+
+    Args:
+        networks (dict): Dictionary of networks to compare {'name':RegNet}.
+        norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
+        selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
+        workers (int, optional): Number of workers to use. Defaults to 'auto'.
+
+    Raises:
+        NormalizationError: Raised if the normalization is not valid.
+        ValueError: Raised if there is not enough data to compare.
+    """
+
+    if norm not in NORM_OPTIONS:
+        raise properties.NormalizationError("Normalization not valid")
+
+    # handle workers
+    usable_workers = cpu_count() - 1
+    if workers == "auto":
+        workers = usable_workers
+    elif workers > usable_workers:
+        warn(
+            f"{workers} workers requested, but only {usable_workers} are available. Using {usable_workers} workers instead."
+        )
+        workers = usable_workers
+
+    # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
+    # TODO!!: passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
+    child_classes = get_child_classes(PARENT_CLASS, selected_props)
+
+    # prepare data
+    data = [
+        list(networks.values()),
+        list(networks.keys()),
+        [norm] * len(networks),
+        [selected_props] * len(networks),
+        [child_classes] * len(networks),
+        [False] * len(networks),  # verbose
+        [True] * len(networks),  # keep_names
+    ]
+
+    # run parallel
+    results = run_parallel(characterize_network, data, workers)
+    name_scalars_array = results["scalars"]
+    name_moments_arrays = results["distributions"]
+
+    if return_prop_dicts:
+        return name_scalars_array, name_moments_arrays
+
+    # Scalar properties
+    if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
+        df = pairwise_pearson_correlation(name_scalars_array)
+        fig_scalar, _ = create_symmetric_heatmap(df, title=f"Global properties")
+    else:
+        print(name_scalars_array)
+        raise ValueError("Not enough data to compare.")
+
+    # Distribution properties
+    if len(name_moments_arrays) > 0 and len(list(name_moments_arrays.values())[0]) > 1:
+        df = pairwise_pearson_correlation(name_moments_arrays)
+        fig_dist, _ = create_symmetric_heatmap(df, title=f"Local properties")
+    else:
+        raise ValueError("Not enough data to compare.")
+
+    return fig_scalar, fig_dist
