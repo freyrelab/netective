@@ -1,6 +1,6 @@
 from pandas import DataFrame
 
-from netective import _arguments
+from netective.cli import _arguments
 from netective.structure import save_strucs
 from netective import pipeline
 from netective.utils import *
