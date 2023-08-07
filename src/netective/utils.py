@@ -19,6 +19,8 @@ import concurrent.futures
 from itertools import chain
 from collections import defaultdict
 from scipy.stats import kurtosis, skew
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import linkage, fcluster
 
 from freyrelab.regnets import regnet as rn
 
@@ -155,3 +157,16 @@ def compute_moments(data: np.ndarray, ddof: int = 1) -> tuple[float, float, floa
 
 def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
+
+
+def get_clusters(
+    corr_df, clust_num, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True
+):
+    dist_mtrx = round(1 - np.abs(corr_df.astype("float")), 4)
+    linkage_mtrx = linkage(squareform(dist_mtrx), method=ch_method, metric=ch_metric)
+    index = list(corr_df.index)
+    cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")
+    clusters = {i: [] for i in cluster_vector}
+    {clusters[cluster_vector[i]].append(index[i]) for i in range(len(cluster_vector))}
+
+    return cluster_vector if not map_ids else clusters
