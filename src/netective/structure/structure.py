@@ -19,8 +19,8 @@ from multiprocessing import cpu_count
 from freyrelab.regnets.regnet import RegNet
 from freyrelab.nets.paths2 import Efficiency, ShortestDistances, ShortestPaths
 
-from netective import properties
-from netective.properties import remove_self_loops
+from netective.structure import properties
+from netective.structure.properties import remove_self_loops
 from netective.utils import compute_moments, run_parallel, validate_network, concat_path
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
 
@@ -57,9 +57,7 @@ def pairwise_pearson_correlation(dict_data: dict[str, dict[str, float]]):
             filtered_array2 = array2[mask]
 
             # Calculate Pearson correlation coefficient and p-value
-            corr_coef, _ = pearsonr(
-                filtered_array1, filtered_array2
-            )  # TODO!!! genera error por nan o inf. Debes filtrar antes de calcular la correlación, en todos los vectores a comparar.
+            corr_coef, _ = pearsonr(filtered_array1, filtered_array2)
 
             # Store the correlation coefficient in the DataFrame
             corr_df.loc[name_dist1, name_dist2] = corr_coef
@@ -69,7 +67,7 @@ def pairwise_pearson_correlation(dict_data: dict[str, dict[str, float]]):
 
 
 # Get properties selected Fxn
-def get_child_classes(parent_class, selected_props):
+def get_child_classes(parent_class, selected_props) -> list:
     child_classes = []
     all_properties = []
     print(f"Properties used for analysis: ", end=" ")

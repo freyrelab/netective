@@ -67,7 +67,7 @@ def plot_scalars(data_dict):
 
 
 # Plotting Fxns
-def create_symmetric_heatmap(dataframe, title: str):
+def create_symmetric_heatmap(dataframe, title: str, method="ward"):
     # Create a figure and axes
     # fig, axs = plt.subplots()
 
@@ -80,6 +80,7 @@ def create_symmetric_heatmap(dataframe, title: str):
         annot=True if dataframe.shape[0] < 10 else False,
         fmt=".2f",
         cbar=True,
+        method=method,
     )
 
     # Set the title
