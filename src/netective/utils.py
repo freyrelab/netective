@@ -162,6 +162,22 @@ def flatten_list_of_iterables(lst):
 def get_clusters(
     corr_df, clust_num, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True
 ):
+    """Get clusters from a correlation matrix.
+
+    Args:
+        corr_df: A correlation matrix.
+        clust_num: The number of clusters to be obtained.
+        ch_method: The linkage method to be used.
+        ch_metric: The distance metric to be used.
+        map_ids: If True, the clusters will be returned as a dictionary.
+
+    Returns:
+        A list containing the cluster number for each node.
+        If map_ids is True, a dictionary containing the clusters will be returned.
+
+    Note:
+        The distance matrix is computed as 1 - |corr_df|
+    """
     dist_mtrx = round(1 - np.abs(corr_df.astype("float")), 4)
     linkage_mtrx = linkage(squareform(dist_mtrx), method=ch_method, metric=ch_metric)
     index = list(corr_df.index)
