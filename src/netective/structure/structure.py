@@ -26,6 +26,8 @@ from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, 
 
 import matplotlib.pyplot as plt
 
+from typing import Callable, Iterable
+
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
 PARENT_CLASS = properties._Property
@@ -36,8 +38,26 @@ def flatten_list_of_iterables(lst):
 
 
 # Comparison Fxn
-def pairwise_pearson_correlation(dict_data: dict[str, dict[str, float]]):
+def association(dict_data: dict[str, dict[str, float]], corr_func: Callable(Iterable, Iterable) = pearsonr) -> pd.DataFrame:
     # TODO: make this general for any correlation... # shouldn't be here...
+    """
+        Computes correlation between elements in a dictionary
+
+        Args:
+            dict_data : dictionary with keys as IDs for each element and values as np.arrays with data.
+            corr_func : correlation function desired for analysis. Default is pearsonr from scipy. 
+        
+        Returns:
+            corr_df : DataFrame with the correlation results of the input data.
+        
+        Note:
+            Correlation function must return either a float with the correlation value
+            or an Iterable where the first element is the correlation value.
+
+            Correlation function's not optional parameters must only be the two arrays to compare.
+
+            All scipy.stats functions admitted except page_trend_test
+    """
     # Get the keys (name_dists) from the dictionary
     name_dists = list(dict_data.keys())
 
@@ -57,8 +77,18 @@ def pairwise_pearson_correlation(dict_data: dict[str, dict[str, float]]):
             filtered_array2 = array2[mask]
 
             # Calculate Pearson correlation coefficient and p-value
-            corr_coef, _ = pearsonr(filtered_array1, filtered_array2)
+            result = corr_func(filtered_array1, filtered_array2)
 
+            accepted_types = [float, Iterable]
+
+            if type(result) not in accepted_types:
+                raise TypeError(f'Correlation function not admitted, Return Type must be {accepted_types}')
+            
+            if type(result) is not float:
+                corr_coef = result[0]
+            else:
+                corr_coef = result
+            
             # Store the correlation coefficient in the DataFrame
             corr_df.loc[name_dist1, name_dist2] = corr_coef
             corr_df.loc[name_dist2, name_dist1] = corr_coef
@@ -777,7 +807,7 @@ def compare_networks(
 
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
-        df = pairwise_pearson_correlation(name_scalars_array)
+        df = association(name_scalars_array)
         fig_scalar, _ = create_symmetric_heatmap(df, title=f"Global properties")
     else:
         print(name_scalars_array)
@@ -785,7 +815,7 @@ def compare_networks(
 
     # Distribution properties
     if len(name_moments_arrays) > 0 and len(list(name_moments_arrays.values())[0]) > 1:
-        df = pairwise_pearson_correlation(name_moments_arrays)
+        df = association(name_moments_arrays)
         fig_dist, _ = create_symmetric_heatmap(df, title=f"Local properties")
     else:
         raise ValueError("Not enough data to compare.")
