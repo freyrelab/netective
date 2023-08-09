@@ -12,6 +12,7 @@ __all__ = [
 ]
 
 import os
+import warnings
 import numpy as np
 import networkx as nx
 from tqdm import tqdm
@@ -178,7 +179,12 @@ def get_clusters(
     # corr_df = corr_df.fillna(0)
     corr_df.replace([np.inf, -np.inf], np.nan, inplace=True)
     dist_mtrx = round(1 - corr_df, 4)
-    linkage_mtrx = linkage(squareform(dist_mtrx), method=ch_method, metric=ch_metric)
+    try:
+        square_matrix = squareform(dist_mtrx)
+    except ValueError:
+        # warnings.warn(f"NaNs found in the correlation matrix. Unable to compute clusters.")
+        raise ValueError(f"NaNs found in the correlation matrix. Unable to compute clusters.")
+    linkage_mtrx = linkage(square_matrix, method=ch_method, metric=ch_metric)
     index = list(corr_df.index)
     cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")
     clusters = {i: [] for i in cluster_vector}
