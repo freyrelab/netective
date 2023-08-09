@@ -75,12 +75,8 @@ def run_parallel(f, my_iter, workers):
 
 def validate_network(G: nx.DiGraph | rn.RegNet) -> rn.RegNet:
     """Validates the network and returns a RegNet object."""
-    print(f"validate --- G has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
     if isinstance(G, nx.DiGraph):
         G = rn.RegNet(G)
-        print(
-            f"validate RegNet --- G has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges."
-        )
     elif not isinstance(G, rn.RegNet):
         raise TypeError("G must be a DiGraph or a RegNet")
     if G.size() == 0:
@@ -178,7 +174,10 @@ def get_clusters(
     Note:
         The distance matrix is computed as 1 - |corr_df|
     """
-    dist_mtrx = round(1 - np.abs(corr_df.astype("float")), 4)
+    corr_df = np.abs(corr_df.astype("float"))
+    # corr_df = corr_df.fillna(0)
+    corr_df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    dist_mtrx = round(1 - corr_df, 4)
     linkage_mtrx = linkage(squareform(dist_mtrx), method=ch_method, metric=ch_metric)
     index = list(corr_df.index)
     cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")

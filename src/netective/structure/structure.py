@@ -38,25 +38,27 @@ def flatten_list_of_iterables(lst):
 
 
 # Comparison Fxn
-def association(dict_data: dict[str, dict[str, float]], corr_func: Callable(Iterable, Iterable) = pearsonr) -> pd.DataFrame:
+def association(
+    dict_data: dict[str, dict[str, float]], corr_func: Callable(Iterable, Iterable) = pearsonr
+) -> pd.DataFrame:
     # TODO: make this general for any correlation... # shouldn't be here...
     """
-        Computes correlation between elements in a dictionary
+    Computes correlation between elements in a dictionary
 
-        Args:
-            dict_data : dictionary with keys as IDs for each element and values as np.arrays with data.
-            corr_func : correlation function desired for analysis. Default is pearsonr from scipy. 
-        
-        Returns:
-            corr_df : DataFrame with the correlation results of the input data.
-        
-        Note:
-            Correlation function must return either a float with the correlation value
-            or an Iterable where the first element is the correlation value.
+    Args:
+        dict_data : dictionary with keys as IDs for each element and values as np.arrays with data.
+        corr_func : correlation function desired for analysis. Default is pearsonr from scipy.
 
-            Correlation function's not optional parameters must only be the two arrays to compare.
+    Returns:
+        corr_df : DataFrame with the correlation results of the input data.
 
-            All scipy.stats functions admitted except page_trend_test
+    Note:
+        Correlation function must return either a float with the correlation value
+        or an Iterable where the first element is the correlation value.
+
+        Correlation function's not optional parameters must only be the two arrays to compare.
+
+        All scipy.stats functions admitted except page_trend_test
     """
     # Get the keys (name_dists) from the dictionary
     name_dists = list(dict_data.keys())
@@ -64,7 +66,7 @@ def association(dict_data: dict[str, dict[str, float]], corr_func: Callable(Iter
     # Initialize an empty DataFrame to store the correlation coefficients
     corr_df = pd.DataFrame(index=name_dists, columns=name_dists)
 
-    # Calculate the pairwise Pearson correlation coefficients
+    # Calculate the pairwise correlation
     for i in range(len(name_dists)):
         for j in range(i, len(name_dists)):
             name_dist1 = name_dists[i]
@@ -79,16 +81,18 @@ def association(dict_data: dict[str, dict[str, float]], corr_func: Callable(Iter
             # Calculate Pearson correlation coefficient and p-value
             result = corr_func(filtered_array1, filtered_array2)
 
-            accepted_types = [float, Iterable]
+            accepted_types = (float, Iterable)
 
-            if type(result) not in accepted_types:
-                raise TypeError(f'Correlation function not admitted, Return Type must be {accepted_types}')
-            
+            if not isinstance(result, accepted_types):
+                raise TypeError(
+                    f"Correlation function not admitted, Return Type must be {accepted_types}"
+                )
+
             if type(result) is not float:
                 corr_coef = result[0]
             else:
                 corr_coef = result
-            
+
             # Store the correlation coefficient in the DataFrame
             corr_df.loc[name_dist1, name_dist2] = corr_coef
             corr_df.loc[name_dist2, name_dist1] = corr_coef
