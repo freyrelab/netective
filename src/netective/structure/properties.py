@@ -39,6 +39,22 @@ def use_paths(cls):
     cls._use_paths = True
     return cls
 
+def validate_network_characteristics(self):
+
+    directed = self.G.is_directed()
+    giant_components = True if nx.number_connected_components(self.G) == 1 else False
+    paths = self._use_paths
+
+    if self._use_selfloops:
+        property_mask = np.asarray([self._use_direction, self._use_giant_component, self._use_paths])
+        input_net_mask = np.asarray([directed, giant_components, paths])
+    else:
+        property_mask = np.asarray([self._use_selfloops, self._use_direction, self._use_giant_component, self._use_paths])
+        selfloops = True if nx.number_of_selfloops(self.G) > 1 else False
+        input_net_mask = np.asarray([selfloops, directed, giant_components, paths])
+
+    if not np.array_equal(property_mask, input_net_mask):
+        raise("Error, incorrect format of input network for this propertie's computation.")
 
 # Theoretical maximums
 def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
@@ -727,7 +743,7 @@ class OutDegree(_Property):
         """Normalize the nparray with the out-degrees of the graph to the number of nodes."""
         return self._raw_value * (1 / self._n_nodes)
 
-
+# TODO Por laguna perra razón se necesita hacer el to_undirected dentro de aquí????????
 @return_distribution
 class RichClub(_Property):
     """Rich Club Coefficient.
@@ -749,6 +765,7 @@ class RichClub(_Property):
             G (nx.DiGraph): Graph.
         """
         super().__init__(G)
+        self.A = self.G.to_undirected()
 
     def compute(self) -> np.array:
         """Compute the Rich Club Coefficient.
@@ -756,14 +773,11 @@ class RichClub(_Property):
         Returns:
             np.array: distribution of rich club coefficients, by degree in graph.
         """
-        self.G.remove_edges_from(nx.selfloop_edges(self.G))
-        self.G = self.G.to_undirected()
-
-        n_edges = self.G.number_of_edges()
+        n_edges = self.A.number_of_edges()
         if n_edges == 0:
             raise EmptyGraphError("There are no edges. Can not form rich clubs with no edges.")
 
-        dict_coeff = nx.rich_club_coefficient(self.G, normalized=False)
+        dict_coeff = nx.rich_club_coefficient(self.A, normalized=False)
         self._raw_value = np.fromiter(dict_coeff.values(), dtype=float)
 
         return self._raw_value
@@ -811,8 +825,7 @@ class SubgraphCentrality(_Property):
             raise EmptyGraphError(
                 "There are no edges. Can not calculate subgraph centrality of nodes that do not form any edges."
             )
-
-        self._raw_value = nx.subgraph_centrality(self.G.to_undirected())
+        self._raw_value = nx.subgraph_centrality(self.G)
         self._raw_value = np.fromiter(self._raw_value.values(), dtype=float)
 
         return self._raw_value
@@ -825,7 +838,7 @@ class SubgraphCentrality(_Property):
     def norm_network(self):
         """Normalize the subgraph centrality of the graph to the max value, obtained from a complete graph of the same size"""
 
-        T = nx.DiGraph()
+        T = nx.Graph()
         n_nodes = self._n_nodes
         T.add_nodes_from(range(n_nodes))
         T.add_edges_from([(i, j) for i in range(n_nodes) for j in range(n_nodes)])
@@ -837,7 +850,7 @@ class SubgraphCentrality(_Property):
 
 @return_distribution
 @use_selfloops
-class LocalityIndex(_Property):  # Hereda de la clase _Property
+class LocalityIndex(_Property):
     """Locality Index.
 
     Measurement that reflects the internality of every connection of all neighbors immediate to each node.
@@ -871,15 +884,14 @@ class LocalityIndex(_Property):  # Hereda de la clase _Property
                 "There are no edges. Can not calculate locality index of nodes that do not form any edges."
             )
 
-        self.A = self.G.to_undirected()
         self._raw_value = []
 
-        for node in self.A.nodes():
+        for node in self.G.nodes():
             # If there is a self-loop, you can be your own neighbor, if not, a connection to you is considered in n_ext
-            neighbors = [x for x in self.A.neighbors(node)]
+            neighbors = [x for x in self.G.neighbors(node)]
 
             links_neighbors = [
-                self.A.number_of_edges(neighbors[i], neighbors[j])
+                self.G.number_of_edges(neighbors[i], neighbors[j])
                 for i in range(len(neighbors))
                 for j in range(i, len(neighbors))
             ]
@@ -887,9 +899,9 @@ class LocalityIndex(_Property):  # Hereda de la clase _Property
             n_int = np.fromiter(links_neighbors, dtype=int).sum()
 
             links_externals = [
-                self.A.number_of_edges(i, j)
+                self.G.number_of_edges(i, j)
                 for i in neighbors
-                for x, j in self.A.edges(i)
+                for x, j in self.G.edges(i)
                 if j not in neighbors
             ]
 
@@ -914,7 +926,7 @@ class LocalityIndex(_Property):  # Hereda de la clase _Property
 
 @return_distribution
 @use_direction
-class AverageOutDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
+class AverageOutDegreeNearestNeighbors(_Property):
     """Average Out-Degree of Nearest Neighbors
 
     Average out-degree of nearest neighbors is defined as de average of out-degrees of each memeber of a node's neighborhood.
@@ -941,8 +953,7 @@ class AverageOutDegreeNearestNeighbors(_Property):  # Hereda de la clase _Proper
         Returns:
             np.array: average out-degree for each node in the graph.
         """
-        self.A = remove_self_loops(self.G)
-        self._dict_av_degree = nx.average_neighbor_degree(self.A, source="out", target="out")
+        self._dict_av_degree = nx.average_neighbor_degree(self.G, source="out", target="out")
         self._raw_value = np.fromiter(self._dict_av_degree.values(), dtype=float)
 
         return self._raw_value
@@ -952,7 +963,7 @@ class AverageOutDegreeNearestNeighbors(_Property):  # Hereda de la clase _Proper
         """Normalize the average degree of nearest neighbors for every node in the graph to the number of nodes and exclude
         0s from nodes that do not have a out-degree higher than 0. Relation between order of values and order of nodes is lost.
         """
-        parents_value = np.array([self._dict_av_degree[node] for node in get_parent_nodes(self.A)])
+        parents_value = np.array([self._dict_av_degree[node] for node in get_parent_nodes(self.G)])
         return parents_value * (1 / (self._n_nodes - 1))
 
     @check_raw_value
@@ -962,7 +973,7 @@ class AverageOutDegreeNearestNeighbors(_Property):  # Hereda de la clase _Proper
 
 
 @return_distribution
-class AverageDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
+class AverageDegreeNearestNeighbors(_Property):
     """Average Degree of Nearest Neighbors.
 
     The Average Degree of Nearest Neighbors here is considered for an undirected network, meaning the neighborhood for each node
@@ -989,9 +1000,7 @@ class AverageDegreeNearestNeighbors(_Property):  # Hereda de la clase _Property
         Returns:
             float: Density of the graph.
         """
-        no_self_loops = nx.DiGraph
-        no_self_loops = remove_self_loops(self.G)
-        dict_av_degree = nx.average_neighbor_degree(no_self_loops.to_undirected())
+        dict_av_degree = nx.average_neighbor_degree(self.G)
         self._raw_value = np.fromiter(dict_av_degree.values(), dtype=float)
 
         return self._raw_value
@@ -1058,7 +1067,7 @@ class EntropyPKout(_Property):
         """Normalize the entropy of the degree distribution to the max theoretical entropy"""
         return self._raw_value / self.h_max
 
-
+# TODO Aveces sale negativo????????????`
 @return_scalar
 @use_selfloops
 @use_direction

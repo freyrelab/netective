@@ -97,15 +97,15 @@ def association(dict_data: dict[str, dict[str, float]], corr_func: Callable(Iter
 
 
 # Get properties selected Fxn
-def get_child_classes(parent_class, selected_props) -> list:
-    child_classes = []
+def get_child_classes(parent_class, selected_props) -> dict:
+    child_classes = {}
     all_properties = []
     print(f"Properties used for analysis: ", end=" ")
     if selected_props == "all":
         for name, obj in inspect.getmembers(properties):
             if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
                 print(obj.CLASS_NAME, end=" ")
-                child_classes.append(obj)
+                child_classes[obj] = np.asarray([obj._use_selfloops, obj._use_direction, obj._use_giant_component, obj._use_paths])
                 all_properties.append(obj.CLASS_NAME)
     else:
         for name, obj in inspect.getmembers(properties):
@@ -116,7 +116,7 @@ def get_child_classes(parent_class, selected_props) -> list:
                 and name in selected_props
             ):
                 print(name, end=" ")
-                child_classes.append(obj)
+                child_classes[obj] = np.asarray([obj._use_selfloops, obj._use_direction, obj._use_giant_component, obj._use_paths])
                 all_properties.append(obj.CLASS_NAME)
             if (
                 inspect.isclass(obj)
@@ -456,8 +456,8 @@ class Structure:
             )
 
         # Get Instances Fxns
-        def get_instances_no_paths(H, child_classes):
-            instances = {x.CLASS_NAME: x(H.copy()) for x in child_classes if not x._use_paths}
+        def get_instances(H, child_classes, mask):
+            instances = {x.CLASS_NAME: x(H.copy()) for x in child_classes if np.array_equal(child_classes[x], mask)}
             return instances
 
         def get_instances_paths(H, child_classes, net_shortest_paths, net_shortest_distances):
@@ -472,20 +472,56 @@ class Structure:
             }
             return instances
 
-        # Properties that do not use paths object
-        instances = get_instances_no_paths(self.G, child_classes)
+        # Properties that do not need network modifications
+        mask = np.asarray([True, True, False, False])
+        instances = get_instances(self.G, child_classes, mask)
+        
+        # Properties that need a giant component with a directed network that allows self loops
+        temp = self.G.copy()
+        temp = temp.giant_component
+        mask = np.asarray([True, True, True, False])
+        instances.update(
+            get_instances(temp, child_classes, mask)
+        )
 
-        # TODO!!! agregar instancias para redes sin self-loops y direccion. Revisar si conviene hacer compbinatoria.
-        # Paths objects
+        # Properties that allow self loops but not a directed network
+        temp = self.G.copy()
+        temp = temp.to_undirected()
+        mask = np.asarray([True, False, False, False])
+        instances.update(
+            get_instances(temp, child_classes, mask)
+        )
+        
+        # From here down, the same network will be 'trimmed' from characteristics
+        # Does not allow self loops
         remove_self_loops(self.G)
+        mask = np.asarray([False, True, False, False])
+        instances.update(
+            get_instances(self.G, child_classes, mask)
+        )
+
+        # TODO No está agarrando a RichClub???
+        # Does not allow directed networks
+        self.G = RegNet(self.G.to_undirected())
+        mask = np.asarray([False, False, False, False])
+        instances.update(
+            get_instances(self.G, child_classes, mask)
+        )
+
+        # Uses giant component but does not need objects paths
         self.G = self.G.giant_component
+        mask = np.asarray([False, False, True, False])
+        instances.update(
+            get_instances(self.G, child_classes, mask)
+        )
+
         self.G = self.G.to_undirected()
         net_shortest_paths = ShortestPaths(self.G)
         net_shortest_distances = ShortestDistances(self.G)
         self.dist_values = {}
+        self.scalar_values = {}
 
         # Properties that use paths object
-        # They use the giant component from an undirected graph with no selfloops
         instances.update(
             get_instances_paths(self.G, child_classes, net_shortest_paths, net_shortest_distances)
         )
@@ -697,7 +733,7 @@ def characterize_network(
     name: str,
     norm: str | None = None,
     selected_props: str | list = "all",
-    child_classes: list = None,
+    child_classes: dict = None,
     verbose: bool = False,
     return_prop_dicts: bool = False,
 ) -> None | Tuple[dict, dict]:
@@ -722,9 +758,11 @@ def characterize_network(
 
     struc = Structure(G, norm=norm, net_id=name, verbose=verbose)
     if child_classes is not None:
-        scalar_values, dist_values = struc.get_props(child_classes=child_classes)
+        scalar_values, dist_values = struc.get_props(child_classes = list(child_classes.keys()) )
     else:
-        scalar_values, dist_values = struc.get_props(props=selected_props)
+        scalar_values, dist_values = struc.get_props(props = selected_props)
+    
+    print(child_classes)
 
     if len(dist_values) == 0 and len(scalar_values) == 0:
         raise ValueError("Not enough data, try with more properties or another normalization")
