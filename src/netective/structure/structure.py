@@ -445,7 +445,7 @@ class Structure:
                 Normalization factor for each property.
             net_id: str.
                 Name of the network. If None, a random uuid is assigned.
-            child_classes: list.
+            child_classes: dict.
                 List of classes to compute the structural properties.
 
         Returns:
@@ -563,7 +563,7 @@ class Structure:
                 Use 'all' to compute all the properties.
                 Use a list of property names to compute only those properties.
                 Use a list of property classes to compute all the properties of those classes.
-            child_classes: list.
+            child_classes: dict.
                 List of property classes to compute all the properties of those classes.
 
 
@@ -747,7 +747,7 @@ def characterize_network(
         G (RegNet): Network to characterize.
         norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
-        child_classes (list, optional): List of child classes to compute. Defaults to None. Use either selected_props or child_classes.
+        child_classes (dict, optional): Dict of child classes to compute. Defaults to None. Use either selected_props or child_classes.
             if child_classes is not None, selected_props is ignored.
         verbose (bool, optional): If True, print messages. Defaults to False.
 
@@ -762,11 +762,9 @@ def characterize_network(
 
     struc = Structure(G, norm=norm, net_id=name, verbose=verbose)
     if child_classes is not None:
-        scalar_values, dist_values = struc.get_props(child_classes = list(child_classes.keys()) )
+        scalar_values, dist_values = struc.get_props(child_classes = child_classes)
     else:
         scalar_values, dist_values = struc.get_props(props = selected_props)
-    
-    print(child_classes)
 
     if len(dist_values) == 0 and len(scalar_values) == 0:
         raise ValueError("Not enough data, try with more properties or another normalization")
@@ -781,7 +779,6 @@ def characterize_network(
         fig_dist, _ = plot_distributions(dist_values[name])
         fig_dist.show()
     if len(scalar_values) != 0:
-        print(scalar_values)
         fig_scalar, _ = plot_scalars(scalar_values[name])
         fig_scalar.show()
 
@@ -852,7 +849,6 @@ def compare_networks(
         df = association(name_scalars_array)
         fig_scalar, _ = create_symmetric_heatmap(df, title=f"Global properties")
     else:
-        print(name_scalars_array)
         raise ValueError("Not enough data to compare.")
 
     # Distribution properties
