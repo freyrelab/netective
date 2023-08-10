@@ -12,6 +12,7 @@ __all__ = [
 ]
 
 import os
+import warnings
 import numpy as np
 import networkx as nx
 from tqdm import tqdm
@@ -75,12 +76,8 @@ def run_parallel(f, my_iter, workers):
 
 def validate_network(G: nx.DiGraph | rn.RegNet) -> rn.RegNet:
     """Validates the network and returns a RegNet object."""
-    print(f"validate --- G has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges.")
     if isinstance(G, nx.DiGraph):
         G = rn.RegNet(G)
-        print(
-            f"validate RegNet --- G has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges."
-        )
     elif not isinstance(G, rn.RegNet):
         raise TypeError("G must be a DiGraph or a RegNet")
     if G.size() == 0:
@@ -162,8 +159,32 @@ def flatten_list_of_iterables(lst):
 def get_clusters(
     corr_df, clust_num, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True
 ):
-    dist_mtrx = round(1 - np.abs(corr_df.astype("float")), 4)
-    linkage_mtrx = linkage(squareform(dist_mtrx), method=ch_method, metric=ch_metric)
+    """Get clusters from a correlation matrix.
+
+    Args:
+        corr_df: A correlation matrix.
+        clust_num: The number of clusters to be obtained.
+        ch_method: The linkage method to be used.
+        ch_metric: The distance metric to be used.
+        map_ids: If True, the clusters will be returned as a dictionary.
+
+    Returns:
+        A list containing the cluster number for each node.
+        If map_ids is True, a dictionary containing the clusters will be returned.
+
+    Note:
+        The distance matrix is computed as 1 - |corr_df|
+    """
+    corr_df = np.abs(corr_df.astype("float"))
+    # corr_df = corr_df.fillna(0)
+    corr_df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    dist_mtrx = round(1 - corr_df, 4)
+    try:
+        square_matrix = squareform(dist_mtrx)
+    except ValueError:
+        # warnings.warn(f"NaNs found in the correlation matrix. Unable to compute clusters.")
+        raise ValueError(f"NaNs found in the correlation matrix. Unable to compute clusters.")
+    linkage_mtrx = linkage(square_matrix, method=ch_method, metric=ch_metric)
     index = list(corr_df.index)
     cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")
     clusters = {i: [] for i in cluster_vector}

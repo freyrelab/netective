@@ -1,0 +1,2 @@
+from freyrelab.regnets.regnet import RegNet
+from freyrelab.nets.paths2 import Efficiency, ShortestDistances, ShortestPaths
