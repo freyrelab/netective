@@ -2,7 +2,7 @@ from pandas import DataFrame
 
 from netective.cli import _arguments
 from netective.structure import save_strucs
-from netective import pipeline
+from netective import structure
 from netective.utils import *
 
 try:
@@ -33,10 +33,10 @@ def main():
     # collect data for parallel processing
     networks = parse_nets(paths, comments, delimiter)
     if len(networks.values()) > 1:
-        fig_scalar, fig_dist = pipeline.compare_networks(networks, norm, workers=workers)
+        fig_scalar, fig_dist = structure.compare_structure(networks, norm, workers=workers)
     else:
         networks = list(networks.values())
-        pipeline.characterize_network(networks[0])
+        structure.characterize_network(networks[0])
 
     ## save results
     cl = f"{comments} command: python {__file__} --path {paths} --norm {norm} --comments {comments} --delimiter {delimiter} --output {output} --output_file {output_file} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose}"

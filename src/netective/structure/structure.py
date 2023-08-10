@@ -99,7 +99,7 @@ def association(
 
     return corr_df
 
-
+# TODO get_child_classes debe poder identificar un error en la lista y poder recibir los nombres con ortografía normal
 # Get properties selected Fxn
 def get_child_classes(parent_class, selected_props) -> dict:
     child_classes = {}
