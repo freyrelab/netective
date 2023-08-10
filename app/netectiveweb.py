@@ -13,7 +13,7 @@ from scipy.stats import pearsonr
 from itertools import chain
 
 
-from netective import properties
+from netective.structure import properties
 
 # from netective.structure import Structure
 from netective.utils import compute_moments
@@ -27,9 +27,7 @@ image = Image.open(r"./assets/on_white.png")
 width, height = image.size
 st.image(image, width=int(width * 0.15))
 st.title("Compute network structural properties")
-uploaded_files = st.file_uploader(
-    "Choose up to three files", accept_multiple_files=True
-)
+uploaded_files = st.file_uploader("Choose up to three files", accept_multiple_files=True)
 
 parent_class = properties._Property
 
@@ -41,11 +39,7 @@ def flatten_list_of_iterables(lst):
 def get_child_classes(parent_class):
     child_classes = []
     for name, obj in inspect.getmembers(properties):
-        if (
-            inspect.isclass(obj)
-            and issubclass(obj, parent_class)
-            and obj != parent_class
-        ):
+        if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
             child_classes.append(obj)
     return child_classes
 
@@ -66,11 +60,7 @@ def normalize_props(instances, G, norm="network"):
     norm_scalar_values = {}
     norm_dist_values = {}
     for name, x in instances.items():
-        dict_ = (
-            norm_scalar_values
-            if x._return_type == "scalar"
-            else norm_dist_values
-        )
+        dict_ = norm_scalar_values if x._return_type == "scalar" else norm_dist_values
         try:
             if norm == "network":
                 dict_[name] = x.norm_network()
@@ -93,9 +83,7 @@ def plot_distributions(dist_values):
     grid_shape = (int(num_items / 2) + 1, 2)
     # Create the figure and subplots
     fig, axs = plt.subplots(
-        nrows=grid_shape[0],
-        ncols=grid_shape[1],
-        figsize=(1.5 * grid_shape[0], 5 * grid_shape[1]),
+        nrows=grid_shape[0], ncols=grid_shape[1], figsize=(1.5 * grid_shape[0], 5 * grid_shape[1])
     )
 
     # Flatten the axes array if it's more than 1D
@@ -104,9 +92,7 @@ def plot_distributions(dist_values):
 
     # Iterate over the dictionary items and create the subplots
     for i, (title, data) in enumerate(dist_values.items()):
-        ax = (
-            axs[i] if num_items > 1 else axs
-        )  # Use a single axis if there's only one item
+        ax = axs[i] if num_items > 1 else axs  # Use a single axis if there's only one item
         sns.kdeplot(data, ax=ax, fill=True, color="#384265")
         ax.set_title(title)
 
@@ -165,18 +151,14 @@ def plot_scalars(data_dict):
                 plt.text(
                     value if value >= threshold else 1 + abs(value),
                     i,
-                    str(value)
-                    if value >= 0.01 or value == 0
-                    else f"{value:.2E}",
+                    str(value) if value >= 0.01 or value == 0 else f"{value:.2E}",
                     va="center",
                 )
             else:
                 plt.text(
                     value,
                     i,
-                    str(value)
-                    if value >= 0.01 or value == 0
-                    else f"{value:.2E}",
+                    str(value) if value >= 0.01 or value == 0 else f"{value:.2E}",
                     va="center",
                 )
 
@@ -190,22 +172,16 @@ def plot_scalars(data_dict):
 def get_props(G, norm="network"):
     instances = get_instances(G, child_classes)
     scalar_values = {
-        name: x.compute()
-        for name, x in instances.items()
-        if x._return_type == "scalar"
+        name: x.compute() for name, x in instances.items() if x._return_type == "scalar"
     }
     dist_values = {
-        name: x.compute()
-        for name, x in instances.items()
-        if x._return_type == "distribution"
+        name: x.compute() for name, x in instances.items() if x._return_type == "distribution"
     }
 
     if norm:
         scalar_values, dist_values = normalize_props(instances, G, norm=norm)
 
-    dist_values = {
-        k: v for k, v in dist_values.items() if not np.isnan(v).all()
-    }
+    dist_values = {k: v for k, v in dist_values.items() if not np.isnan(v).all()}
     scalar_values = {k: v for k, v in scalar_values.items() if not np.isnan(v)}
 
     return scalar_values, dist_values
@@ -264,13 +240,7 @@ def create_symmetric_heatmap(dataframe, title: str):
 
     # Plot the heatmap
     g = sns.clustermap(
-        dataframe.astype(float),
-        cmap="Blues",
-        vmin=0,
-        vmax=1,
-        annot=True,
-        fmt=".2f",
-        cbar=True,
+        dataframe.astype(float), cmap="Blues", vmin=0, vmax=1, annot=True, fmt=".2f", cbar=True
     )
 
     # Set the title
@@ -303,19 +273,13 @@ def main_multiple(uploaded_files, norm):
         st.write(f"Processing file {i+1}: {uploaded_file.name}")
         file_bytes = uploaded_file.read()
         file_obj = BytesIO(file_bytes)
-        G = nx.read_edgelist(
-            file_obj, delimiter=" ", create_using=nx.DiGraph, data=False
-        )
+        G = nx.read_edgelist(file_obj, delimiter=" ", create_using=nx.DiGraph, data=False)
         G = rn.RegNet(G)
         # props
         scalar_values, dist_values = get_props(G, norm=norm)
         # scalar properties
-        scalar_arrays[uploaded_file.name] = np.asarray(
-            list(scalar_values.values())
-        )
-        dist_moments = [
-            compute_moments(array) for array in dist_values.values()
-        ]
+        scalar_arrays[uploaded_file.name] = np.asarray(list(scalar_values.values()))
+        dist_moments = [compute_moments(array) for array in dist_values.values()]
         dist_moments_arrays[uploaded_file.name] = np.asarray(
             flatten_list_of_iterables(dist_moments)
         )
@@ -323,9 +287,7 @@ def main_multiple(uploaded_files, norm):
 
     df = pairwise_pearson_correlation(scalar_arrays)
     st.dataframe(df)
-    fig_scalar, _ = create_symmetric_heatmap(
-        df, title=f"Network-level properties"
-    )
+    fig_scalar, _ = create_symmetric_heatmap(df, title=f"Network-level properties")
     # distribution properties
     df = pairwise_pearson_correlation(dist_moments_arrays)
     st.dataframe(df)
@@ -350,9 +312,7 @@ if uploaded_files:
         # Process for a single file
         file_bytes = uploaded_files[0].read()
         file_obj = BytesIO(file_bytes)
-        G = nx.read_edgelist(
-            file_obj, delimiter=" ", create_using=nx.DiGraph, data=False
-        )
+        G = nx.read_edgelist(file_obj, delimiter=" ", create_using=nx.DiGraph, data=False)
         G = rn.RegNet(G)
         main_single(G, norm=norm)
     elif num_files <= 3:
