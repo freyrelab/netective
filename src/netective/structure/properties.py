@@ -878,7 +878,8 @@ class LocalityIndex(_Property):
         Returns:
             nparray: locality index for every node.
         """
-        n_edges = self.G.number_of_edges()
+        n_edges = len(self.G.edges())
+        # n_edges = self.G.number_of_edges()
         if n_edges == 0:
             raise EmptyGraphError(
                 "There are no edges. Can not calculate locality index of nodes that do not form any edges."
@@ -891,7 +892,7 @@ class LocalityIndex(_Property):
             neighbors = [x for x in self.G.neighbors(node)]
 
             links_neighbors = [
-                self.G.number_of_edges(neighbors[i], neighbors[j])
+                self.G.has_edge(neighbors[i], neighbors[j])
                 for i in range(len(neighbors))
                 for j in range(i, len(neighbors))
             ]
@@ -899,7 +900,7 @@ class LocalityIndex(_Property):
             n_int = np.fromiter(links_neighbors, dtype=int).sum()
 
             links_externals = [
-                self.G.number_of_edges(i, j)
+                self.G.has_edge(i, j)
                 for i in neighbors
                 for x, j in self.G.edges(i)
                 if j not in neighbors
@@ -1067,7 +1068,7 @@ class EntropyPKout(_Property):
         """Normalize the entropy of the degree distribution to the max theoretical entropy"""
         return self._raw_value / self.h_max
 
-# TODO Aveces sale negativo????????????`
+# TODO number of edges de RegNet != len(edges) !!
 @return_scalar
 @use_selfloops
 @use_direction
@@ -1101,7 +1102,7 @@ class GiniIndex(_Property):
         Returns:
             float: gini index of the entire graph.
         """
-        self.t = self.G.number_of_edges()
+        self.t = len(self.G.edges())
         if self.t == 0:
             raise EmptyGraphError(
                 "There are no edges. Can not calculate Gini Index of a network with no edges."
@@ -1114,7 +1115,7 @@ class GiniIndex(_Property):
         for i in range(self._n_nodes):
             x = b[i] / self.t
             y = (self._n_nodes - (i + 1) + 0.5) / self._n_nodes
-            area += x * y
+            area += (x * y)
 
         self._raw_value = 1 - (2 * area)
         return self._raw_value
@@ -1131,7 +1132,7 @@ class GiniIndex(_Property):
         for i in range(n_parents):
             x = b[i] / self.t
             y = (n_parents - (i + 1) + 0.5) / n_parents
-            area += x * y
+            area += (x * y)
 
         self._norm_biol = 1 - (2 * area)
         return self._norm_biol

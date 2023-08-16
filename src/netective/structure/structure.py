@@ -17,7 +17,7 @@ from scipy.stats import pearsonr
 from multiprocessing import cpu_count
 
 from freyrelab.regnets.regnet import RegNet
-from freyrelab.nets.paths2 import Efficiency, ShortestDistances, ShortestPaths
+from freyrelab.nets.paths2 import ShortestDistances, ShortestPaths
 
 from netective.structure import properties
 from netective.structure.properties import remove_self_loops
