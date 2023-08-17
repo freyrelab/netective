@@ -105,19 +105,19 @@ def get_child_classes(parent_class, selected_props) -> dict:
     child_classes = {}
     all_properties = []
     # if verbose: TODO: add verbose option (or make if global?)
-    print(f"Properties used for analysis: ", end=" ")
+    print(f"Properties used for analysis: ")
+    # postit1 Aqui se genera la máscara a partir de los atributos del objeto
     if selected_props == "all":
         for name, obj in inspect.getmembers(properties):
             if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
-                print(obj.CLASS_NAME, end=" ")
-                child_classes[obj] = np.asarray(
-                    [
+                print(obj.CLASS_NAME, end="\n")
+                bool_mask = [
                         obj._use_selfloops,
                         obj._use_direction,
                         obj._use_giant_component,
                         obj._use_paths,
                     ]
-                )
+                child_classes[obj] = bin(np.packbits(bool_mask).item() >> 4)
                 all_properties.append(obj.CLASS_NAME)
     else:
         for name, obj in inspect.getmembers(properties):
@@ -127,15 +127,14 @@ def get_child_classes(parent_class, selected_props) -> dict:
                 and obj != parent_class
                 and name in selected_props
             ):
-                print(name, end=" ")
-                child_classes[obj] = np.asarray(
-                    [
+                print(obj.CLASS_NAME, end="\n")
+                bool_mask = [
                         obj._use_selfloops,
                         obj._use_direction,
                         obj._use_giant_component,
                         obj._use_paths,
                     ]
-                )
+                child_classes[obj] = bin(np.packbits(bool_mask).item() >> 4)
                 all_properties.append(obj.CLASS_NAME)
             if (
                 inspect.isclass(obj)
@@ -431,20 +430,22 @@ class Structure:
 
         norm_scalar_values = {}
         norm_dist_values = {}
+        if norm not in NORM_OPTIONS:
+                raise properties.NormalizationError(f"Invalid normalization method: {norm}")
+        print('Properties excluded from analysis due to lack of normalization:')
         for name, x in instances.items():
             # TODO: why using x.CLASS_NAME instead of name?
             # TODO: toma la normalización de normalizaciones disponibles
             dict_ = norm_scalar_values if x._return_type == "scalar" else norm_dist_values
-            if norm not in NORM_OPTIONS:
-                raise properties.NormalizationError(f"Invalid normalization method: {norm}")
             try:
                 if norm == "network":
                     dict_[x.CLASS_NAME] = x.norm_network()
                 elif norm == "biological":
                     dict_[x.CLASS_NAME] = x.norm_biol()
             except (NotImplementedError, properties.NormalizationError):
-                dict_[x.CLASS_NAME] = np.nan
-
+                # dict_[x.CLASS_NAME] = np.nan
+                print(f'{x.CLASS_NAME}', end='\n')
+                continue
         return norm_scalar_values, norm_dist_values
 
     def _compute_props(self, child_classes) -> dict[str, float, int]:
@@ -478,7 +479,7 @@ class Structure:
             instances = {
                 x.CLASS_NAME: x(H.copy())
                 for x in child_classes
-                if np.array_equal(child_classes[x], mask)
+                if child_classes[x] == bin(mask)
             }
             return instances
 
@@ -495,36 +496,35 @@ class Structure:
             return instances
 
         # Properties that do not need network modifications
-        mask = np.asarray([True, True, False, False])
+        mask = 0b1100
         instances = get_instances(self.G, child_classes, mask)
 
         # Properties that need a giant component with a directed network that allows self loops
         temp = self.G.copy()
         temp = temp.giant_component
-        mask = np.asarray([True, True, True, False])
+        mask = 0b1110
         instances.update(get_instances(temp, child_classes, mask))
 
         # Properties that allow self loops but not a directed network
         temp = self.G.copy()
         temp = temp.to_undirected()
-        mask = np.asarray([True, False, False, False])
+        mask = 0b1000
         instances.update(get_instances(temp, child_classes, mask))
 
         # From here down, the same network will be 'trimmed' from characteristics
         # Does not allow self loops
         remove_self_loops(self.G)
-        mask = np.asarray([False, True, False, False])
+        mask = 0b0100
         instances.update(get_instances(self.G, child_classes, mask))
 
-        # TODO No está agarrando a RichClub???
         # Does not allow directed networks
         self.G = RegNet(self.G.to_undirected())
-        mask = np.asarray([False, False, False, False])
+        mask = 0b0000
         instances.update(get_instances(self.G, child_classes, mask))
 
         # Uses giant component but does not need objects paths
         self.G = self.G.giant_component
-        mask = np.asarray([False, False, True, False])
+        mask = 0b0010
         instances.update(get_instances(self.G, child_classes, mask))
 
         self.G = self.G.to_undirected()
@@ -538,10 +538,14 @@ class Structure:
             get_instances_paths(self.G, child_classes, net_shortest_paths, net_shortest_distances)
         )
 
+        # Computing of global properties
         self.scalar_values = {
-            x.CLASS_NAME: x.compute() for name, x in instances.items() if x._return_type == "scalar"
+            x.CLASS_NAME: x.compute()
+            for name, x in instances.items() 
+            if x._return_type == "scalar"
         }
 
+        # Computing of node-level properties
         self.dist_values = {
             x.CLASS_NAME: x.compute()
             for name, x in instances.items()
