@@ -487,4 +487,33 @@ class NetworkInferenceStats:
             ax=ax,
         )
 
-    # def recall(self, cutoff) -> float:
+    # TODO: Create a cache to keep {(cutoff, metric): value)}
+    def recall(self, cutoff) -> float:
+        """Computes the recall for a given cutoff.
+
+        Args:
+        cutoff (float): Cutoff to use to compute the evaluation metrics.
+            The cutoff follows the greater_is_better rule.
+
+        Returns:
+        -------
+        recall: float
+            Recall for the given cutoff.
+        """
+        _, sensitivity, _ = self.__compute_roc_pr_datapoints(cutoff=cutoff)
+        return sensitivity[-2]  # last value is always 1
+
+    def precision(self, cutoff) -> float:
+        """Computes the precision for a given cutoff.
+
+        Args:
+        cutoff (float): Cutoff to use to compute the evaluation metrics.
+            The cutoff follows the greater_is_better rule.
+
+        Returns:
+        -------
+        precision: float
+            Precision for the given cutoff.
+        """
+        precision, _, _ = self.__compute_roc_pr_datapoints(cutoff=cutoff)
+        return precision[-2]  # last value is always the baseline

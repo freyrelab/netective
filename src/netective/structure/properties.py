@@ -39,6 +39,7 @@ def use_paths(cls):
     cls._use_paths = True
     return cls
 
+
 def validate_network_characteristics(self):
 
     directed = self.G.is_directed()
@@ -46,15 +47,20 @@ def validate_network_characteristics(self):
     paths = self._use_paths
 
     if self._use_selfloops:
-        property_mask = np.asarray([self._use_direction, self._use_giant_component, self._use_paths])
+        property_mask = np.asarray(
+            [self._use_direction, self._use_giant_component, self._use_paths]
+        )
         input_net_mask = np.asarray([directed, giant_components, paths])
     else:
-        property_mask = np.asarray([self._use_selfloops, self._use_direction, self._use_giant_component, self._use_paths])
+        property_mask = np.asarray(
+            [self._use_selfloops, self._use_direction, self._use_giant_component, self._use_paths]
+        )
         selfloops = True if nx.number_of_selfloops(self.G) > 1 else False
         input_net_mask = np.asarray([selfloops, directed, giant_components, paths])
 
     if not np.array_equal(property_mask, input_net_mask):
-        raise("Error, incorrect format of input network for this propertie's computation.")
+        raise ("Error, incorrect format of input network for this propertie's computation.")
+
 
 # Theoretical maximums
 def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
@@ -432,6 +438,7 @@ class FeedbackLoops_3(_Property):
         return self._raw_value / max_feedbacks3
 
 
+# TODO:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! INCLUIR feedforwards_count
 @return_scalar
 @use_direction
 class ComplexFeedForwardCircuits(_Property):
@@ -742,6 +749,7 @@ class OutDegree(_Property):
     def norm_network(self) -> float:
         """Normalize the nparray with the out-degrees of the graph to the number of nodes."""
         return self._raw_value * (1 / self._n_nodes)
+
 
 # TODO Por laguna perra razón se necesita hacer el to_undirected dentro de aquí????????
 @return_distribution
@@ -1068,6 +1076,7 @@ class EntropyPKout(_Property):
         """Normalize the entropy of the degree distribution to the max theoretical entropy"""
         return self._raw_value / self.h_max
 
+
 # TODO number of edges de RegNet != len(edges) !!
 @return_scalar
 @use_selfloops
@@ -1115,7 +1124,7 @@ class GiniIndex(_Property):
         for i in range(self._n_nodes):
             x = b[i] / self.t
             y = (self._n_nodes - (i + 1) + 0.5) / self._n_nodes
-            area += (x * y)
+            area += x * y
 
         self._raw_value = 1 - (2 * area)
         return self._raw_value
@@ -1132,7 +1141,7 @@ class GiniIndex(_Property):
         for i in range(n_parents):
             x = b[i] / self.t
             y = (n_parents - (i + 1) + 0.5) / n_parents
-            area += (x * y)
+            area += x * y
 
         self._norm_biol = 1 - (2 * area)
         return self._norm_biol
