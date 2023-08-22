@@ -5,6 +5,7 @@ import numpy as np
 import networkx as nx
 from abc import ABC, abstractmethod
 
+from freyrelab.nets import motifs
 from freyrelab.nets.paths2 import ShortestPaths, Efficiency, ShortestDistances
 
 # Decorators for graph characteristics
@@ -419,7 +420,8 @@ class FeedbackLoops_3(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        self._raw_value = self.G.feedbacks3_count
+        mc = motifs.count_motifs(self.G)
+        self._raw_value = mc.feedbacks3_count
         return self._raw_value
 
     @check_raw_value
@@ -456,7 +458,8 @@ class ComplexFeedForwardCircuits(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        self._raw_value = self.G.complex_feedforwards_count
+        mc = motifs.count_motifs(self.G)
+        self._raw_value = mc.complex_feedforwards_count
         return self._raw_value
 
     def norm_biol(self) -> float:
@@ -488,7 +491,8 @@ class GenesintheGiantComponent(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        self._raw_value = self.G.giant_component_size
+        # self._raw_value = motifs.giant_component_size(self.G) #TODO: freyrelab giant_component_size doesn't work with nx.Graph
+        self._raw_value = len(list(self.G.subgraph(c) for c in nx.connected_components(self.G))[0])
         return self._raw_value
 
     @check_raw_value
@@ -614,7 +618,7 @@ class AverageClusteringCoefficient(_Property):
 
     def compute(self) -> float:
         # self._raw_value = self.G.average_clustering_coefficient
-        clustering_values = self.G.clustering().values()
+        clustering_values = nx.clustering(self.G).values()
         self._raw_value = np.fromiter(clustering_values, dtype=float).mean()
         return self._raw_value
 
@@ -643,7 +647,7 @@ class ClusteringCoefficient(_Property):
         super().__init__(G)
 
     def compute(self) -> float:
-        clustering_values = self.G.clustering().values()
+        clustering_values = nx.clustering(self.G).values()
         self._raw_value = np.fromiter(clustering_values, dtype=float)
         return self._raw_value
 
