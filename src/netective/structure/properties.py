@@ -1081,7 +1081,6 @@ class EntropyPKout(_Property):
         return self._raw_value / self.h_max
 
 
-# TODO number of edges de RegNet != len(edges) !!
 @return_scalar
 @use_selfloops
 @use_direction

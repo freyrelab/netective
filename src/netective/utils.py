@@ -22,8 +22,7 @@ from collections import defaultdict
 from scipy.stats import kurtosis, skew
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
-
-from freyrelab.regnets import regnet as rn
+from typing import Union
 
 concat_path = os.path.join
 
@@ -74,12 +73,10 @@ def run_parallel(f, my_iter, workers):
     return results
 
 
-def validate_network(G: nx.DiGraph | rn.RegNet) -> rn.RegNet:
-    """Validates the network and returns a RegNet object."""
-    if isinstance(G, nx.DiGraph):
-        G = rn.RegNet(G)
-    elif not isinstance(G, rn.RegNet):
-        raise TypeError("G must be a DiGraph or a RegNet")
+def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph) :
+    """Validates the network and returns a DiGraph or Graph object."""
+    if not isinstance(G, (nx.Graph, nx.DiGraph)):
+        raise TypeError("G must be a DiGraph or a Graph")
     if G.size() == 0:
         raise ValueError(f"G must have at least one edge. It has {G.size()} edges.")
     return G

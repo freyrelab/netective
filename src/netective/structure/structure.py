@@ -17,9 +17,9 @@ from scipy.stats import pearsonr
 from collections import defaultdict
 from multiprocessing import cpu_count
 from networkx import connected_components
+from networkx import fast_gnp_random_graph
 
 from freyrelab.nets import motifs
-from freyrelab.regnets.regnet import RegNet
 from freyrelab.nets.paths2 import ShortestDistances, ShortestPaths
 
 from netective.structure import properties
@@ -184,12 +184,12 @@ class GraphObserver:
 
     """A class to observe changes in a graph."""
 
-    def __init__(self, G: Graph | RegNet, data: bool = False) -> None:
+    def __init__(self, G: Graph | DiGraph, data: bool = False) -> None:
         """
         Initialize the GraphObserver class.
 
         Args:
-            G (nx.Graph | rn.RegNet): The graph to observe.
+            G (nx.Graph | nx.Graph): The graph to observe.
             data (bool): If True, the node/edge data will be considered when computing the hash.
 
         """
@@ -197,12 +197,12 @@ class GraphObserver:
         self.data = data
         self.graph_hash = self._compute_hash(self.G)
 
-    def _compute_hash(self, G: Graph | RegNet) -> str:
+    def _compute_hash(self, G: Graph | DiGraph) -> str:
         """
         Compute the hash of the graph.
 
         Args:
-            G (nx.Graph | rn.RegNet): The graph to compute the hash.
+            G (nx.Graph | nx.DiGraph): The graph to compute the hash.
             data (bool): If True, the node/edge data will be considered when computing the hash.
 
         Returns:
@@ -217,12 +217,12 @@ class GraphObserver:
         )
         return hash.hexdigest()
 
-    def changed(self, G: Graph | RegNet = None, update_G: bool = False) -> bool:
+    def changed(self, G: Graph | DiGraph= None, update_G: bool = False) -> bool:
         """
         Check if G has changed with reference to the last call.
 
         Args:
-            G (nx.Graph | rn.RegNet): The graph to check. If None, the original graph will be used.
+            G (nx.Graph | nx.DiGraph): The graph to check. If None, the original graph will be used.
             update_G (bool): If True, the graph will be updated to G. If False, the graph will not be updated.
 
         Returns:
@@ -346,7 +346,7 @@ class NormObserver:
 class Structure:
     def __init__(
         self,
-        G: DiGraph | RegNet,
+        G: DiGraph | Graph,
         norm: None | str | pd.Series = None,
         net_id: str = None,
         verbose: bool = False,
@@ -362,7 +362,7 @@ class Structure:
         If the network has changed, the properties and the normalization factors are recomputed when get_props() is called.
 
         Args:
-            G: DiGraph or RegNet.
+            G: DiGraph or Graph.
                 Network to compute the structural properties.
             norm: None|str|pd.Series.
                 Normalization factor for each property.
@@ -380,7 +380,7 @@ class Structure:
             Structure: Object with the structural properties of the network.
 
         Raises:
-            TypeError: If G is not a DiGraph or a RegNet.
+            TypeError: If G is not a DiGraph or a Graph.
             ValueError: If G has no edges.
 
         Examples:
@@ -458,9 +458,11 @@ class Structure:
 
     def __get_modify_directed_graphs(self, property_groups, original_graph):
         graphs = {}
+
         for mask, class_group in property_groups.items():
             directed = mask & DIRECTED != 0
 
+            # Modifications for undirected graphs in another fxn
             if not directed:
                 continue
 
@@ -468,7 +470,10 @@ class Structure:
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
 
+            # Dummy graph that will be modified, only if it applies
             graph_copy = original_graph.copy()
+
+            # Graph modifications, only if it applies
             if remove_self_loops:
                 graph_copy = properties.remove_self_loops(graph_copy)
             if get_giant_component:
@@ -476,8 +481,11 @@ class Structure:
             if get_paths:
                 net_shortest_paths = ShortestPaths(graph_copy)
                 net_shortest_distances = ShortestDistances(graph_copy)
+
+                # Input requires paths objects besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
+                # Input requires only the modified graph
                 graphs[mask] = graph_copy
 
         return graphs
@@ -487,6 +495,7 @@ class Structure:
         for mask, class_group in property_groups.items():
             directed = mask & DIRECTED != 0
 
+            # Modifications for directed graph in another fxn
             if directed:
                 continue
 
@@ -494,19 +503,24 @@ class Structure:
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
 
+            # Dummy graph that will be modified, only if it applies
             graph_copy = original_graph.copy()
+
+            # Graph modifications, only if it applies
             if remove_self_loops:
                 graph_copy = properties.remove_self_loops(graph_copy)
             if get_giant_component:
                 graph_copy = list(graph_copy.subgraph(c) for c in connected_components(graph_copy))[
                     0
-                ]  # TODO: cant get giant_cmoponent for undirected graph (freyrelab)
+                ]  # TODO: cant get giant_component for undirected graph (freyrelab)
             if get_paths:
                 net_shortest_paths = ShortestPaths(graph_copy)
                 net_shortest_distances = ShortestDistances(graph_copy)
-                graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
 
+                # Input requires paths objects besides the modified graph
+                graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
+                # Input requires only the modified graph
                 graphs[mask] = graph_copy
 
         return graphs
@@ -529,15 +543,19 @@ class Structure:
                 self.__get_modify_undirected_graphs(property_groups, original_graph)
             )
 
+        # Dict with keys: masks for each property group
+        #           values: required input to instance each property in that property group           
         inputs = {**modified_directed_graphs, **modified_undirected_graphs}
 
         for mask, class_group in property_groups.items():
             if mask not in inputs:
                 for class_ in class_group:
                     print(f"{mask}, {class_.CLASS_NAME} cannot be computed for the input graph.")
-
+            
+            # Creo que se puede sacar
+            property_input = inputs[mask]
+            
             for class_ in class_group:
-                property_input = inputs[mask]
                 if isinstance(property_input, tuple):
                     G = property_input[0]
                     net_shortest_paths = property_input[1]
@@ -558,7 +576,7 @@ class Structure:
         Computes the structural properties of a network.
 
         Args:
-            G: DiGraph or RegNet.
+            G: DiGraph or Graph.
                 Network to compute the structural properties.
             norm: None|str|pd.Series.
                 Normalization factor for each property.
@@ -678,7 +696,7 @@ class Structure:
 
 
 def struc_props_call(
-    G: DiGraph | RegNet,
+    G: DiGraph | Graph,
     net_id: str,
     norm: None | str | pd.Series,
     erdos_renyi: int,
@@ -689,7 +707,7 @@ def struc_props_call(
     Call the function struc_props with erdos_renyi random graphs with the same number of nodes and edges as G.
 
     Args:
-        G: DiGraph or RegNet.
+        G: DiGraph or Graph.
             Network to compute the structural properties.
         net_id: str.
             Name of the network.
@@ -717,14 +735,11 @@ def struc_props_call(
         netid_props = [(net_id, props)]
 
     else:
-        from collections import defaultdict
-        from networkx import fast_gnp_random_graph
-
         props_er = defaultdict(list)
         n = G.number_of_nodes()
         m = G.number_of_edges()
         for i in range(erdos_renyi):
-            ER = RegNet(fast_gnp_random_graph(n, m / (n**2), directed=True))
+            ER = fast_gnp_random_graph(n, m / (n**2), directed=True)
             S_er = Structure(ER, norm=norm, net_id=f"{net_id}_ER_{i}", verbose=verbose)
             props_i = S_er.get_props()
             for k, v in props_i.items():
@@ -788,7 +803,7 @@ def save_strucs(
 # User Fxns
 # Characterization of one network
 def characterize_network(
-    G: RegNet,
+    G: DiGraph | Graph,
     name: str,
     norm: str | None = None,
     selected_props: str | list = "all",
@@ -799,7 +814,7 @@ def characterize_network(
     """Module-level function to characterize a single network.
 
     Args:
-        G (RegNet): Network to characterize.
+        G (DiGraph | Graph): Network to characterize.
         norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
         child_classes (dict, optional): Dict of child classes to compute. Defaults to None. Use either selected_props or child_classes.
@@ -849,7 +864,7 @@ def compare_structure(
     Otherwise, it returns a tuple of dictionaries, one for the scalar properties and one for the distributions.
 
     Args:
-        networks (dict): Dictionary of networks to compare {'name':RegNet}.
+        networks (dict): Dictionary of networks to compare {'name':DiGraph | Graph}.
         norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
         workers (int, optional): Number of workers to use. Defaults to 'auto'.
