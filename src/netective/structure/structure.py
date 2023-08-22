@@ -31,6 +31,10 @@ from typing import Callable, Iterable
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
 PARENT_CLASS = properties._Property
+DIRECTED = 8
+SELF_LOOPS = 4
+GIANT_COMPONENT = 2
+PATHS = 1
 
 # Auxiliar Fxns
 def flatten_list_of_iterables(lst):
@@ -112,8 +116,8 @@ def get_child_classes(parent_class, selected_props) -> dict:
             if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
                 print(obj.CLASS_NAME, end="\n")
                 bool_mask = [
-                        obj._use_selfloops,
                         obj._use_direction,
+                        obj._use_selfloops,
                         obj._use_giant_component,
                         obj._use_paths,
                     ]
@@ -129,8 +133,8 @@ def get_child_classes(parent_class, selected_props) -> dict:
             ):
                 print(obj.CLASS_NAME, end="\n")
                 bool_mask = [
-                        obj._use_selfloops,
                         obj._use_direction,
+                        obj._use_selfloops,
                         obj._use_giant_component,
                         obj._use_paths,
                     ]
@@ -496,35 +500,35 @@ class Structure:
             return instances
 
         # Properties that do not need network modifications
-        mask = 0b1100
+        mask = DIRECTED | SELF_LOOPS
         instances = get_instances(self.G, child_classes, mask)
 
         # Properties that need a giant component with a directed network that allows self loops
         temp = self.G.copy()
         temp = temp.giant_component
-        mask = 0b1110
+        mask = DIRECTED | SELF_LOOPS | GIANT_COMPONENT
         instances.update(get_instances(temp, child_classes, mask))
 
         # Properties that allow self loops but not a directed network
         temp = self.G.copy()
         temp = temp.to_undirected()
-        mask = 0b1000
+        mask = SELF_LOOPS
         instances.update(get_instances(temp, child_classes, mask))
 
         # From here down, the same network will be 'trimmed' from characteristics
         # Does not allow self loops
-        remove_self_loops(self.G)
-        mask = 0b0100
+        self.G = remove_self_loops(self.G)
+        mask = DIRECTED
         instances.update(get_instances(self.G, child_classes, mask))
 
         # Does not allow directed networks
         self.G = RegNet(self.G.to_undirected())
-        mask = 0b0000
+        mask = 0
         instances.update(get_instances(self.G, child_classes, mask))
 
         # Uses giant component but does not need objects paths
         self.G = self.G.giant_component
-        mask = 0b0010
+        mask = GIANT_COMPONENT
         instances.update(get_instances(self.G, child_classes, mask))
 
         self.G = self.G.to_undirected()
