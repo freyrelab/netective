@@ -14,11 +14,8 @@ from networkx import Graph
 from itertools import chain
 from networkx import DiGraph
 from scipy.stats import pearsonr
-from collections import defaultdict
 from multiprocessing import cpu_count
-from networkx import connected_components
 
-from freyrelab.nets import motifs
 from freyrelab.regnets.regnet import RegNet
 from freyrelab.nets.paths2 import ShortestDistances, ShortestPaths
 
@@ -125,7 +122,7 @@ def get_child_classes(parent_class, selected_props) -> dict:
                     obj._use_giant_component,
                     obj._use_paths,
                 ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 4
+                child_classes[obj] = bin(np.packbits(bool_mask).item() >> 4)
                 all_properties.append(obj.CLASS_NAME)
     else:
         for name, obj in inspect.getmembers(properties):
@@ -142,7 +139,7 @@ def get_child_classes(parent_class, selected_props) -> dict:
                     obj._use_giant_component,
                     obj._use_paths,
                 ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 4
+                child_classes[obj] = bin(np.packbits(bool_mask).item() >> 4)
                 all_properties.append(obj.CLASS_NAME)
             if (
                 inspect.isclass(obj)
@@ -456,102 +453,6 @@ class Structure:
                 continue
         return norm_scalar_values, norm_dist_values
 
-    def __get_modify_directed_graphs(self, property_groups, original_graph):
-        graphs = {}
-        for mask, class_group in property_groups.items():
-            directed = mask & DIRECTED != 0
-
-            if not directed:
-                continue
-
-            remove_self_loops = mask & SELF_LOOPS == 0
-            get_giant_component = mask & GIANT_COMPONENT != 0
-            get_paths = mask & PATHS != 0
-
-            graph_copy = original_graph.copy()
-            if remove_self_loops:
-                graph_copy = properties.remove_self_loops(graph_copy)
-            if get_giant_component:
-                graph_copy = motifs.giant_component(graph_copy)
-            if get_paths:
-                net_shortest_paths = ShortestPaths(graph_copy)
-                net_shortest_distances = ShortestDistances(graph_copy)
-                graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
-            else:
-                graphs[mask] = graph_copy
-
-        return graphs
-
-    def __get_modify_undirected_graphs(self, property_groups, original_graph):
-        graphs = {}
-        for mask, class_group in property_groups.items():
-            directed = mask & DIRECTED != 0
-
-            if directed:
-                continue
-
-            remove_self_loops = mask & SELF_LOOPS == 0
-            get_giant_component = mask & GIANT_COMPONENT != 0
-            get_paths = mask & PATHS != 0
-
-            graph_copy = original_graph.copy()
-            if remove_self_loops:
-                graph_copy = properties.remove_self_loops(graph_copy)
-            if get_giant_component:
-                graph_copy = list(graph_copy.subgraph(c) for c in connected_components(graph_copy))[
-                    0
-                ]  # TODO: cant get giant_cmoponent for undirected graph (freyrelab)
-            if get_paths:
-                net_shortest_paths = ShortestPaths(graph_copy)
-                net_shortest_distances = ShortestDistances(graph_copy)
-                graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
-
-            else:
-                graphs[mask] = graph_copy
-
-        return graphs
-
-    def __get_instances(self, property_groups, original_graph):
-
-        instances = {}
-        modified_directed_graphs = {}
-        modified_undirected_graphs = {}
-
-        if original_graph.is_directed():
-            modified_directed_graphs.update(
-                self.__get_modify_directed_graphs(property_groups, original_graph)
-            )
-            modified_undirected_graphs.update(
-                self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
-            )
-        else:
-            modified_undirected_graphs.update(
-                self.__get_modify_undirected_graphs(property_groups, original_graph)
-            )
-
-        inputs = {**modified_directed_graphs, **modified_undirected_graphs}
-
-        for mask, class_group in property_groups.items():
-            if mask not in inputs:
-                for class_ in class_group:
-                    print(f"{mask}, {class_.CLASS_NAME} cannot be computed for the input graph.")
-
-            for class_ in class_group:
-                property_input = inputs[mask]
-                if isinstance(property_input, tuple):
-                    G = property_input[0]
-                    net_shortest_paths = property_input[1]
-                    net_shortest_distances = property_input[2]
-                    instances[class_.CLASS_NAME] = class_(
-                        G,
-                        net_shortest_paths=net_shortest_paths,
-                        net_shortest_distances=net_shortest_distances,
-                    )
-                else:
-                    instances[class_.CLASS_NAME] = class_(property_input)
-
-        return instances
-
     def _compute_props(self, child_classes) -> dict[str, float, int]:
 
         """
@@ -565,7 +466,7 @@ class Structure:
             net_id: str.
                 Name of the network. If None, a random uuid is assigned.
             child_classes: dict.
-                Dict of classes to compute the structural properties.
+                List of classes to compute the structural properties.
 
         Returns:
             dict: Dictionary with the structural properties of the network.
@@ -578,11 +479,67 @@ class Structure:
                 flush=True,
             )
 
-        property_groups = defaultdict(list)
-        for class_, mask in child_classes.items():
-            property_groups[mask].append(class_)
+        # Get Instances Fxns
+        def get_instances(H, child_classes, mask):
+            instances = {
+                x.CLASS_NAME: x(H.copy()) for x in child_classes if child_classes[x] == bin(mask)
+            }
+            return instances
 
-        instances = self.__get_instances(property_groups, self.G)
+        def get_instances_paths(H, child_classes, net_shortest_paths, net_shortest_distances):
+            instances = {
+                x.CLASS_NAME: x(
+                    H.copy(),
+                    net_shortest_paths=net_shortest_paths,
+                    net_shortest_distances=net_shortest_distances,
+                )
+                for x in child_classes
+                if x._use_paths
+            }
+            return instances
+
+        # Properties that do not need network modifications
+        mask = DIRECTED | SELF_LOOPS
+        instances = get_instances(self.G, child_classes, mask)
+
+        # Properties that need a giant component with a directed network that allows self loops
+        temp = self.G.copy()
+        temp = temp.giant_component
+        mask = DIRECTED | SELF_LOOPS | GIANT_COMPONENT
+        instances.update(get_instances(temp, child_classes, mask))
+
+        # Properties that allow self loops but not a directed network
+        temp = self.G.copy()
+        temp = temp.to_undirected()
+        mask = SELF_LOOPS
+        instances.update(get_instances(temp, child_classes, mask))
+
+        # From here down, the same network will be 'trimmed' from characteristics
+        # Does not allow self loops
+        self.G = remove_self_loops(self.G)
+        mask = DIRECTED
+        instances.update(get_instances(self.G, child_classes, mask))
+
+        # Does not allow directed networks
+        self.G = RegNet(self.G.to_undirected())
+        mask = 0
+        instances.update(get_instances(self.G, child_classes, mask))
+
+        # Uses giant component but does not need objects paths
+        self.G = self.G.giant_component
+        mask = GIANT_COMPONENT
+        instances.update(get_instances(self.G, child_classes, mask))
+
+        self.G = self.G.to_undirected()
+        net_shortest_paths = ShortestPaths(self.G)
+        net_shortest_distances = ShortestDistances(self.G)
+        self.dist_values = {}
+        self.scalar_values = {}
+
+        # Properties that use paths object
+        instances.update(
+            get_instances_paths(self.G, child_classes, net_shortest_paths, net_shortest_distances)
+        )
 
         # Computing of global properties
         self.scalar_values = {
