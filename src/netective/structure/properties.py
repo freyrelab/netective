@@ -420,8 +420,8 @@ class FeedbackLoops_3(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        mc = motifs.count_motifs(self.G)
-        self._raw_value = mc.feedbacks3_count
+        mc = motifs.count_3motifs(self.G)
+        self._raw_value = mc.feedbacks
         return self._raw_value
 
     @check_raw_value
@@ -458,8 +458,8 @@ class ComplexFeedForwardCircuits(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        mc = motifs.count_motifs(self.G)
-        self._raw_value = mc.complex_feedforwards_count
+        mc = motifs.count_3motifs(self.G)
+        self._raw_value = mc.complex_feedforwards
         return self._raw_value
 
     def norm_biol(self) -> float:
