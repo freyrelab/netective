@@ -510,9 +510,7 @@ class Structure:
             if remove_self_loops:
                 graph_copy = properties.remove_self_loops(graph_copy)
             if get_giant_component:
-                graph_copy = list(graph_copy.subgraph(c) for c in connected_components(graph_copy))[
-                    0
-                ]  # TODO: cant get giant_component for undirected graph (freyrelab)
+                graph_copy = motifs.giant_component(graph_copy)
             if get_paths:
                 net_shortest_paths = ShortestPaths(graph_copy)
                 net_shortest_distances = ShortestDistances(graph_copy)
@@ -552,7 +550,6 @@ class Structure:
                 for class_ in class_group:
                     print(f"{mask}, {class_.CLASS_NAME} cannot be computed for the input graph.")
             
-            # Creo que se puede sacar
             property_input = inputs[mask]
             
             for class_ in class_group:
