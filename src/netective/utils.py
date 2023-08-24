@@ -15,6 +15,7 @@ import os
 import warnings
 import numpy as np
 import networkx as nx
+import igraph as ig
 from tqdm import tqdm
 import concurrent.futures
 from itertools import chain
@@ -188,3 +189,163 @@ def get_clusters(
     {clusters[cluster_vector[i]].append(index[i]) for i in range(len(cluster_vector))}
 
     return cluster_vector if not map_ids else clusters
+
+def giant_component(G):
+    """Summary."""
+    components = nx.weakly_connected_components if G.is_directed() else nx.connected_components
+    return G.subgraph(max(components(G), key=len)).copy()
+
+def giant_component_size(G):
+    """Summary."""
+    components = nx.weakly_connected_components if G.is_directed() else nx.connected_components
+    return len(max(components(G), key=len))
+
+# Paths objects
+
+def is_iterable(obj):
+    return hasattr(obj, '__iter__') and not isinstance(obj, str)
+
+class ShortestDistances:
+    """Summary."""
+    def __init__(self, G):
+        """Summary."""
+        if G.is_directed():
+            raise TypeError("requires an undirected graph")
+        iG = ig.Graph.TupleList(G.edges(data=False), directed=False, vertex_name_attr='name', edge_attrs=None, weights=False)
+        iG.add_vertices(nx.isolates(G))
+        self.__id2name = {i.index:i['name'] for i in iG.vs}
+        self.__name2id = {v:iG.vs.find(name=v).index for v in G.nodes()}
+        self.__sp = np.ma.masked_values(np.asarray(iG.distances(), dtype=np.float64), np.inf)
+        self.__num_nodes = self.__sp.shape[0]
+    
+    def matrix(self, masked_inf=False):
+        """Summary."""
+        return self.__sp if masked_inf else self.__sp.filled()
+    
+    @property
+    def average_path_length(self):
+        """Summary."""
+        n = self.__num_nodes
+        return self.__sp.sum() / (n * (n - 1))
+    
+    @property
+    def diameter(self):
+        """Summary."""
+        return int(self.__sp.max())
+    
+    @property
+    def radius(self):
+        """Summary."""
+        return min(self.eccentricity().values())
+    
+    @property
+    def center(self):
+        """Summary."""
+        r = self.radius
+        return {v for v, e in self.eccentricity().items() if e == r}
+    
+    @property
+    def periphery(self):
+        """Summary."""
+        d = self.diameter
+        return {v for v, e in self.eccentricity().items() if e == d}
+    
+    def eccentricity(self, v=None):
+        """Summary."""
+        if v is None:
+            v = range(self.__num_nodes)
+        else:
+            v = [self.__name2id[i] for i in v] if is_iterable(v) else self.__name2id[v]
+        if is_iterable(v):
+            return {self.__id2name[i]:int(self.__sp[i, :].max()) for i in v}
+        else:
+            return int(self.__sp[v, :].max())
+    
+    def shortest_path_length(self, v, u=None):
+        """Summary."""
+        if u is None:
+            return self.__sp.filled()[self.__name2id[v], :]
+        else:
+            if not is_iterable(u):
+                return self.__sp.filled()[self.__name2id[v], self.__name2id[u]]
+            else:
+                return self.__sp.filled()[self.__name2id[v], [self.__name2id[i] for i in u]]
+
+class ShortestPaths:
+    """Summary."""
+    def __init__(self, G):
+        """Summary."""
+        if G.is_directed():
+            raise TypeError("requires an undirected graph")
+        self.__G = ig.Graph.TupleList(G.edges(data=False), directed=False, vertex_name_attr='name', edge_attrs=None, weights=False)
+        self.__G.add_vertices(nx.isolates(G))
+        self.__id2name = {i.index:i['name'] for i in self.__G.vs}
+        self.__name2id = {v:self.__G.vs.find(name=v).index for v in G.nodes()}
+    
+    def shortest_paths(self, v, u=None):
+        """Summary."""
+        if u is not None:
+            u = [self.__name2id[i] for i in u] if is_iterable(u) else self.__name2id[u]
+        paths = self.__G.get_all_shortest_paths(self.__name2id[v], to=u, weights=None, mode='out')
+        return tuple((tuple((self.__id2name[v] for v in p)) for p in paths if len(p) > 1))
+    
+    def betweenness(self, vertices=None, cutoff=None, sources=None, targets=None):
+        """Summary."""
+        if vertices is not None:
+            vertices = [self.__name2id[i] for i in vertices] if is_iterable(vertices) else self.__name2id[vertices]
+        if sources is not None:
+            sources = [self.__name2id[i] for i in sources] if is_iterable(sources) else self.__name2id[sources]
+        if targets is not None:
+            targets = [self.__name2id[i] for i in targets] if is_iterable(targets) else self.__name2id[targets]
+        betweenness = self.__G.betweenness(vertices=vertices, directed=False, cutoff=cutoff, weights=None, sources=sources, targets=targets)
+        return {v:b for v, b in zip(self.__G.vs['name'], betweenness)} if is_iterable(vertices) else betweenness
+
+# Effciciency object
+
+class Efficiency:
+    """
+    Reference:
+        Vito Latora and Massimo Marchiori. Efficient behavior of small-world networks. *Physical Review Letters* 87.19 (2001): 198701. http://dx.doi.org/10.1103/PhysRevLett.87.198701
+    """
+    def __init__(self, G, shortest_distances=None):
+        """Summary."""
+        if G.is_directed():
+            raise TypeError("efficiency is not defined for directed graphs")
+        if shortest_distances is None:
+            sp = ShortestDistances(G)
+        else:
+            if not isinstance(shortest_distances, ShortestDistances):
+                raise TypeError("shortest_distances must be a ShortestDistance instance")
+            sp = shortest_distances
+        self.__name2id = sp._ShortestDistances__name2id
+        self.__efficiency = 1 / sp.matrix(masked_inf=True)
+        self.__efficiency = self.__efficiency.filled(fill_value=0)
+        self.__G = G
+        self.__num_nodes = self.__efficiency.shape[0]
+    
+    def efficiency(self, u, v):
+        """Summary."""
+        return self.__efficiency[self.__name2id[u], self.__name2id[v]]
+    
+    @property
+    def global_efficiency(self):
+        """Summary."""
+        n = self.__num_nodes
+        if n > 1:
+            return self.__efficiency.sum() / (n * (n - 1))
+        else:
+            return 0
+    
+    @property
+    def local_efficiency(self):
+        """Summary."""
+        lg = (tuple(self.__G.neighbors(v)) for v in self.__G.nodes())
+        ge = []
+        for g in lg:
+            if len(g) < 2: continue
+            ef = ShortestDistances(self.__G.subgraph(g))
+            ef = 1 / ef.matrix(masked_inf=True)
+            ef = ef.filled(fill_value=0)
+            nl = ef.shape[0]
+            ge.append(ef.sum() / (nl * (nl - 1)))
+        return np.array(ge).sum() / self.__num_nodes

@@ -4,12 +4,11 @@ import math
 import numpy as np
 import networkx as nx
 from abc import ABC, abstractmethod
+import igraph as ig
 
-from freyrelab.nets import motifs
-from freyrelab.nets.paths2 import ShortestPaths, Efficiency, ShortestDistances
+from netective.utils import Efficiency, giant_component_size
 
 # Decorators for graph characteristics
-
 
 def use_direction(cls):
     cls._use_direction = True
@@ -100,9 +99,33 @@ def get_parent_nodes(G: nx.DiGraph):
     """Get the parent nodes of a graph."""
     return [i for i, k_out in G.out_degree() if k_out > 0]
 
+# motifs class
+
+class count_3motifs:
+    """Summary."""
+    def __init__(self, G):
+        if not G.is_directed():
+            raise TypeError("requires a directed graph")
+        iG = ig.Graph.TupleList(G.edges(data=False), directed=True, vertex_name_attr='name', edge_attrs=None, weights=False)
+        iG.add_vertices(nx.isolates(G))
+        self.tc = iG.triad_census()
+    
+    @property
+    def feedforwards(self):
+        """Summary."""
+        return self.tc.t030T
+    
+    @property
+    def complex_feedforwards(self):
+        """Summary."""
+        return self.tc.t120U
+    
+    @property
+    def feedbacks(self):
+        """Summary."""
+        return self.tc.t030C + self.tc.t120C + self.tc.t210 + 2 * self.tc.t300
 
 # Parent class for all properties
-
 
 class _Property(ABC):
     """Abstract base class for all properties."""
@@ -420,7 +443,7 @@ class FeedbackLoops_3(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        mc = motifs.count_3motifs(self.G)
+        mc = count_3motifs(self.G)
         self._raw_value = mc.feedbacks
         return self._raw_value
 
@@ -458,7 +481,7 @@ class ComplexFeedForwardCircuits(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        mc = motifs.count_3motifs(self.G)
+        mc = count_3motifs(self.G)
         self._raw_value = mc.complex_feedforwards
         return self._raw_value
 
@@ -491,8 +514,8 @@ class GenesintheGiantComponent(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        # self._raw_value = motifs.giant_component_size(self.G) #TODO: freyrelab giant_component_size doesn't work with nx.Graph
-        self._raw_value = len(list(self.G.subgraph(c) for c in nx.connected_components(self.G))[0])
+        self._raw_value = giant_component_size(self.G)
+        # self._raw_value = len(list(self.G.subgraph(c) for c in nx.connected_components(self.G))[0])
         return self._raw_value
 
     @check_raw_value

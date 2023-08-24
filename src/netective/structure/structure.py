@@ -19,12 +19,9 @@ from multiprocessing import cpu_count
 from networkx import connected_components
 from networkx import fast_gnp_random_graph
 
-from freyrelab.nets import motifs
-from freyrelab.nets.paths2 import ShortestDistances, ShortestPaths
-
 from netective.structure import properties
 from netective.structure.properties import remove_self_loops
-from netective.utils import compute_moments, run_parallel, validate_network, concat_path
+from netective.utils import compute_moments, run_parallel, validate_network, concat_path, ShortestDistances, ShortestPaths, giant_component, giant_component_size
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
 
 import matplotlib.pyplot as plt
@@ -477,7 +474,7 @@ class Structure:
             if remove_self_loops:
                 graph_copy = properties.remove_self_loops(graph_copy)
             if get_giant_component:
-                graph_copy = motifs.giant_component(graph_copy)
+                graph_copy = giant_component(graph_copy)
             if get_paths:
                 net_shortest_paths = ShortestPaths(graph_copy)
                 net_shortest_distances = ShortestDistances(graph_copy)
@@ -510,7 +507,7 @@ class Structure:
             if remove_self_loops:
                 graph_copy = properties.remove_self_loops(graph_copy)
             if get_giant_component:
-                graph_copy = motifs.giant_component(graph_copy)
+                graph_copy = giant_component(graph_copy)
             if get_paths:
                 net_shortest_paths = ShortestPaths(graph_copy)
                 net_shortest_distances = ShortestDistances(graph_copy)
