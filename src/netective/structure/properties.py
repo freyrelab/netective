@@ -6,9 +6,10 @@ import networkx as nx
 from abc import ABC, abstractmethod
 import igraph as ig
 
-from netective.utils import Efficiency, giant_component_size
+from netective.utils import Efficiency, giant_component_size, remove_self_loops
 
 # Decorators for graph characteristics
+
 
 def use_direction(cls):
     cls._use_direction = True
@@ -84,9 +85,6 @@ def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
 
 
 # Auxiliary functions
-def remove_self_loops(G: nx.DiGraph):
-    G.remove_edges_from(nx.selfloop_edges(G))
-    return G
 
 
 def get_entropy(elements: np.array):
@@ -99,33 +97,44 @@ def get_parent_nodes(G: nx.DiGraph):
     """Get the parent nodes of a graph."""
     return [i for i, k_out in G.out_degree() if k_out > 0]
 
+
 # motifs class
+
 
 class count_3motifs:
     """Summary."""
+
     def __init__(self, G):
         if not G.is_directed():
             raise TypeError("requires a directed graph")
-        iG = ig.Graph.TupleList(G.edges(data=False), directed=True, vertex_name_attr='name', edge_attrs=None, weights=False)
+        iG = ig.Graph.TupleList(
+            G.edges(data=False),
+            directed=True,
+            vertex_name_attr="name",
+            edge_attrs=None,
+            weights=False,
+        )
         iG.add_vertices(nx.isolates(G))
         self.tc = iG.triad_census()
-    
+
     @property
     def feedforwards(self):
         """Summary."""
         return self.tc.t030T
-    
+
     @property
     def complex_feedforwards(self):
         """Summary."""
         return self.tc.t120U
-    
+
     @property
     def feedbacks(self):
         """Summary."""
         return self.tc.t030C + self.tc.t120C + self.tc.t210 + 2 * self.tc.t300
 
+
 # Parent class for all properties
+
 
 class _Property(ABC):
     """Abstract base class for all properties."""
@@ -300,18 +309,17 @@ class Regulators(_Property):
 
 
 @return_scalar
-@use_direction
 @use_selfloops
-class SelfRegulations(_Property):
-    """Number of self-regulations of the graph.
+class SelfLoops(_Property):
+    """Number of self-loops of the graph.
 
     Methods:
-        compute: Compute the number of self-regulations of the graph.
-        norm_biol: Normalize the number of self-regulations of the graph to the number of parents.
-        norm_network: Normalize the number of self-regulations of the graph to the number of nodes.
+        compute: Compute the number of self-loops of the graph.
+        norm_biol: Normalize the number of self-loops of the graph to the number of parents.
+        norm_network: Normalize the number of self-loops of the graph to the number of nodes.
     """
 
-    CLASS_NAME = "Self-Regulations"
+    CLASS_NAME = "Self-Loops"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -321,10 +329,10 @@ class SelfRegulations(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        """Compute the number of self-regulations of the graph.
+        """Compute the number of self-loops of the graph.
 
         Returns:
-            int: Number of self-regulations of the graph.
+            int: Number of self-loops of the graph.
         """
         self._raw_value = nx.number_of_selfloops(self.G)
         return self._raw_value
@@ -342,7 +350,7 @@ class SelfRegulations(_Property):
 
     @check_raw_value
     def norm_network(self) -> float:
-        """Normalize the number of self-regulations of the graph to the number of nodes."""
+        """Normalize the number of self-loops of the graph to the number of nodes."""
         return self._raw_value / self._n_nodes
 
 
