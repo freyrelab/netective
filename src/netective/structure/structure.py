@@ -20,8 +20,17 @@ from networkx import connected_components
 from networkx import fast_gnp_random_graph
 
 from netective.structure import properties
-from netective.structure.properties import remove_self_loops
-from netective.utils import compute_moments, run_parallel, validate_network, concat_path, ShortestDistances, ShortestPaths, giant_component, giant_component_size
+from netective.utils import remove_self_loops
+from netective.utils import (
+    compute_moments,
+    run_parallel,
+    validate_network,
+    concat_path,
+    ShortestDistances,
+    ShortestPaths,
+    giant_component,
+    giant_component_size,
+)
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
 
 import matplotlib.pyplot as plt
@@ -214,7 +223,7 @@ class GraphObserver:
         )
         return hash.hexdigest()
 
-    def changed(self, G: Graph | DiGraph= None, update_G: bool = False) -> bool:
+    def changed(self, G: Graph | DiGraph = None, update_G: bool = False) -> bool:
         """
         Check if G has changed with reference to the last call.
 
@@ -472,7 +481,7 @@ class Structure:
 
             # Graph modifications, only if it applies
             if remove_self_loops:
-                graph_copy = properties.remove_self_loops(graph_copy)
+                graph_copy = remove_self_loops(graph_copy)
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
             if get_paths:
@@ -539,7 +548,7 @@ class Structure:
             )
 
         # Dict with keys: masks for each property group
-        #           values: required input to instance each property in that property group           
+        #           values: required input to instance each property in that property group
         inputs = {**modified_directed_graphs, **modified_undirected_graphs}
 
         for mask, class_group in property_groups.items():
@@ -547,9 +556,9 @@ class Structure:
                 for class_ in class_group:
                     print(f"{class_.CLASS_NAME} cannot be computed for the input graph.")
                 continue
-            
+
             property_input = inputs[mask]
-            
+
             for class_ in class_group:
                 if isinstance(property_input, tuple):
                     G = property_input[0]
