@@ -1,15 +1,10 @@
 from __future__ import annotations
+from typing import Tuple
+import numpy as np
 
 import gc
 from collections import defaultdict
 from itertools import combinations, combinations_with_replacement, permutations, product
-from typing import Tuple
-
-import numpy as np
-from warnings import warn
-from networkx import Graph, DiGraph
-
-from netective.utils import remove_self_loops
 
 # SENT TO GLOBALS.PY
 FONT_SIZE = 11
@@ -22,9 +17,10 @@ MINOR_FONT_COLOR = "#504B51"
 class NetworkInferenceStats:
     def __init__(
         self,
-        gold_standard: Graph | DiGraph,
-        inference: Graph | DiGraph,
-        greater_score_is_better: bool = True,
+        gold_standard: str,
+        inference: str,
+        greater_is_better: bool | None = None,
+        directed: bool = True,
         allow_self_loops: bool = False,
         cutoff: float | False = False,
     ):
@@ -33,51 +29,65 @@ class NetworkInferenceStats:
         Optimized for network inference.
 
         Args:
-        gold_standard (Graph | DiGraph): Gold standard network.
-        inference (Graph | DiGraph): Inference network. The edges can have a score as an attribute 'score'.
-        greater_score_is_better (bool): Whether the inference score is better when it is higher or lower.
+        gold_standard (str): Path to gold standard file.
+            It must be a tab separated file with two columns: source and target.
+        inference (str): Path to inference file.
+            It must be a tab separated file with two or three columns: source, target and score (optional).
+            if score is not provided, the descending order of the edges will be used (better inference first).
+        greater_is_better (bool): Whether the inference score is better when it is higher or lower.
+            Only used if the inference file has a score column. Otherwise, it is ignored.
             If True, the higher the score, the better the inference.
             If False, the lower the score, the better the inference.
+        directed (bool): Whether the network is directed or not.
+            If True, the direction of the edges will be considered.
+            If False, the direction of the edges will be ignored (i.e., A-B = B-A).
         allow_self_loops (bool): Whether self-loops are allowed or not.
         cutoff (float): Cutoff to use to compute the evaluation metrics.
             If False, the evaluation metrics are computed for every score in the inference.
 
         Notes:
-        Networks types must be the same (Graph or DiGraph).
         Node IDs for gold standard and inference must be comparable.
         Nodes in the inference not present in the gold standard will be ignored as gold standard may not be complete.
         """
 
         self.__gold_standard = gold_standard
         self.__inference = inference
-        self.__greater_is_better = greater_score_is_better
+        self.__greater_is_better = greater_is_better
+        self.__directed = directed
         self.__allow_self_loops = allow_self_loops
         self.__cutoff = cutoff
-
-        # Validate the networks
-        for name, network in [("Gold standard", self.gold_standard), ("Inference", self.inference)]:
-            if not isinstance(network, (Graph, DiGraph)):
-                raise TypeError(f"{name} must be a networkx.Graph or networkx.DiGraph.")
-
-        if self.gold_standard.is_directed() != self.inference.is_directed():
-            raise ValueError("Gold standard and inference must be both directed or undirected.")
-
-        if not all("score" in data for _, _, data in self.inference.edges(data=True)):
-            raise ValueError("Inference edges must have a score attribute.")
-
-        if any("score" in data for _, _, data in self.gold_standard.edges(data=True)):
-            warn("The gold standard edges have a score attribute. It might be a prediction.")
-
-        self.__directed = self.gold_standard.is_directed()
-        if not self.allow_self_loops:
-            self.__gold_standard = remove_self_loops(self.gold_standard)
-            self.__inference = remove_self_loops(self.inference)
+        self.__score = False
 
         # Define evaluation
         # Used as flags to know if the curves data points have been computed
         self.__fpr = None
         self.__precision = None
         self.__sensitivity = None
+
+        # Validate the number of columns in the inference file
+        with open(inference) as f:
+            first_line = f.readline()
+            self.__num_columns = len(first_line.split())
+
+        if self.__num_columns not in [2, 3]:
+            raise ValueError(
+                f"Inference file must have 2 or 3 columns. {self.__num_columns} columns were found."
+            )
+        elif self.__num_columns == 3:
+            self.__score = True
+            if self.__greater_is_better is None:
+                raise ValueError(
+                    "Inference file has 3 columns, but greater_is_better was not provided."
+                )
+        elif self.__num_columns == 2 and self.__greater_is_better is not None:
+            raise ValueError(
+                "Inference file only has 2 columns, but greater_is_better was provided."
+            )
+
+        elif self.__num_columns == 2:
+            # If the inference is not scored, lower index = better inference
+            # the order of the edges will be used
+            self.__greater_is_better = False
 
         (
             self.__gold_standard_edges,
@@ -166,8 +176,53 @@ class NetworkInferenceStats:
         return self.__directed
 
     @property
+    def score(self) -> bool:
+        return self.__score
+
+    @property
     def allow_self_loops(self) -> bool:
         return self.__allow_self_loops
+
+    def __read_gold_standard(self, gold_standard_file) -> Tuple[set[tuple[str, str]], set[str]]:
+        """Reads the gold standard file and returns a set of edges and a set of genes."""
+        gold_standard_edges = set()
+        gold_standard_geneset = set()
+        with open(gold_standard_file) as f:
+            for line in f:
+                source, target = line.split()
+
+                if not self.allow_self_loops and source == target:
+                    continue
+
+                gold_standard_edges.add((source, target))
+                gold_standard_geneset.add(source)
+                gold_standard_geneset.add(target)
+
+        return gold_standard_edges, gold_standard_geneset
+
+    def __read_inference(self, inference_file) -> dict[float, tuple[str, str]]:
+        """Reads the inference file and returns a list of edges ordered by relevance."""
+        inference_edges = defaultdict(list)
+
+        with open(inference_file) as f:
+            for i, line in enumerate(f):
+                if self.score:
+                    source, target, score = line.split()
+                    inference_edges[float(score)].append((source, target))
+                else:
+                    source, target = line.split()
+                    # If the inference is not scored, edges order is used
+                    # lower index = better inference
+                    inference_edges[i].append((source, target))
+
+        if not self.allow_self_loops:
+            inference_edges = {
+                score: [edge for edge in edges if edge[0] != edge[1]]
+                for score, edges in inference_edges.items()
+            }
+
+        # return [edges for score, edges in sorted(inference_edges.items(), reverse=self.greater_is_better)] # this loses the score...
+        return inference_edges
 
     def __universe(self, gold_standard_geneset: set) -> set[tuple[str, str]]:
         """Returns the universe of potential edges between genes in the gold standard.
@@ -201,15 +256,8 @@ class NetworkInferenceStats:
         size_universe: int
             Size of the universe of potential edges.
         """
-        gold_standard_edges = set(self.gold_standard.edges(data=False))
-        gold_standard_geneset = set(self.gold_standard.nodes(data=False))
-        inference_edges = defaultdict(list)
-        for u, v, data in self.inference.edges(data=True):
-            # self-loops are already handled in __init__
-            if u not in gold_standard_geneset or v not in gold_standard_geneset:
-                continue
-            inference_edges[data["score"]].append((u, v))
-
+        gold_standard_edges, gold_standard_geneset = self.__read_gold_standard(self.gold_standard)
+        inference_edges = self.__read_inference(self.inference)
         universe = self.__universe(gold_standard_geneset)
         size_universe = len(universe)
 
