@@ -309,18 +309,17 @@ class Regulators(_Property):
 
 
 @return_scalar
-@use_direction
 @use_selfloops
-class SelfRegulations(_Property):
-    """Number of self-regulations of the graph.
+class SelfLoops(_Property):
+    """Number of self-loops of the graph.
 
     Methods:
-        compute: Compute the number of self-regulations of the graph.
-        norm_biol: Normalize the number of self-regulations of the graph to the number of parents.
-        norm_network: Normalize the number of self-regulations of the graph to the number of nodes.
+        compute: Compute the number of self-loops of the graph.
+        norm_biol: Normalize the number of self-loops of the graph to the number of parents.
+        norm_network: Normalize the number of self-loops of the graph to the number of nodes.
     """
 
-    CLASS_NAME = "Self-Regulations"
+    CLASS_NAME = "Self-Loops"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -330,10 +329,10 @@ class SelfRegulations(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        """Compute the number of self-regulations of the graph.
+        """Compute the number of self-loops of the graph.
 
         Returns:
-            int: Number of self-regulations of the graph.
+            int: Number of self-loops of the graph.
         """
         self._raw_value = nx.number_of_selfloops(self.G)
         return self._raw_value
@@ -351,7 +350,7 @@ class SelfRegulations(_Property):
 
     @check_raw_value
     def norm_network(self) -> float:
-        """Normalize the number of self-regulations of the graph to the number of nodes."""
+        """Normalize the number of self-loops of the graph to the number of nodes."""
         return self._raw_value / self._n_nodes
 
 
