@@ -545,7 +545,8 @@ class Structure:
         for mask, class_group in property_groups.items():
             if mask not in inputs:
                 for class_ in class_group:
-                    print(f"{mask}, {class_.CLASS_NAME} cannot be computed for the input graph.")
+                    print(f"{class_.CLASS_NAME} cannot be computed for the input graph.")
+                continue
             
             property_input = inputs[mask]
             
@@ -595,7 +596,6 @@ class Structure:
             property_groups[mask].append(class_)
 
         instances = self.__get_instances(property_groups, self.G)
-
         # Computing of global properties
         self.scalar_values = {
             x.CLASS_NAME: x.compute() for name, x in instances.items() if x._return_type == "scalar"

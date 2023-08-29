@@ -515,7 +515,7 @@ class GenesintheGiantComponent(_Property):
 
     def compute(self) -> int:
         self._raw_value = giant_component_size(self.G)
-        # self._raw_value = len(list(self.G.subgraph(c) for c in nx.connected_components(self.G))[0])
+
         return self._raw_value
 
     @check_raw_value
