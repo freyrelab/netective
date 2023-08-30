@@ -850,6 +850,25 @@ def characterize_network(
     if len(scalar_values) != 0:
         fig_scalar, _ = plot_scalars(scalar_values[name])
 
+def common_props_dict(networks):
+    new = defaultdict(lambda:defaultdict())
+
+    for i, (net_name, props) in enumerate(networks.items()):
+        if i == 0:
+            common = set(props.keys())
+        else:
+            common.intersection_update(set(props.keys()))
+
+    new = {
+        net_name : {
+            prop_name : value 
+            for prop_name, value in props.items()
+            if prop_name in common
+        }
+        for net_name, props in networks.items()
+    }
+
+    return new
 
 # Comparison of multiple networks
 def compare_structure(
@@ -916,6 +935,9 @@ def compare_structure(
     
     if return_prop_dicts:
         return name_scalars_array, name_moments_arrays
+    
+    # TODO Deberían seleccionarse las propiedades que se van a eliminar antes de calcularse
+    name_scalars_array = common_props_dict(name_scalars_array)
 
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
