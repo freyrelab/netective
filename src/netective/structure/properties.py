@@ -307,11 +307,11 @@ class Regulators(_Property):
         """Normalize the number of regulators of the graph to the number of nodes."""
         return self._raw_value / self._n_nodes
 
-
+@use_direction
 @return_scalar
 @use_selfloops
-class SelfLoops(_Property):
-    """Number of self-loops of the graph.
+class SelfRegulations(_Property):
+    """Number of self-loops of the directed graph. These represent self regulators in a biological context.
 
     Methods:
         compute: Compute the number of self-loops of the graph.
@@ -319,7 +319,7 @@ class SelfLoops(_Property):
         norm_network: Normalize the number of self-loops of the graph to the number of nodes.
     """
 
-    CLASS_NAME = "Self-Loops"
+    CLASS_NAME = "Self Regulations"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -518,7 +518,7 @@ class GenesintheGiantComponent(_Property):
 
     CLASS_NAME = "Gene % in the Giant Component"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.Graph):
         super().__init__(G)
 
     def compute(self) -> int:
@@ -552,7 +552,7 @@ class Diameter(_Property):
 
     CLASS_NAME = "Diameter"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         self._shortest_distances = kwargs["net_shortest_distances"]
         super().__init__(G)
 
@@ -600,10 +600,10 @@ class AverageShortestPathLength(_Property):
 
     CLASS_NAME = "Average Shortest Path Length"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
@@ -631,39 +631,6 @@ class AverageShortestPathLength(_Property):
         """Normalize the average shortest path length of the graph to the number of nodes."""
         return self._raw_value / (self._n_nodes - 1)
 
-
-@return_scalar
-class AverageClusteringCoefficient(_Property):
-    """Average clustering coefficient of the graph.
-
-    Methods:
-        compute: Compute the average clustering coefficient of the graph.
-        norm_biol: Normalize the average clustering coefficient of the graph to the number of parents.
-        norm_network: Normalize the average clustering coefficient of the graph to the number of nodes.
-    """
-
-    CLASS_NAME = "Average Clustering Coefficient"
-
-    def __init__(self, G: nx.DiGraph):
-        super().__init__(G)
-
-    def compute(self) -> float:
-        # self._raw_value = self.G.average_clustering_coefficient
-        clustering_values = nx.clustering(self.G).values()
-        self._raw_value = np.fromiter(clustering_values, dtype=float).mean()
-        return self._raw_value
-
-    @check_raw_value
-    def norm_biol(self) -> float:
-        """Coeffients are considered already normalized."""
-        return self._raw_value
-
-    @check_raw_value
-    def norm_network(self) -> float:
-        """Coeffients are considered already normalized."""
-        return self._raw_value
-
-
 @return_distribution
 class ClusteringCoefficient(_Property):
     """Clustering coefficient of the graph.
@@ -674,7 +641,7 @@ class ClusteringCoefficient(_Property):
 
     CLASS_NAME = "Clustering Coefficient"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.Graph):
         super().__init__(G)
 
     def compute(self) -> float:
@@ -802,10 +769,10 @@ class RichClub(_Property):
 
     CLASS_NAME = "Rich Club Coefficient"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.Graph):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         super().__init__(G)
         self.A = self.G.to_undirected()
@@ -850,10 +817,10 @@ class SubgraphCentrality(_Property):
 
     CLASS_NAME = "Subgraph Centrality"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.Graph):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         super().__init__(G)
 
@@ -908,10 +875,10 @@ class LocalityIndex(_Property):
 
     CLASS_NAME = "Locality Index"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.Graph):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         super().__init__(G)
 
@@ -1031,10 +998,10 @@ class AverageDegreeNearestNeighbors(_Property):
 
     CLASS_NAME = "Average Degree for Nearest Neighbors (Undirected)"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.Graph):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         super().__init__(G)
 
@@ -1063,18 +1030,18 @@ class AverageDegreeNearestNeighbors(_Property):
 @use_direction
 @use_selfloops
 class EntropyPKout(_Property):
-    """Entropy of degree distribution.
+    """Entropy of out-degree distribution.
 
-    Entropy of the degree distribution is defined as the absolute valueof the sum of each probability to have a certain degree
+    Entropy of the out-degree distribution is defined as the absolute value of the sum of each probability to have a certain out-degree
     multiplied by its own log2.
 
     Methods:
-        compute: Compute the entropy of the degree distribution for a graph.
-        norm_biol: Normalize the entropy of the degree distribution to the max theoretical value.
-        norm_network: Normalize the entropy of the degree of distribution to the max theoretical value.
+        compute: Compute the entropy of the out-degree distribution for a graph.
+        norm_biol: Normalize the entropy of the out-degree distribution to the max theoretical value.
+        norm_network: Normalize the entropy of the out-degree of distribution to the max theoretical value.
     """
 
-    CLASS_NAME = "Entropy of Degree Distribution"
+    CLASS_NAME = "Entropy of Out-Degree Distribution"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -1084,16 +1051,17 @@ class EntropyPKout(_Property):
         super().__init__(G)
 
     def compute(self) -> float:
-        """Compute the entropy for the degree distribution of the graph.
+        """Compute the entropy for the out-degree distribution of the graph.
 
         Returns:
-            float: entropy of the degree distribution.
+            float: entropy of the out-degree distribution.
         """
 
+        self._n_parents = len(get_parent_nodes(self.G))
         degrees = np.array([x for a, x in self.G.out_degree()])
         uniques, counts = np.unique(degrees, return_counts=True)
 
-        # Frequencies are only determined to degrees existent in the network, degrees with a frequency of 0 are ignored
+        # Frequencies are only determined to out-degrees existent in the network, degrees with a frequency of 0 are ignored
         freq = counts * (1 / self._n_nodes)
         self._raw_value = get_entropy(freq)
 
@@ -1101,14 +1069,16 @@ class EntropyPKout(_Property):
 
         return self._raw_value
 
+    # TODO creo que el max teorético debería ser de los reguladores, no de todos los nodos ????
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the entropy of the degree distribution to the max theoretical entropy."""
-        return self._raw_value / self.h_max
-
+        """Normalize the entropy of the out-degree distribution to the max theoretical entropy."""
+        biol_h_max = math.log2(self._n_parents)
+        return self._raw_value / biol_h_max
+    
     @check_raw_value
     def norm_network(self) -> float:
-        """Normalize the entropy of the degree distribution to the max theoretical entropy"""
+        """Normalize the entropy of the out-degree distribution to the max theoretical entropy"""
         return self._raw_value / self.h_max
 
 
@@ -1123,6 +1093,8 @@ class GiniIndex(_Property):
     how unequal (Gini Index = 1) the distribution of links between nodes in the network is.
     It is calculated thorugh the area under the curve of The Lorenz Curve, which is drawn by the cummulative percentage of
     total connections which a certain fraction of nodes can have.
+
+    This is the computation for Gini Index for directed networks
 
     Methods:
         compute: Compute the gini index for the graph.
@@ -1145,7 +1117,7 @@ class GiniIndex(_Property):
         Returns:
             float: gini index of the entire graph.
         """
-        self.t = len(self.G.edges())
+        self.t = self.G.number_of_edges()
         if self.t == 0:
             raise EmptyGraphError(
                 "There are no edges. Can not calculate Gini Index of a network with no edges."
@@ -1198,10 +1170,10 @@ class BetweennessCentrality(_Property):
 
     CLASS_NAME = "Betweenness Centrality"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
@@ -1246,10 +1218,10 @@ class GlobalEfficiency(_Property):
 
     CLASS_NAME = "Global Efficiency"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
@@ -1289,10 +1261,10 @@ class Eccentricity(_Property):
 
     CLASS_NAME = "Eccentricity"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
@@ -1330,10 +1302,10 @@ class Radius(_Property):
 
     CLASS_NAME = "Radius"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
@@ -1372,10 +1344,10 @@ class Center(_Property):
 
     CLASS_NAME = "Center"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
@@ -1414,10 +1386,10 @@ class Periphery(_Property):
 
     CLASS_NAME = "Periphery"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
@@ -1456,10 +1428,10 @@ class AverageLocalEfficiency(_Property):
 
     CLASS_NAME = "Average Local Efficiency"
 
-    def __init__(self, G: nx.DiGraph, **kwargs):
+    def __init__(self, G: nx.Graph, **kwargs):
         """
         Args:
-            G (nx.DiGraph): Graph.
+            G (nx.Graph): Graph.
         """
         if not G.number_of_edges():
             raise EmptyGraphError("Graph has no edges.")
@@ -1487,3 +1459,403 @@ class AverageLocalEfficiency(_Property):
         """Average Local Efficiency is already normalized between 0 and 1."""
         # Already normalized
         return self._raw_value
+    
+@return_scalar
+@use_selfloops
+class EntropyPK(_Property):
+    """Entropy of degree distribution.
+
+    Entropy of the degree distribution is defined as the absolute valueof the sum of each probability to have a certain degree
+    multiplied by its own log2.
+
+    Methods:
+        compute: Compute the entropy of the degree distribution for a graph.
+        norm_biol: Not implemented.
+        norm_network: Normalize the entropy of the degree of distribution to the max theoretical value.
+    """
+
+    CLASS_NAME = "Entropy of Degree Distribution"
+
+    def __init__(self, G: nx.Graph):
+        """
+        Args:
+            G (nx.Graph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> float:
+        """Compute the entropy for the degree distribution of the graph.
+
+        Returns:
+            float: entropy of the degree distribution.
+        """
+
+        degrees = np.array([x for a, x in self.G.degree()])
+        uniques, counts = np.unique(degrees, return_counts=True)
+
+        # Frequencies are only determined to degrees existent in the network, degrees with a frequency of 0 are ignored
+        freq = counts * (1 / self._n_nodes)
+        self._raw_value = get_entropy(freq)
+
+        self.h_max = math.log2(self._n_nodes)
+
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Entropy for degree distribution cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize the entropy of the degree distribution to the max theoretical entropy"""
+        return self._raw_value / self.h_max
+
+@return_scalar
+@use_selfloops
+class UndirGiniIndex(_Property):
+    """Undirected Gini Index.
+
+    Measurement that reflects the inequiality of distribution of resources between entities. For networks, connections are
+    considered as resources and each node is an individual entity. Therefore, we calculate how well (Gini Index = 0) or
+    how unequal (Gini Index = 1) the distribution of links between nodes in the network is.
+    It is calculated thorugh the area under the curve of The Lorenz Curve, which is drawn by the cummulative percentage of
+    total connections which a certain fraction of nodes can have.
+
+    This is the computation for Gini Index for undirected networks.
+
+    Methods:
+        compute: Compute the gini index for the graph.
+        norm_biol: Not implemented.
+        norm_network: Already normalized.
+    """
+
+    CLASS_NAME = "Undirected Gini Index"
+
+    def __init__(self, G: nx.Graph):
+        """
+        Args:
+            G (nx.Graph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> float:
+        """Compute the gini index for the graph.
+
+        Returns:
+            float: gini index of the entire graph.
+        """
+        self.t = self.G.number_of_edges() * 2
+        if self.t == 0:
+            raise EmptyGraphError(
+                "There are no edges. Can not calculate Gini Index of a network with no edges."
+            )
+
+        b = [j for x, j in self.G.degree()]
+        b.sort()
+        area = 0
+
+        for i in range(self._n_nodes):
+            x = b[i] / self.t
+            y = (self._n_nodes - (i + 1) + 0.5) / self._n_nodes
+            area += x * y
+
+        self._raw_value = 1 - (2 * area)
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Undirected Gini Index cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Already normalized."""
+        return self._raw_value  # Already normalized [0,1]
+    
+
+@return_distribution
+@use_selfloops
+class Degree(_Property):
+    """Degree of the graph.
+
+    The degree of each node is defined as the number of connections it has.
+
+    Methods:
+        compute: Compute the connectivity of the graph.
+        norm_biol: Not implemented.
+        norm_network: Normalize the connectivity of the graph to the number of nodes.
+    """
+
+    CLASS_NAME = "Degree"
+
+    def __init__(self, G: nx.Graph):
+        """
+        Args:
+            G (nx.Graph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> np.array:
+        """Compute the degree of the graph.
+
+        Returns:
+            nparray: Array with degrees of every node in graph.
+        """
+        self._raw_value = np.array([x for a, x in self.G.degree()])
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Degree cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> np.array:
+        """Normalize the nparray with the degrees of the graph to the number of nodes."""
+        return self._raw_value * (1 / self._n_nodes)
+    
+@return_scalar
+@use_selfloops
+class MaxDegree(_Property):
+    """Maximum degree of the graph.
+
+    Methods:
+        compute: Compute the maximum degree of the graph.
+        norm_biol: Not implemented.
+        norm_network: Normalize the maximum degree of the graph to the number of nodes.
+    """
+
+    CLASS_NAME = "Max Degree"
+
+    def __init__(self, G: nx.Graph):
+        super().__init__(G)
+
+    def compute(self) -> int:
+        """Compute the maximum degree of the graph.
+
+        Returns:
+            int: Maximum degree of the graph.
+        """
+        self._raw_value = max(dict(self.G.degree()).values())
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Degree cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize the maximum degree of the graph to the number of nodes."""
+        return self._raw_value / self._n_nodes
+    
+@return_scalar
+@use_selfloops
+class NumberNodes(_Property):
+    """Number of nodes in the graph.
+
+    Methods:
+        compute: Compute the number of nodes of a graph.
+        norm_biol: Not implemented.
+        norm_network: Not implemented.
+    """
+
+    CLASS_NAME = "Number of Nodes"
+
+    def __init__(self, G: nx.Graph):
+        super().__init__(G)
+
+    def compute(self) -> int:
+        """Compute the number of nodes.
+
+        Returns:
+            int: number of nodes in the graph.
+        """
+        self._raw_value = self.G.number_of_nodes()
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Number of nodes cannot be normalized."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        raise NormalizationError(
+            "Number of nodes cannot be normalized."
+        )
+    
+@return_scalar
+@use_selfloops
+class SelfLoops(_Property):
+    """Number of self-loops of the undirected graph.
+
+    Methods:
+        compute: Compute the number of self-loops of the graph.
+        norm_biol: Not implemented.
+        norm_network: Normalize the number of self-loops of the graph to the number of nodes.
+    """
+
+    CLASS_NAME = "Self-Loops"
+
+    def __init__(self, G: nx.Graph):
+        """
+        Args:
+            G (nx.Graph): Undirected graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> int:
+        """Compute the number of self-loops of the graph.
+
+        Returns:
+            int: Number of self-loops of the graph.
+        """
+        self._raw_value = nx.number_of_selfloops(self.G)
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Self-Loops cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize the number of self-loops of the graph to the number of nodes."""
+        return self._raw_value / self._n_nodes
+    
+@return_scalar
+@use_selfloops
+@use_direction
+class NumberArcs(_Property):
+    """Number of arcs in the graph. An arc is defined as an edge in a directed graph,
+        considering an edge (u,v) separately from the edge (v,u).
+
+    Methods:
+        compute: Compute the number of arcs in the graph.
+        norm_biol: Normalize the number of arcs of the graph to the number of parents.
+        norm_network: Normalize the number of arcs of the graph to the number of nodes.
+    """
+
+    CLASS_NAME = "Number of Arcs"
+
+    def __init__(self, G: nx.DiGraph):
+        super().__init__(G)
+
+    def compute(self) -> int:
+        """Compute the number of arcs in the graph.
+
+        Returns:
+            int: number of arcs in the graph.
+        """
+        self._n_nodes = self.G.number_of_nodes()
+        self._raw_value = self.G.number_of_edges()
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> float:
+        raise NormalizationError(
+            "Number of arcs cannot be normalized."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        raise NormalizationError(
+            "Number of arcs cannot be normalized."
+        )
+    
+
+@return_scalar
+@use_selfloops
+class NumberEdges(_Property):
+    """Number of edges in the graph.
+
+    Methods:
+        compute: Compute the number of edges in the graph.
+        norm_biol: Not implemented.
+        norm_network: Normalize the number of edges of the graph to the number of nodes.
+    """
+
+    CLASS_NAME = "Number of Edges"
+
+    def __init__(self, G: nx.Graph):
+        super().__init__(G)
+
+    def compute(self) -> int:
+        """Compute the number of arcs in the graph.
+
+        Returns:
+            int: number of edges in the graph.
+        """
+        self._n_nodes = self.G.number_of_nodes()
+        self._raw_value = self.G.number_of_edges()
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Number of edges cannot be normalized."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        raise NormalizationError(
+            "Number of edges cannot be normalized."
+        )
+    
+@return_scalar
+@use_selfloops
+@use_giant_component
+class UndirDensity(_Property):
+    """Density of an undirected graph.
+
+    The density of a graph is defined as the ratio of the number of edges to the number of possible edges.
+    The number of possible edges for directed network with self loops is given by n**2,
+    where n is the number of nodes in the graph.
+
+    Methods:
+        compute: Compute the density of the graph.
+        norm_biol: Normalize the density of the graph to the number of parents.
+        norm_network: Normalize the density of the graph to the number of nodes.
+    """
+
+    CLASS_NAME = "Undirected Density"
+
+    def __init__(self, G: nx.Graph):
+        """
+        Args:
+            G (nx.Graph): Graph.
+        """
+        super().__init__(G)
+
+    def compute(self) -> float:
+        """Compute the density of the graph.
+
+        Returns:
+            float: Density of the graph.
+        """
+        n_edges = self.G.number_of_edges()
+        self._raw_value = n_edges / self._n_nodes**2
+        return self._raw_value
+
+    @check_raw_value
+    def norm_biol(self) -> None:
+        raise NormalizationError(
+            "Undirected Density cannot be normalized by biological properties."
+        )
+
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize the density of the graph to the number of nodes. (Already normalized)
+
+        Returns:
+            float: Normalized density of the graph, considering the number of nodes.
+        """
+        return self._raw_value  # density is already normalized to [0,1]

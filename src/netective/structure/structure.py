@@ -20,7 +20,6 @@ from networkx import connected_components
 from networkx import fast_gnp_random_graph
 
 from netective.structure import properties
-from netective.utils import remove_self_loops
 from netective.utils import (
     compute_moments,
     run_parallel,
@@ -30,6 +29,7 @@ from netective.utils import (
     ShortestPaths,
     giant_component,
     giant_component_size,
+    remove_self_loops,
 )
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
 
@@ -472,7 +472,7 @@ class Structure:
             if not directed:
                 continue
 
-            remove_self_loops = mask & SELF_LOOPS == 0
+            haveto_remove_self_loops = mask & SELF_LOOPS == 0
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
 
@@ -480,7 +480,7 @@ class Structure:
             graph_copy = original_graph.copy()
 
             # Graph modifications, only if it applies
-            if remove_self_loops:
+            if haveto_remove_self_loops:
                 graph_copy = remove_self_loops(graph_copy)
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
@@ -505,7 +505,7 @@ class Structure:
             if directed:
                 continue
 
-            remove_self_loops = mask & SELF_LOOPS == 0
+            haveto_remove_self_loops = mask & SELF_LOOPS == 0
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
 
@@ -513,8 +513,8 @@ class Structure:
             graph_copy = original_graph.copy()
 
             # Graph modifications, only if it applies
-            if remove_self_loops:
-                graph_copy = properties.remove_self_loops(graph_copy)
+            if haveto_remove_self_loops:
+                graph_copy = remove_self_loops(graph_copy)
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
             if get_paths:
@@ -859,7 +859,7 @@ def compare_structure(
     workers: str | int = "auto",
     return_prop_dicts: bool = False,
     association_metric: Callable = pearsonr,
-) -> Tuple[dict, dict] | Tuple[plt.Figure, plt.Figure]:
+) -> Tuple[dict, dict] | plt.Figure:
 
     """Module-level function to compare multiple networks.
 
@@ -909,7 +909,11 @@ def compare_structure(
     results = run_parallel(characterize_network, data, workers)
     name_scalars_array = results["scalars"]
     name_moments_arrays = results["distributions"]
-
+    
+    for net_name, prop in results['distributions'].items():
+        for prop_name, values in prop.items():
+            name_scalars_array[net_name][f'Average {prop_name}'] = values[0]
+    
     if return_prop_dicts:
         return name_scalars_array, name_moments_arrays
 
@@ -920,11 +924,4 @@ def compare_structure(
     else:
         raise ValueError("Not enough data to compare.")
 
-    # Distribution properties
-    if len(name_moments_arrays) > 0 and len(list(name_moments_arrays.values())[0]) > 1:
-        df = association(name_moments_arrays, association_metric)
-        fig_dist, _ = create_symmetric_heatmap(df, title=f"Local properties")
-    else:
-        raise ValueError("Not enough data to compare.")
-
-    return fig_scalar, fig_dist
+    return fig_scalar
