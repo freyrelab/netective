@@ -6,7 +6,7 @@ import numpy as np
 
 # Auxiliar Fxns
 def get_human_names(root, code_names):
-    name = re.split('buffer.5000', root)
+    name = re.split('mouse_net', root)
     name = name[1]
     name = name.replace('\\','')
     return code_names[name]
