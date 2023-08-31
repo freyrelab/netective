@@ -1,2 +1,0 @@
-from freyrelab import motifs (componente gigante, motifs)
-from freyrelab.nets.paths2 import Efficiency, ShortestDistances, ShortestPaths
