@@ -349,6 +349,7 @@ class NetworkInferenceStats:
             Area under the precision-recall curve.
         """
         precision, sensitivity, _ = self.__compute_roc_pr_datapoints(cutoff=cutoff)
+        print(precision, sensitivity)
         return self.__compute_auc(x=sensitivity, y=precision)
 
     def area_under_roc_curve(self, cutoff=None) -> float:
@@ -455,7 +456,7 @@ class NetworkInferenceStats:
         _, sensitivity, _ = self.__compute_roc_pr_datapoints(cutoff=cutoff)
         return sensitivity[-2]  # last value is always 1
 
-    def precision(self, cutoff) -> float:
+    def overall_precision(self, cutoff) -> float:
         """Computes the precision for a given cutoff.
 
         Args:
