@@ -25,7 +25,7 @@ from collections import defaultdict
 from scipy.stats import kurtosis, skew
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
-from typing import Union
+from typing import Union, Callable, Iterable
 
 concat_path = os.path.join
 
