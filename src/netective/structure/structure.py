@@ -30,6 +30,7 @@ from netective.utils import (
     giant_component,
     giant_component_size,
     remove_self_loops,
+    association,
 )
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
 
@@ -49,78 +50,11 @@ PATHS = 1
 def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
 
-
-# Comparison Fxn
-def association(
-    dict_data: dict[str, dict[str, float]], corr_func: Callable(Iterable, Iterable) = pearsonr
-) -> pd.DataFrame:
-    # TODO: make this general for any correlation... # shouldn't be here...
-    """
-    Computes correlation between elements in a dictionary
-
-    Args:
-        dict_data : dictionary with keys as IDs for each element and values as np.arrays with data.
-        corr_func : correlation function desired for analysis. Default is pearsonr from scipy.
-
-    Returns:
-        corr_df : DataFrame with the correlation results of the input data.
-
-    Note:
-        Correlation function must return either a float with the correlation value
-        or an Iterable where the first element is the correlation value.
-
-        Correlation function's not optional parameters must only be the two arrays to compare.
-
-        All scipy.stats functions admitted except page_trend_test
-    """
-    # Get the keys (name_dists) from the dictionary
-    name_dists = list(dict_data.keys())
-
-    # Initialize an empty DataFrame to store the correlation coefficients
-    corr_df = pd.DataFrame(index=name_dists, columns=name_dists)
-
-    # Calculate the pairwise correlation
-    for i in range(len(name_dists)):
-        for j in range(i, len(name_dists)):
-            name_dist1 = name_dists[i]
-            name_dist2 = name_dists[j]
-            array1 = np.asarray(list(dict_data[name_dist1].values()))
-            array2 = np.asarray(list(dict_data[name_dist2].values()))
-
-            mask = np.isfinite(array1) & np.isfinite(array2)
-            filtered_array1 = array1[mask]
-            filtered_array2 = array2[mask]
-
-            # Calculate Pearson correlation coefficient and p-value
-            result = corr_func(filtered_array1, filtered_array2)
-
-            accepted_types = (float, Iterable)
-
-            if not isinstance(result, accepted_types):
-                raise TypeError(
-                    f"Correlation function not admitted, Return Type must be {accepted_types}"
-                )
-
-            if not isinstance(result, float):
-                corr_coef = result[0]
-            else:
-                corr_coef = result
-
-            # Store the correlation coefficient in the DataFrame
-            corr_df.loc[name_dist1, name_dist2] = corr_coef
-            corr_df.loc[name_dist2, name_dist1] = corr_coef
-
-    return corr_df
-
-
-# TODO get_child_classes debe poder identificar un error en la lista y poder recibir los nombres con ortografía normal
 # Get properties selected Fxn
 def get_child_classes(parent_class, selected_props) -> dict:
     child_classes = {}
     all_properties = []
-    # if verbose: TODO: add verbose option (or make if global?)
     print(f"Properties used for analysis: ")
-    # postit1 Aqui se genera la máscara a partir de los atributos del objeto
     if selected_props == "all":
         for name, obj in inspect.getmembers(properties):
             if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
@@ -448,8 +382,6 @@ class Structure:
             raise properties.NormalizationError(f"Invalid normalization method: {norm}")
         print("Properties excluded from analysis due to lack of normalization:")
         for name, x in instances.items():
-            # TODO: why using x.CLASS_NAME instead of name?
-            # TODO: toma la normalización de normalizaciones disponibles
             dict_ = norm_scalar_values if x._return_type == "scalar" else norm_dist_values
             try:
                 if norm == "network":
@@ -645,7 +577,7 @@ class Structure:
 
 
         Returns:
-            If keep_names is True, it returns a dictionary with the property names as keys.
+            If keep_names is True, it returns a dictionary with the name_id as key and as its value, a dict with property names as keys.
             Otherwise, it returns a flattened array with the values.
         """
         # Compute the properties if they have not been computed yet or if the network has changed
@@ -727,7 +659,6 @@ def struc_props_call(
     Raises:
         ValueError: if erdos_renyi is less than 0.
     """
-    # TODO!! UPDATE
     S_bio = Structure(G, norm=norm, net_id=net_id, verbose=verbose)
     props = S_bio.get_props()
 
@@ -748,7 +679,6 @@ def struc_props_call(
             for k, v in props_i.items():
                 props_er[k].append(v)
 
-        # TODO: here you can make it robust to a threshold of nan values
         props_er_avg = {prop: sum(vals) / len(vals) for prop, vals in props_er.items()}
         netid_props = [(net_id, props), (f"{net_id}_ER_avg", props_er_avg)]
 
@@ -756,30 +686,29 @@ def struc_props_call(
 
 
 def save_strucs(
-    fig_scalar,
-    fig_dist,
-    output: str = os.getcwd(),
+    scalar_props: dict,
+    dist_props: dict,
+    output_dir: str = os.getcwd(),
     delimiter: str = "\t",
     cl: str = None,
-    output_file: str = "structural_properties",
 ) -> None:
 
     # TODO!! UPDATE
 
     """
-    Save the structural properties in a file.
+    Save the structural properties in a file containing the name of the network and the properties.
 
     Args:
-        df: DataFrame.
-            Dataframe with the structural properties.
-        output: str.
-            Path to the output directory. Default is the current working directory.
+        scalar_props: dict.
+            Dictionary with the scalar properties of the networks. {network_name: {property_name: property_value}}.
+        dist_props: dict.
+            Dictionary with the distribution properties of the networks. {network_name: {property_name: property_value}}.
+        output_dir: str.
+            Path to the output directory.
         delimiter: str.
-            Delimiter to use in the output file. Default is tab.
+            Delimiter to use in the output file.
         cl: str.
-            Command line used to run the script. Default is None.
-        output_file: str.
-            Name of the output file. Default is structural_properties.
+            Command line used to run the script.
 
     Returns:
         None.
@@ -789,19 +718,25 @@ def save_strucs(
     ext = exts.get(delimiter, "txt")
     # file_p = concat_path(output, f"{output_file}.{ext}")
 
-    file_p_s = concat_path(output, "network_level_comp.png")
-    file_p_d = concat_path(output, "node_level_comp.png")
+    network_name = list(scalar_props.keys())[0]
 
-    # save output
-    # rewrite file if it exists
-    # with open(file_p, "w") as f:
-    # save command line
-    # print(cl, file=f)
+    file_p_s = concat_path(output_dir, f"{network_name}_scalar_props.{ext}")
+    file_p_d = concat_path(output_dir, f"{network_name}_dist_props.{ext}")
 
-    # save structural properties
-    fig_scalar.savefig(file_p_s, dpi=300)
-    fig_dist.savefig(file_p_d, dpi=300)
+    if cl is not None:
+        with open(file_p_s, "w") as f:
+            f.write(f"# {cl}\n")
+        with open(file_p_d, "w") as f:
+            f.write(f"# {cl}\n")
 
+    # save scalar props as csv
+    df_s = pd.DataFrame.from_dict(scalar_props, orient="index")
+    df_s.to_csv(file_p_s, sep=delimiter)
+
+    # save dist props as csv
+    df_d = pd.DataFrame.from_dict(dist_props, orient="index")
+    df_d.to_csv(file_p_d, sep=delimiter)
+    
 
 # User Fxns
 # Characterization of one network

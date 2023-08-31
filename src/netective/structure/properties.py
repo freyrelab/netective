@@ -528,8 +528,7 @@ class GenesintheGiantComponent(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the number of genes in the giant component to the number of nodes."""
-        return self._raw_value / self._n_nodes
+        raise NotImplementedError
 
     @check_raw_value
     def norm_network(self) -> float:

@@ -1,8 +1,8 @@
 Metadata-Version: 2.1
 Name: netective
-Version: 0.5
+Version: 0.8
 Summary: Use structural and standard performance metrics to assess network inference
-Author-email: Juan Escorcia <juanesscorcia@gmail.com>, Julio Freyre <jfreyreg@gmail.com>
+Author-email: Juan Escorcia <juanesscorcia@gmail.com>, Julio Freyre <jfreyreg@gmail.com>, Jose Antonio Sanchez <josesv@lcg.unam.mx>
 Project-URL: Homepage, https://github.com/JuanEscorcia/netective.git
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License

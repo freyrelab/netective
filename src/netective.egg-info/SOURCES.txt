@@ -3,7 +3,6 @@ pyproject.toml
 setup.cfg
 setup.py
 src/netective/__init__.py
-src/netective/stats.py
 src/netective/utils.py
 src/netective.egg-info/PKG-INFO
 src/netective.egg-info/SOURCES.txt
@@ -17,7 +16,13 @@ src/netective/cli/netective_test.py
 src/netective/legacy/pipeline.py
 src/netective/legacy/properties.py
 src/netective/legacy/structure_.py
+src/netective/legacy/structure__.py
+src/netective/prop_notebooks/human_analysis.py
+src/netective/prop_notebooks/mouse_analysis.py
 src/netective/prop_notebooks/properties_old.py
+src/netective/stats/__init__.py
+src/netective/stats/stats copy.py
+src/netective/stats/stats.py
 src/netective/structure/dataviz.py
 src/netective/structure/properties.py
 src/netective/structure/structure.py

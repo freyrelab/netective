@@ -14,11 +14,13 @@ __all__ = [
 import os
 import warnings
 import numpy as np
+import pandas as pd
 import networkx as nx
 import igraph as ig
 from tqdm import tqdm
 import concurrent.futures
 from itertools import chain
+from scipy.stats import pearsonr
 from collections import defaultdict
 from scipy.stats import kurtosis, skew
 from scipy.spatial.distance import squareform
@@ -127,11 +129,103 @@ def parse_nets(paths: list[str], comments: str = "#", delimiter: str = "\t") -> 
     return networks
 
 
-def parse_net(
-    file_path, comments="#", delimiter="\t", directed=True, data=False, use_position_as_score=False
-):
-    """"""
+def parse_network(
+    file_path, comments="#", delimiter="\t", directed=True, score=False, use_position_as_score=False
+) -> Union(nx.DiGraph, nx.Graph):
+    """
+    Parse a network file and return a networkx.DiGraph or networkx.Graph depending on the directed parameter.
 
+    Args:
+        file_path: Path to the network file.
+        comments: Comment character.
+        delimiter: Delimiter character.
+        directed: If True, the network will be a DiGraph, otherwise it will be a Graph.
+        score: If True, the network will use the third column of the file as the score of the edge.
+        use_position_as_score: If True, the position of the edge in the file will be used as the score of the edge.
+    """
+    if score and use_position_as_score:
+        raise ValueError("score and use_position_as_score cannot be True at the same time.")
+
+    if not use_position_as_score:
+        G = nx.read_edgelist(
+            file_path,
+            comments=comments,
+            delimiter=delimiter,
+            create_using=nx.DiGraph if directed else nx.Graph,
+            data=(("score", float),) if score else False,
+        )
+    else:
+        G = nx.DiGraph() if directed else nx.Graph()
+        with open(file_path, "r") as f:
+            for i, line in enumerate(f):
+                if line.startswith(comments):
+                    continue
+                cols = line.strip().split(delimiter)
+                source = cols[0]
+                target = cols[1]
+                G.add_edge(source, target, score=i)
+    return G
+
+# Comparison Fxn
+def association(
+    dict_data: dict[str, dict[str, float]], corr_func: Callable(Iterable, Iterable) = pearsonr
+) -> pd.DataFrame:
+    """
+    Computes correlation between elements in a dictionary
+
+    Args:
+        dict_data : dictionary with keys as IDs for each element and values as np.arrays with data.
+        corr_func : correlation function desired for analysis. Default is pearsonr from scipy.
+
+    Returns:
+        corr_df : DataFrame with the correlation results of the input data.
+
+    Note:
+        Correlation function must return either a float with the correlation value
+        or an Iterable where the first element is the correlation value.
+
+        Correlation function's not optional parameters must only be the two arrays to compare.
+
+        All scipy.stats functions admitted except page_trend_test
+    """
+    # Get the keys (name_dists) from the dictionary
+    name_dists = list(dict_data.keys())
+
+    # Initialize an empty DataFrame to store the correlation coefficients
+    corr_df = pd.DataFrame(index=name_dists, columns=name_dists)
+
+    # Calculate the pairwise correlation
+    for i in range(len(name_dists)):
+        for j in range(i, len(name_dists)):
+            name_dist1 = name_dists[i]
+            name_dist2 = name_dists[j]
+            array1 = np.asarray(list(dict_data[name_dist1].values()))
+            array2 = np.asarray(list(dict_data[name_dist2].values()))
+
+            mask = np.isfinite(array1) & np.isfinite(array2)
+            filtered_array1 = array1[mask]
+            filtered_array2 = array2[mask]
+
+            # Calculate Pearson correlation coefficient and p-value
+            result = corr_func(filtered_array1, filtered_array2)
+
+            accepted_types = (float, Iterable)
+
+            if not isinstance(result, accepted_types):
+                raise TypeError(
+                    f"Correlation function not admitted, Return Type must be {accepted_types}"
+                )
+
+            if not isinstance(result, float):
+                corr_coef = result[0]
+            else:
+                corr_coef = result
+
+            # Store the correlation coefficient in the DataFrame
+            corr_df.loc[name_dist1, name_dist2] = corr_coef
+            corr_df.loc[name_dist2, name_dist1] = corr_coef
+
+    return corr_df
 
 def remove_self_loops(G: nx.DiGraph):
     G.remove_edges_from(nx.selfloop_edges(G))
