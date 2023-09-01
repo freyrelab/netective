@@ -1,8 +1,8 @@
 from pandas import DataFrame
 
 from netective.cli import _arguments
-from netective.structure import save_strucs
-from netective import structure
+from netective.structure.structure import save_strucs
+from netective.structure import structure
 from netective.utils import *
 
 try:
