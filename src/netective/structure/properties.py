@@ -698,12 +698,12 @@ class ClusteringCoefficient(_Property):
         return self._raw_value
 
     def norm_biol(self) -> float:
-        """Coeffients are considered already normalized."""
+        """Direction would be required."""
         raise NotImplementedError
 
     def norm_network(self) -> float:
         """Coeffients are considered already normalized."""
-        raise NotImplementedError
+        return self._raw_value
 
 
 @return_distribution
