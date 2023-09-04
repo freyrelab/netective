@@ -821,7 +821,6 @@ class RichClub(_Property):
             G (nx.Graph): Graph.
         """
         super().__init__(G)
-        self.A = self.G.to_undirected()
 
     def compute(self) -> np.array:
         """Compute the Rich Club Coefficient.
@@ -829,11 +828,11 @@ class RichClub(_Property):
         Returns:
             np.array: distribution of rich club coefficients, by degree in graph.
         """
-        n_edges = self.A.number_of_edges()
+        n_edges = self.G.number_of_edges()
         if n_edges == 0:
             raise EmptyGraphError("There are no edges. Can not form rich clubs with no edges.")
 
-        dict_coeff = nx.rich_club_coefficient(self.A, normalized=False)
+        dict_coeff = nx.rich_club_coefficient(self.G, normalized=False)
         self._raw_value = np.fromiter(dict_coeff.values(), dtype=float)
 
         return self._raw_value

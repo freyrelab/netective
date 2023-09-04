@@ -511,6 +511,11 @@ class Structure:
                 flush=True,
             )
 
+        if not self.G.is_directed() and self.norm_observer.norm == "biological":
+            raise properties.NormalizationError(
+                "Biological normalization is only available for directed graphs"
+            )
+
         property_groups = defaultdict(list)
         for class_, mask in child_classes.items():
             property_groups[mask].append(class_)
