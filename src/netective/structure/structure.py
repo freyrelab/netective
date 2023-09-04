@@ -99,27 +99,6 @@ def get_child_classes(parent_class, selected_props) -> dict:
     return child_classes
 
 
-def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
-    """
-    Computes the maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
-
-    Args:
-        n = number of nodes in the network
-        r = number of elements in the motif
-        tfs = number of TFs in the network
-        r_tfs = number of TFs in the motif
-
-    Returns:
-        int: maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
-    """
-    putative = math.factorial(n) / math.factorial(n - r)
-    # fraccion de TFs al cuadrado para feed forward (el expoente es el numero de TFs en el motivo)
-    putative = putative * (
-        (tfs / n) ** r_tfs
-    )  # TODO: check this line to consider there shouldn't be replacement.
-    return putative
-
-
 class GraphObserver:
 
     """A class to observe changes in a graph."""

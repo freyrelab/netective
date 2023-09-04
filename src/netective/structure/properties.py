@@ -64,11 +64,11 @@ def validate_network_characteristics(self):
 
 
 # Theoretical maximums
-def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
+def _max_loops(*, n: int, r: int, tfs: int, r_tfs: int) -> int:
     """
     Computes the maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
 
-    Args:
+    Keyword Arguments:
         n = number of nodes in the network
         r = number of elements in the motif
         tfs = number of TFs in the network
@@ -77,12 +77,20 @@ def _max_loops(n: int, r: int, tfs: int, r_tfs: int) -> int:
     Returns:
         int: maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
     """
-    putative = math.factorial(n) / math.factorial(n - r)
-    putative = putative * (
-        (tfs / n) ** r_tfs
-    )  # TODO: check this line to consider there shouldn't be replacement.
-    return putative
 
+    if r_tfs > tfs or r_tfs > r:
+        raise ValueError("r_tfs cannot be greater than r or tfs")
+    
+    if r > n or tfs > n:
+        raise ValueError("r nor tfs cannot be greater than n")
+
+    putative = math.factorial(n) / math.factorial(n - r)
+    tfs_fraction = tfs / n
+
+    for i in range(r_tfs):
+        ratio = (tfs - i) / (n - i)
+        putative *= ratio
+    return putative
 
 # Auxiliary functions
 
@@ -449,6 +457,8 @@ class FeedbackLoops_3(_Property):
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
+        self._motif_size = 3
+        self._tfs_required = 3
 
     def compute(self) -> int:
         mc = count_3motifs(self.G)
@@ -459,19 +469,18 @@ class FeedbackLoops_3(_Property):
     def norm_biol(self) -> float:
         """Normalize the number of feedback loops of length 3 to the number of parents."""
         n_parents = len(get_parent_nodes(self.G))
-        max_feedbacks3 = (
-            n_parents * (n_parents - 1) * (n_parents - 2)
-        )  # TODO: UERGENTE is this better than _max_loops???
+        max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=n_parents, r_tfs=self._tfs_required)
         return self._raw_value / max_feedbacks3
 
     @check_raw_value
     def norm_network(self) -> float:
-        """Normalize the number of feedback loops of length 3 to the number of nodes."""
-        max_feedbacks3 = self._n_nodes * (self._n_nodes - 1) * (self._n_nodes - 2)  # TODO: verify
+        """Normalize the number of feedback loops of length 3 to the number of nodes. Every node is considered a TF."""
+        max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=self._n_nodes, r_tfs=self._tfs_required)
         return self._raw_value / max_feedbacks3
 
 
-# TODO:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! INCLUIR feedforwards_count
+
+
 @return_scalar
 @use_direction
 class ComplexFeedForwardCircuits(_Property):
@@ -487,6 +496,8 @@ class ComplexFeedForwardCircuits(_Property):
 
     def __init__(self, G: nx.DiGraph):
         super().__init__(G)
+        self._motif_size = 3
+        self._tfs_required = 2
 
     def compute(self) -> int:
         mc = count_3motifs(self.G)
@@ -496,12 +507,12 @@ class ComplexFeedForwardCircuits(_Property):
     def norm_biol(self) -> float:
         """Normalize the number of complex feed-forward circuits to the number of parents."""
         n_parents = len(get_parent_nodes(self.G))
-        max_complex_ff = n_parents * (n_parents - 1)  # TODO: verify
+        max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=n_parents, r_tfs=self._tfs_required)
         return self._raw_value / max_complex_ff
 
     def norm_network(self) -> float:
-        """Normalize the number of complex feed-forward circuits to the number of nodes."""
-        max_complex_ff = self._n_nodes * (self._n_nodes - 1) * (self._n_nodes - 2)  # TODO: verify
+        """Normalize the number of complex feed-forward circuits to the number of nodes. Every node is considered a TF."""
+        max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=self._n_nodes, r_tfs=self._tfs_required)
         return self._raw_value / max_complex_ff
 
 
