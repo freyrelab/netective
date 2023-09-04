@@ -703,9 +703,7 @@ class ClusteringCoefficient(_Property):
 
     def norm_network(self) -> float:
         """Coeffients are considered already normalized."""
-        return (
-            self._raw_value
-        )  # TODO: o cambiar a NotImplementedError??? El usuario debería de decidir qué hacer en este caso, dejar nan o el valor crudo.
+        raise NotImplementedError
 
 
 @return_distribution
@@ -896,13 +894,8 @@ class SubgraphCentrality(_Property):
     def norm_network(self):
         """Normalize the subgraph centrality of the graph to the max value, obtained from a complete graph of the same size"""
 
-        T = nx.Graph()
-        n_nodes = self._n_nodes
-        T.add_nodes_from(range(n_nodes))
-        T.add_edges_from([(i, j) for i in range(n_nodes) for j in range(n_nodes)])
-
+        T = nx.complete_graph(self._n_nodes)
         max = SubgraphCentrality(T)
-
         return self._raw_value / max.compute()
 
 
