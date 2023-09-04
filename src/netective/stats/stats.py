@@ -227,7 +227,7 @@ class NetworkInferenceStats:
         edge_to_id = {edge: i for i, edge in enumerate(universe)}
         gold_standard_edges = {edge_to_id[edge] for edge in gold_standard_edges}
         # The get method is used to only keep edges between genes in the gold standard geneset
-        # TODO: The user may want to know the fraction of the inference used for the evaluation
+        # TODO: UX: The user may want to know the fraction of the inference used for the evaluation
         inference_edges = sorted(
             [
                 [score, {edge_to_id.get(edge) for edge in edges}]
@@ -238,7 +238,7 @@ class NetworkInferenceStats:
 
         # erase universe, mapping and gold standard geneset
         del universe
-        del edge_to_id  # TODO: user may want to keep this mapping
+        del edge_to_id  # TODO: UX: user may want to keep this mapping
         del gold_standard_geneset
         # call garbage collector
         gc.collect()
@@ -440,7 +440,7 @@ class NetworkInferenceStats:
             ax=ax,
         )
 
-    # TODO: Create a cache to keep {(cutoff, metric): value)}
+    # TODO: Optimization: Create a cache to keep {(cutoff, metric): value)}
     def recall(self, cutoff) -> float:
         """Computes the recall for a given cutoff.
 

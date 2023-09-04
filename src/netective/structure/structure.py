@@ -577,10 +577,10 @@ class Structure:
                     "The network or the normalization method has changed. Computing its properties...",
                     flush=True,
                 )
-                # TODO!!!: conservar los raw!
-                # TODO: incluir un verbose cuando semodifica la normalización. O usar en su lugar un warning?
+                # TODO Optimization: cache the raw values?
+                # TODO: include a verbose message when normalization has changed
 
-            # TODO!!!!: quita parche, primera corrida es None y self.graph_observer.changed(self._original_G no entra por bypass.
+            # TODO: Refactor code: First run is None and self.graph_observer.changed(self._original_G is not evaluated due to bypass.
             if self.graph_observer.graph_hash is None:
                 self.graph_observer.changed(self._original_G, update_G=True)
 
@@ -676,8 +676,6 @@ def save_strucs(
     delimiter: str = "\t",
     cl: str = None,
 ) -> None:
-
-    # TODO!! UPDATE
 
     """
     Save the structural properties in a file containing the name of the network and the properties.
@@ -829,7 +827,7 @@ def compare_structure(
         workers = usable_workers
 
     # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
-    # TODO!!: passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
+    # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
     child_classes = get_child_classes(PARENT_CLASS, selected_props)
 
     # prepare data
@@ -858,7 +856,7 @@ def compare_structure(
     if return_prop_dicts:
         return name_scalars_array, name_moments_arrays
     
-    # TODO Deberían seleccionarse las propiedades que se van a eliminar antes de calcularse
+    # TODO: Optimization:  only compute the common properties
     name_scalars_array = common_props_dict(name_scalars_array)
 
     # Scalar properties

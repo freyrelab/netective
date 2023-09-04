@@ -798,8 +798,6 @@ class OutDegree(_Property):
         """Normalize the nparray with the out-degrees of the graph to the number of nodes."""
         return self._raw_value * (1 / self._n_nodes)
 
-
-# TODO Por laguna perra razón se necesita hacer el to_undirected dentro de aquí????????
 @return_distribution
 class RichClub(_Property):
     """Rich Club Coefficient.
