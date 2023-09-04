@@ -85,7 +85,6 @@ def _max_loops(*, n: int, r: int, tfs: int, r_tfs: int) -> int:
         raise ValueError("r nor tfs cannot be greater than n")
 
     putative = math.factorial(n) / math.factorial(n - r)
-    tfs_fraction = tfs / n
 
     for i in range(r_tfs):
         ratio = (tfs - i) / (n - i)
