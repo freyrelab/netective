@@ -442,6 +442,8 @@ class MaxInDegree(_Property):
         return self._raw_value / self._n_nodes
 
 
+# TODO: Optimization: Several computations are repeated when calling motif-related properties. Consider caching the results of the motif computation.
+
 @return_scalar
 @use_direction
 class FeedbackLoops_3(_Property):
@@ -479,6 +481,41 @@ class FeedbackLoops_3(_Property):
         return self._raw_value / max_feedbacks3
 
 
+@return_scalar
+@use_direction
+class FeedForwardCircuits(_Property):
+    """Number of feed-forward circuits.
+    
+    Methods:
+        compute: Compute the number of feed-forward circuits.
+        norm_biol: Normalize the number of feed-forward circuits to the number of parents.
+        norm_network: Normalize the number of feed-forward circuits to the number of nodes.
+    """
+    
+    CLASS_NAME = "Feed-Forward Circuits"
+
+    def __init__(self, G: nx.DiGraph):
+        super().__init__(G)
+        self._motif_size = 3
+        self._tfs_required = 2
+
+    def compute(self) -> int:
+        mc = count_3motifs(self.G)
+        self._raw_value = mc.feedforwards
+        return self._raw_value
+    
+    @check_raw_value
+    def norm_biol(self) -> float:
+        """Normalize the number of feed-forward circuits to the number of parents."""
+        n_parents = len(get_parent_nodes(self.G))
+        max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=n_parents, r_tfs=self._tfs_required)
+        return self._raw_value / max_ff
+    
+    @check_raw_value
+    def norm_network(self) -> float:
+        """Normalize the number of feed-forward circuits to the number of nodes. Every node is considered a TF."""
+        max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=self._n_nodes, r_tfs=self._tfs_required)
+        return self._raw_value / max_ff
 
 
 @return_scalar
@@ -504,12 +541,14 @@ class ComplexFeedForwardCircuits(_Property):
         self._raw_value = mc.complex_feedforwards
         return self._raw_value
 
+    @check_raw_value
     def norm_biol(self) -> float:
         """Normalize the number of complex feed-forward circuits to the number of parents."""
         n_parents = len(get_parent_nodes(self.G))
         max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=n_parents, r_tfs=self._tfs_required)
         return self._raw_value / max_complex_ff
 
+    @check_raw_value
     def norm_network(self) -> float:
         """Normalize the number of complex feed-forward circuits to the number of nodes. Every node is considered a TF."""
         max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=self._n_nodes, r_tfs=self._tfs_required)
