@@ -54,6 +54,7 @@ def flatten_list_of_iterables(lst):
 def get_child_classes(parent_class, selected_props) -> dict:
     child_classes = {}
     all_properties = []
+    
     print(f"Properties used for analysis: ")
     if selected_props == "all":
         for name, obj in inspect.getmembers(properties):
@@ -73,7 +74,7 @@ def get_child_classes(parent_class, selected_props) -> dict:
                 inspect.isclass(obj)
                 and issubclass(obj, parent_class)
                 and obj != parent_class
-                and name in selected_props
+                and obj.CLASS_NAME in selected_props
             ):
                 print(obj.CLASS_NAME, end="\n")
                 bool_mask = [
@@ -795,6 +796,7 @@ def compare_structure(
     workers: str | int = "auto",
     return_prop_dicts: bool = False,
     association_metric: Callable = pearsonr,
+    verbose: bool = False,
 ) -> Tuple[dict, dict] | plt.Figure:
 
     """Module-level function to compare multiple networks.
@@ -842,16 +844,16 @@ def compare_structure(
     ]
 
     # run parallel
-    results = run_parallel(characterize_network, data, workers)
+    results = run_parallel(characterize_network, data, workers, verbose=verbose)
     name_scalars_array = results["scalars"]
     name_moments_arrays = results["distributions"]
     
     for net_name, prop in results['distributions'].items():
         for prop_name, values in prop.items():
             name_scalars_array[net_name][f'Average {prop_name}'] = values[0]
-            name_scalars_array[net_name][f'Variation {prop_name}'] = values[1]
-            name_scalars_array[net_name][f'Skewness {prop_name}'] = values[2]
-            name_scalars_array[net_name][f'Kurtosis {prop_name}'] = values[3]
+            # name_scalars_array[net_name][f'Variation {prop_name}'] = values[1]
+            # name_scalars_array[net_name][f'Skewness {prop_name}'] = values[2]
+            # name_scalars_array[net_name][f'Kurtosis {prop_name}'] = values[3]
     
     if return_prop_dicts:
         return name_scalars_array, name_moments_arrays

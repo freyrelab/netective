@@ -21,8 +21,8 @@ src/netective/prop_notebooks/human_analysis.py
 src/netective/prop_notebooks/mouse_analysis.py
 src/netective/prop_notebooks/properties_old.py
 src/netective/stats/__init__.py
-src/netective/stats/stats copy.py
 src/netective/stats/stats.py
+src/netective/structure/__init__.py
 src/netective/structure/dataviz.py
 src/netective/structure/properties.py
 src/netective/structure/structure.py

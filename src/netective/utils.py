@@ -12,6 +12,7 @@ __all__ = [
 ]
 
 import os
+import sys
 import warnings
 import numpy as np
 import pandas as pd
@@ -30,7 +31,7 @@ from typing import Union, Callable, Iterable
 concat_path = os.path.join
 
 
-def run_parallel(f, my_iter, workers):
+def run_parallel(f, my_iter, workers, verbose=False):
 
     """
     Start the parallel processes.
@@ -51,13 +52,14 @@ def run_parallel(f, my_iter, workers):
     """
 
     len_iter = len(my_iter)
-    with tqdm(total=len_iter) as pbar:
+    with tqdm(total=len_iter, file=sys.stdout) as pbar:
         try:
             with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
                 futures = {}
                 for arg in zip(*my_iter):
                     name = arg[1]
-                    print(f"Running {name}")
+                    if verbose:
+                        print(f"Running {name}")
                     futures[executor.submit(f, *arg)] = name
 
                 results = defaultdict(dict)
@@ -201,8 +203,13 @@ def association(
             name_dist2 = name_dists[j]
             array1 = np.asarray(list(dict_data[name_dist1].values()))
             array2 = np.asarray(list(dict_data[name_dist2].values()))
-
-            mask = np.isfinite(array1) & np.isfinite(array2)
+            try:
+                mask = np.isfinite(array1) & np.isfinite(array2)
+            except ValueError:
+                print(f"Error in {name_dist1} or {name_dist2}")
+                print(f"array1: {dict_data[name_dist1]}")
+                print(f"array2: {dict_data[name_dist2]}")
+                raise ValueError
             filtered_array1 = array1[mask]
             filtered_array2 = array2[mask]
 
