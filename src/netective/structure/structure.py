@@ -55,11 +55,11 @@ def get_child_classes(parent_class, selected_props) -> dict:
     child_classes = {}
     all_properties = []
     
-    print(f"Properties used for analysis: ")
+    # print(f"Properties used for analysis: ") #TODO: UX: only if vervose
     if selected_props == "all":
         for name, obj in inspect.getmembers(properties):
             if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
-                print(obj.CLASS_NAME, end="\n")
+                # print(obj.CLASS_NAME, end="\n") #TODO: UX: only if vervose
                 bool_mask = [
                     obj._use_direction,
                     obj._use_selfloops,
@@ -360,7 +360,8 @@ class Structure:
         norm_dist_values = {}
         if norm not in NORM_OPTIONS:
             raise properties.NormalizationError(f"Invalid normalization method: {norm}")
-        print("Properties excluded from analysis due to lack of normalization:")
+        if self.verbose:
+            print("Properties excluded from analysis due to lack of normalization:")
         for name, x in instances.items():
             dict_ = norm_scalar_values if x._return_type == "scalar" else norm_dist_values
             try:
@@ -370,7 +371,8 @@ class Structure:
                     dict_[x.CLASS_NAME] = x.norm_biol()
             except (NotImplementedError, properties.NormalizationError):
                 # dict_[x.CLASS_NAME] = np.nan
-                print(f"{x.CLASS_NAME}", end="\n")
+                if self.verbose:
+                    print(f"{x.CLASS_NAME}", end="\n")
                 continue
         return norm_scalar_values, norm_dist_values
 
