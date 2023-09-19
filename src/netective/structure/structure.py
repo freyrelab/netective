@@ -866,7 +866,7 @@ def compare_structure(
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
         df = association(name_scalars_array, corr_func=association_metric)
-        fig_scalar, _ = create_symmetric_heatmap(df, title=f"Global properties")
+        fig_scalar = create_symmetric_heatmap(df, title=f"Global properties")
     else:
         raise ValueError("Not enough data to compare.")
 

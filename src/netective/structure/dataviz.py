@@ -87,4 +87,4 @@ def create_symmetric_heatmap(dataframe, title: str, method="ward"):
     g.ax_heatmap.set_title(title)
 
     # Return the figure and axes
-    return g.fig, g.ax_heatmap
+    return g.fig#, g.ax_heatmap

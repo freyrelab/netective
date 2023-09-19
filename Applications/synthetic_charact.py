@@ -26,12 +26,10 @@ def run_parallel(f, my_iter, workers):
             results = {}
             for future in concurrent.futures.as_completed(futures):
                 try:
-                    results[name] = future.result()
+                    results[futures[future]] = future.result()
                     pbar.update(1)
                 except Exception as exc:
                     print(f"Error: {exc}")
-
-
     return results
 
 
@@ -103,7 +101,7 @@ def synthetic_charact(num_nodes, density, random_times):
 
 if __name__ == '__main__':
 
-    random_times = 10  # number of times to run random graph generation
+    random_times = 100  # number of times to run random graph generation
     num_nodes_values = range(1000, 5001, 1000)
     density_values = [0.001, 0.005, 0.01]#, 0.05]
 
@@ -111,6 +109,6 @@ if __name__ == '__main__':
 
 
     for name, data_dict in run_parallel(synthetic_charact, input_datasets, workers=15).items():
-            for name, data in data_dict.items():
-                with open(f'{name}.pkl', 'wb') as f:
-                    pickle.dump(data, f)
+        for name_2, data in data_dict.items():
+            with open(f'{name_2}.pkl', 'wb') as f:
+                pickle.dump(data, f)

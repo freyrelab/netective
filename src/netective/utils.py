@@ -50,13 +50,13 @@ def run_parallel(f, my_iter, workers, verbose=False):
     Results: zip object.
         Contains the results of the function f.
     """
-
+    my_iter = list(zip(*my_iter))
     len_iter = len(my_iter)
     with tqdm(total=len_iter, file=sys.stdout) as pbar:
         try:
             with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
                 futures = {}
-                for arg in zip(*my_iter):
+                for arg in my_iter:
                     name = arg[1]
                     if verbose:
                         print(f"Running {name}")
