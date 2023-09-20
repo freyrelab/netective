@@ -76,6 +76,15 @@ def _max_loops(*, n: int, r: int, tfs: int, r_tfs: int) -> int:
 
     Returns:
         int: maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
+
+    Notes:
+        The putative maximum number of motifs is computed as follows:
+        - The number of possible combinations of r elements out of n is given by n! / r! / (n-r)!
+        - It is normalized by the probability of founding a TF in the network, which is tfs / n for the first TF, tfs-1 / n-1 for the second, and so on.
+        The mathematical expression is:
+        .. math::
+            \frac{n!}{r! \cdot (n-r)!} \cdot \frac{tfs}{n} \cdot \frac{tfs-1}{n-1} \cdot \ldots \cdot \frac{tfs - r_{tfs} - 1}{n - r_{tfs} - 1}
+
     """
 
     if r_tfs > tfs or r_tfs > r:
@@ -84,7 +93,7 @@ def _max_loops(*, n: int, r: int, tfs: int, r_tfs: int) -> int:
     if r > n or tfs > n:
         raise ValueError("r nor tfs cannot be greater than n")
 
-    putative = math.factorial(n) / math.factorial(n - r)
+    putative = math.factorial(n) / math.factorial(r) / math.factorial(n - r)
 
     for i in range(r_tfs):
         ratio = (tfs - i) / (n - i)
