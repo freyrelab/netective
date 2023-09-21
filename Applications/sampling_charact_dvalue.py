@@ -11,14 +11,15 @@ from multiprocessing import cpu_count
 
 
 from freyrelab.abasy import Abasy
+from freyrelab.nets import models, dissimilarity
 from freyrelab.nets.sampling import edge_sampling, node_sampling, snowball_sampling
 
 from netective.structure.structure import Structure, characterize_network
 from netective.structure import properties
 parent_class = properties._Property
 
-import warnings
-warnings.filterwarnings("ignore")
+# import warnings
+# warnings.filterwarnings("ignore
 
 def run_parallel(f, my_iter, workers):
     len_iter = len(my_iter)
@@ -89,25 +90,12 @@ def get_samples(G: nx.DiGraph,
             if deterministic:
                 random.seed(j)
             size = int(G.number_of_nodes() * i / 100) if sampling_type != 'edge' else int(G.number_of_edges() * i / 100)
-            print(f'Computing {sampling_type} sampling with {i}% coverage and {j} repetition... nodes: {size} and edges: {G.number_of_edges()}')
+            # print(f'Computing {sampling_type} sampling with {i}% coverage and {j} repetition... nodes: {size} and edges: {G.number_of_edges()}')
             nets[f'Net_{sampling_type}_{step * x}_{j}'] = sampling_fxns[sampling_type](G, size=size)
     
     return nets
 
 def sampling_charact(name_id, G, random_times, perc_sampling_step):
-    
-    child_classes = {}
-    for _, obj in inspect.getmembers(properties):
-        if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
-            if obj._use_direction:
-                continue
-            bool_mask = [
-                    obj._use_direction,
-                    obj._use_selfloops,
-                    obj._use_giant_component,
-                    obj._use_paths,
-                ]
-            child_classes[obj] = np.packbits(bool_mask).item() >> 4
 
     sampled_nets = {}
     for sampling in ['node', 'edge', 'snowball']:
@@ -116,33 +104,15 @@ def sampling_charact(name_id, G, random_times, perc_sampling_step):
         nets = {k.replace('Net', name_id) : v for k,v in nets.items()}
         sampled_nets.update(nets)
     
-    scalar_raw = {}
-    scalar_networknorm = {}
-    for name, network in sampled_nets.items():
-        # print(f'Computing {name}...')
-        # print(f'Number of nodes: {network.number_of_nodes()}')
-        struct = Structure(network, norm=None, net_id=name, verbose=False)
-        scalar_values, dist_props = struct.get_props(child_classes=child_classes)
-        scalar_raw[name] = scalar_values[name]
-        for prop_name, prop_values in dist_props[name].items():
-            scalar_raw[name][f'Average {prop_name}'] = prop_values[0]
-            scalar_raw[name][f'Variation {prop_name}'] = prop_values[1]
-            scalar_raw[name][f'Skewness {prop_name}'] = prop_values[2]
-            scalar_raw[name][f'Kurtosis {prop_name}'] = prop_values[3]
-
-        struct.norm = 'network'
-        scalar_values, dist_props = struct.get_props(child_classes=child_classes)
-        scalar_networknorm[name] = scalar_values[name]
-        for prop_name, prop_values in dist_props[name].items():
-            scalar_networknorm[name][f'Average {prop_name}'] = prop_values[0]
-            scalar_networknorm[name][f'Variation {prop_name}'] = prop_values[1]
-            scalar_networknorm[name][f'Skewness {prop_name}'] = prop_values[2]
-            scalar_networknorm[name][f'Kurtosis {prop_name}'] = prop_values[3]
-
-    data_dict = {
-        f'scalar_networknorm_{name_id}' : scalar_networknorm,
-        f'scalar_raw_{name_id}' : scalar_raw
-    }
+    data_dict = {}
+    for i, name in enumerate(sampled_nets):
+        data_dict[name] = {}
+        for j, name2 in enumerate(list(sampled_nets)[i+1:]):
+            try:
+                data_dict[name][name2] = dissimilarity.graph_dissimilarity(sampled_nets[name], sampled_nets[name2])
+            except:
+                # print(f'Error computing dissimilarity between {name} and {name2}')
+                data_dict[name][name2] = np.nan
 
     return data_dict
 
@@ -172,7 +142,7 @@ def main():
     workers = 5#int((cpu_count()-2)/len(net_ids))
     print(f'Using {workers} workers')
     for name, data_dict in run_parallel(sampling_charact, input_datasets, workers=workers).items():
-        with open(f'{name}.pkl', 'wb') as f:
+        with open(f'{name}_dvalue.pkl', 'wb') as f:
             pickle.dump(data_dict, f)
 
 if __name__ == '__main__':

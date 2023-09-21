@@ -1250,8 +1250,14 @@ class BetweennessCentrality(_Property):
         Returns:
             np.array: Normalized betweenness centrality for each node in the graph.
         """
-        scale_factor = 2 / ((self._n_nodes - 1) * (self._n_nodes - 2))
-        return self._raw_value * scale_factor
+        try:
+            scale_factor = 2 / ((self._n_nodes - 1) * (self._n_nodes - 2))
+            return self._raw_value * scale_factor
+        except ZeroDivisionError:
+            print(f'BCerror. Number of nodes: {self._n_nodes}, Number of edges: {self.G.number_of_edges()}')
+            raise NormalizationError(
+                "Division by zero (no nodes). Cannot normalize with this approach."
+            )
 
 
 @use_paths
