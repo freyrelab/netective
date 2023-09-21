@@ -288,7 +288,7 @@ def get_clusters(
     corr_df = np.abs(corr_df.astype("float"))
     # corr_df = corr_df.fillna(0)
     corr_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    dist_mtrx = round(1 - corr_df, 4)
+    dist_mtrx = round(1 - abs(corr_df), 4)
     try:
         square_matrix = squareform(dist_mtrx)
     except ValueError:
