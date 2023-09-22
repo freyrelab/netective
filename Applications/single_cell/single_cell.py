@@ -11,6 +11,7 @@ import re
 from netective.structure.structure import Structure
 import warnings
 warnings.filterwarnings("ignore")
+import random
 
 
 def run_parallel(f, my_iter, workers):
@@ -49,7 +50,7 @@ def get_paths(directory_name= str, validate= False, selected= list):
                         path = os.path.join(os.getcwd(), root, f)
                         paths.append(path)
                 else:
-                    if re.search('.txt', f):
+                    if re.search('.txt', f) or re.search('.genes', f):
                         path = os.path.join(os.getcwd(), root, f)
                         paths.append(path)
 
@@ -58,25 +59,46 @@ def get_paths(directory_name= str, validate= False, selected= list):
 def analyze(net_path= str, name= str):
     scalar_raw = {}
     scalar_networknorm = {}
+    er_scalar_raw = {}
+    er_scalar_networknorm = {}
 
     with open(net_path) as f:
         net = nx.DiGraph([line.split()[:2] for line in f if not re.search('regulator', line)])
-        print(f'Net: {name}, Nodes: {net.number_of_nodes()}, Edges: {net.number_of_edges()}')
+    
+    seed = 42
+    random.seed(seed)
+    density = net.number_of_edges() / (net.number_of_nodes() * (net.number_of_nodes() -1))
+    er_net = nx.erdos_renyi_graph(n= net.number_of_nodes(), p= density, directed= True, seed=seed)
+
     struct = Structure(net, norm=None, net_id=name, verbose=False)
     scalar_values, dist_props = struct.get_props()
     scalar_raw[name] = scalar_values[name]
-    for prop_name, prop_moments in dist_props.items():
+    for prop_name, prop_moments in dist_props[name].items():
         scalar_raw[name][f'Average {prop_name}'] = prop_moments[0]
     
     struct.norm = 'network'
     scalar_values, dist_props = struct.get_props()
     scalar_networknorm[name] = scalar_values[name]
-    for prop_name, prop_moments in dist_props.items():
+    for prop_name, prop_moments in dist_props[name].items():
         scalar_networknorm[name][f'Average {prop_name}'] = prop_moments[0]
+
+    struct = Structure(er_net, norm=None, net_id=f'ER_{name}', verbose=False)
+    scalar_values, dist_props = struct.get_props()
+    er_scalar_raw[f'ER_{name}'] = scalar_values[f'ER_{name}']
+    for prop_name, prop_moments in dist_props[f'ER_{name}'].items():
+        er_scalar_raw[f'ER_{name}'][f'Average {prop_name}'] = prop_moments[0]
+    
+    struct.norm = 'network'
+    scalar_values, dist_props = struct.get_props()
+    er_scalar_networknorm[f'ER_{name}'] = scalar_values[f'ER_{name}']
+    for prop_name, prop_moments in dist_props[f'ER_{name}'].items():
+        er_scalar_networknorm[f'ER_{name}'][f'Average {prop_name}'] = prop_moments[0]
     
     data_dict = {
         f'scalar_raw_{name}' : scalar_raw,
-        f'scalar_nwtworknorm_{name}' : scalar_networknorm
+        f'scalar_networknorm_{name}' : scalar_networknorm,
+        f'er_scalar_raw_{name}' : er_scalar_raw,
+        f'er_scalar_networknorm_{name}' : er_scalar_networknorm
     }
 
     return data_dict
@@ -96,11 +118,16 @@ if __name__ == '__main__':
             'hESC_chipunion.txt',
             'hESC_chipunion_KDUnion_intersect.txt'
         ]
-    paths = get_paths('./gold_standard_datasets', validate= True, selected= final_nets)
-    paths.extend(get_paths('./imputed_inferred_networks/'))
+    # paths = get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\netective\\data\\mouse_net")
+    paths = get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\aux_netective\\single_cell_analysis\\gold_standard_datasets", validate= True, selected= final_nets)
+    # paths.extend(get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\aux_netective\\single_cell_analysis\\imputed_inferred_networks"))
 
-    test = [path for i,path in enumerate(paths) if i < 20]
+    test = [path for i,path in enumerate(paths) if i < 1]
 
     input_dataset = [(net_path, 'GS_') if i < 12 else (net_path, 'INF_') for i,net_path in enumerate(test)]
+    # input_dataset = [(net_path, 'INF_') for net_path in test]
 
-    run_parallel(analyze, input_dataset, workers = 5)
+    for name, data_dict in run_parallel(analyze, input_dataset, workers=5).items():
+        for name_2, data in data_dict.items():
+            with open(f'results\\{name_2}.pkl', 'wb') as f:
+                pickle.dump(data, f)
