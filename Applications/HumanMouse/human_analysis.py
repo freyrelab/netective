@@ -111,6 +111,15 @@ path += '\human_analysis_nets_info'
 pd.DataFrame.to_csv(info_df, path_or_buf= path, mode='w')
 
 # Netective Analysis
+import pickle
 from netective import compare_structure
 
-compare_structure(networks, norm='biological', workers='auto')
+name_scalars_array, name_moments_array = compare_structure(networks, norm='biological', workers='auto', return_prop_dicts=True)
+
+# Save results
+with open('human_analysis_scalars.pkl', 'wb') as f:
+    pickle.dump(name_scalars_array, f)
+
+with open('human_analysis_moments.pkl', 'wb') as f:
+    pickle.dump(name_moments_array, f)
+
