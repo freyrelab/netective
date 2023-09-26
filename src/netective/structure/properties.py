@@ -4,6 +4,7 @@ import math
 import numpy as np
 import networkx as nx
 from abc import ABC, abstractmethod
+from mpmath import fac
 import igraph as ig
 
 from netective.utils import Efficiency, giant_component_size, remove_self_loops
@@ -92,8 +93,9 @@ def _max_loops(*, n: int, r: int, tfs: int, r_tfs: int) -> int:
     
     if r > n or tfs > n:
         raise ValueError("r nor tfs cannot be greater than n")
-
-    putative = math.factorial(n) / math.factorial(r) / math.factorial(n - r)
+    
+    # print(f'putative max loops: {math.factorial(n)} / {math.factorial(r)} / {math.factorial(n - r)}')
+    putative = int(fac(n) / fac(r) / fac(n - r))
 
     for i in range(r_tfs):
         ratio = (tfs - i) / (n - i)

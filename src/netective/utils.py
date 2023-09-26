@@ -64,13 +64,13 @@ def run_parallel(f, my_iter, workers, verbose=False):
 
                 results = defaultdict(dict)
                 for future in concurrent.futures.as_completed(futures):
-                    try:
-                        scalar, dist = future.result()
-                        results["scalars"].update(scalar)
-                        results["distributions"].update(dist)
-                        pbar.update(1)
-                    except Exception as exc:
-                        print(f"Error: {exc}")
+                    # try:
+                    scalar, dist = future.result()
+                    results["scalars"].update(scalar)
+                    results["distributions"].update(dist)
+                    pbar.update(1)
+                    # except Exception as exc:
+                    #     print(f"Error: {exc}")
         except NotImplementedError as e:
             print()
             print(e.message)
