@@ -99,7 +99,7 @@ if __name__ == '__main__':
     from netective import compare_structure
 
 
-    name_scalars_array, name_moments_array = compare_structure(networks, norm='biological', workers=6, return_prop_dicts=True)
+    name_scalars_array, name_moments_array = compare_structure(networks, norm='network', workers=6, return_prop_dicts=True)
     # name_scalars_array, name_moments_array = compare_structure(networks, norm='biological', workers='auto', return_prop_dicts=True)
 
     # Save results
