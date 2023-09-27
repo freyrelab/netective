@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import os
 import math
 import uuid
@@ -76,7 +77,7 @@ def get_child_classes(parent_class, selected_props) -> dict:
                 and obj != parent_class
                 and obj.CLASS_NAME in selected_props
             ):
-                print(obj.CLASS_NAME, end="\n")
+                # print(obj.CLASS_NAME, end="\n")
                 bool_mask = [
                     obj._use_direction,
                     obj._use_selfloops,
@@ -92,7 +93,7 @@ def get_child_classes(parent_class, selected_props) -> dict:
                 and obj.CLASS_NAME not in all_properties
             ):
                 all_properties.append(obj.CLASS_NAME)
-    print("\n")
+    # print("\n")
     if len(child_classes) == 0:
         raise Exception(
             f"Sorry, no matches for properties inquired.\nList of available properties is: {all_properties}"
@@ -310,17 +311,22 @@ class Structure:
         """
 
         # super().__init__()  # DataFrame.__init__(self)
+        self.inicio = time.time()
+        print(f'\t\tEntra al init, se empieza a crear la copia.')
         self._original_G = G  # original network
         self.G = validate_network(
             self._original_G.copy()
         )  # network to compute the structural properties
+        print(f'\t\tTerminó de crearse la copia. {time.time() - self.inicio}')
         self.graph_observer = GraphObserver(
             G
         )  # note that it observes the original graph, not the copy
+        print(f'\t\tTerminó GraphObserver. {time.time() - self.inicio}')
         self.graph_observer.graph_hash = None  # hash of the network to detect changes. None means that the properties have not been computed yet.
         self.norm_observer = NormObserver(
             norm
         )  # object to observe changes in the normalization strategy
+        print(f'\t\tTerminó NormObserver. {time.time() - self.inicio}')
         self.verbose = verbose
         self.net_id = net_id if net_id is not None else str(uuid.uuid4())
 
@@ -355,7 +361,8 @@ class Structure:
 
         if self.verbose:
             print("Normalizing...", flush=True)
-
+        
+        print(f'\t\tEmpieza Normalización. {time.time() - self.inicio}')
         norm_scalar_values = {}
         norm_dist_values = {}
         if norm not in NORM_OPTIONS:
@@ -374,6 +381,7 @@ class Structure:
                 if self.verbose:
                     print(f"{x.CLASS_NAME}", end="\n")
                 continue
+        print(f'\t\tTermina la normalización. {time.time() - self.inicio}')
         return norm_scalar_values, norm_dist_values
 
     def __get_modify_directed_graphs(self, property_groups, original_graph):
@@ -407,7 +415,7 @@ class Structure:
             else:
                 # Input requires only the modified graph
                 graphs[mask] = graph_copy
-
+        print(f'\t\tTerminó modified directed classes. {time.time() - self.inicio}')
         return graphs
 
     def __get_modify_undirected_graphs(self, property_groups, original_graph):
@@ -440,7 +448,7 @@ class Structure:
             else:
                 # Input requires only the modified graph
                 graphs[mask] = graph_copy
-
+        print(f'\t\tTerminó modified undirected classes. {time.time() - self.inicio}')
         return graphs
 
     def __get_instances(self, property_groups, original_graph):
@@ -485,7 +493,7 @@ class Structure:
                     )
                 else:
                     instances[class_.CLASS_NAME] = class_(property_input)
-
+        print(f'\t\tTerminó get_instances. {time.time() - self.inicio}')
         return instances
 
     def _compute_props(self, child_classes) -> dict[str, float, int]:
@@ -507,6 +515,7 @@ class Structure:
             dict: Dictionary with the structural properties of the network.
         """
 
+        print(f'\t\tEmpieza get props... {time.time() - self.inicio}')
         if self.verbose:
             print(f"Processing {self.net_id}...", flush=True)
             print(
@@ -525,21 +534,38 @@ class Structure:
 
         instances = self.__get_instances(property_groups, self.G)
         # Computing of global properties
-        self.scalar_values = {
-            x.CLASS_NAME: x.compute() for name, x in instances.items() if x._return_type == "scalar"
-        }
+        # BANDERA
+        # self.scalar_values = {
+            # x.CLASS_NAME: x.compute() for name, x in instances.items() if x._return_type == "scalar"
+        # }
+
+        # TODO esto se tiene que ir
+        print(f'\t\tEmpieza compute props... {time.time() - self.inicio}')
+        self.scalar_values = {}
+        self.dist_values = {}
+        
+        for name, x in instances.items():
+            if x._return_type == 'scalar':
+                print(f'Computing {x.CLASS_NAME}, {time.time() - self.inicio}')
+                self.scalar_values[x.CLASS_NAME] = x.compute()
+            else:
+                print(f'Computing {x.CLASS_NAME}, {time.time() - self.inicio}')
+                self.dist_values[x.CLASS_NAME] = x.compute()
+            print(f'Finished computing {x.CLASS_NAME}, {time.time() - self.inicio}')
 
         # Computing of node-level properties
-        self.dist_values = {
-            x.CLASS_NAME: x.compute()
-            for name, x in instances.items()
-            if x._return_type == "distribution"
-        }
+        # self.dist_values = {
+            # x.CLASS_NAME: x.compute()
+            # for name, x in instances.items()
+            # if x._return_type == "distribution"
+        # }
 
+        print(f'\t\tSe empezaron a normalizar. {time.time() - self.inicio}')
         if self.norm_observer.norm is not None:
             self.scalar_values, self.dist_values = self._normalize_props(
                 instances, norm=self.norm_observer.norm
             )
+        print(f'\t\tSe terminaron de normalizar {time.time() - self.inicio}')
 
         self.dist_values = {k: v for k, v in self.dist_values.items() if not np.isnan(v).all()}
 
@@ -598,12 +624,15 @@ class Structure:
                     child_classes = get_child_classes(PARENT_CLASS, props)
 
                 # props
+                print(f'\t\tSe manda a llamar compute_props {time.time() - self.inicio}')
                 scalar_values, dist_values = self._compute_props(child_classes)
-
+                print(f'Se terminó compute_props. {time.time() - self.inicio}')
                 self._scalar_arrays[self.net_id] = scalar_values
+                print(f'\t\tInicia compute_moments. {time.time() - self.inicio}')
                 self._dist_moments_arrays[self.net_id] = {
                     prop_name: compute_moments(array) for prop_name, array in dist_values.items()
                 }
+                print(f'\t\tTerminó compute moments. {time.time() - self.inicio}')
 
                 return self._scalar_arrays, self._dist_moments_arrays
 

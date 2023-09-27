@@ -12,6 +12,7 @@ from netective.structure.structure import Structure
 import warnings
 warnings.filterwarnings("ignore")
 import random
+import time
 
 
 def run_parallel(f, my_iter, workers):
@@ -27,7 +28,7 @@ def run_parallel(f, my_iter, workers):
                     name = arg[1] + path[len(path) - 1].split('.')[0]
                 if path[len(path) - 1].split('.')[1] != 'txt':
                     name = name + '.' + path[len(path) - 1].split('.')[1]
-                print(f'Submitting net: {name}')
+                print(f'\n\nSubmitting net: {name}')
                 futures[executor.submit(f, *(arg[0], name))] = name
 
             results = {}
@@ -57,43 +58,62 @@ def get_paths(directory_name= str, validate= False, selected= list):
     return paths
 
 def analyze(net_path= str, name= str):
+    inicio = time.time()
     scalar_raw = {}
     scalar_networknorm = {}
     er_scalar_raw = {}
     er_scalar_networknorm = {}
 
+    
+    print(f'\t\tEmpieza a leer el archivo {time.time() - inicio}')
     with open(net_path) as f:
         net = nx.DiGraph([line.split()[:2] for line in f if not re.search('regulator', line)])
-    
+    print(f'\t\tTermina de cargar la red {time.time() - inicio}')
+
     seed = 42
     random.seed(seed)
     density = net.number_of_edges() / (net.number_of_nodes() * (net.number_of_nodes() -1))
     er_net = nx.erdos_renyi_graph(n= net.number_of_nodes(), p= density, directed= True, seed=seed)
+    print(f'\t\tSe generó la ER del mismo tamaño {time.time() - inicio}')
 
+    print(f'\t\tOG net: {name}, nodes: {net.number_of_nodes()}, edges: {net.number_of_edges()}')
+    
+    print(f'\t\tER net, nodes: {er_net.number_of_nodes()}, edges: {er_net.number_of_edges()}')
+
+    print(f'\t\tSe inicia la instancia de la red original {time.time() - inicio}')
     struct = Structure(net, norm=None, net_id=name, verbose=False)
+    print(f'\t\tSe terminó de instanciar {time.time() - inicio}')
+
+    print(f'\tEntra a get props para {name}, norm: raw {time.time() - inicio}')
     scalar_values, dist_props = struct.get_props()
     scalar_raw[name] = scalar_values[name]
     for prop_name, prop_moments in dist_props[name].items():
         scalar_raw[name][f'Average {prop_name}'] = prop_moments[0]
     
     struct.norm = 'network'
+    print(f'\tEntra a get props para {name}, norm: network {time.time() - inicio}')
     scalar_values, dist_props = struct.get_props()
     scalar_networknorm[name] = scalar_values[name]
     for prop_name, prop_moments in dist_props[name].items():
         scalar_networknorm[name][f'Average {prop_name}'] = prop_moments[0]
 
+    print(f'\t\tSe inicia la instancia con la er{time.time() - inicio}')
     struct = Structure(er_net, norm=None, net_id=f'ER_{name}', verbose=False)
+    print(f'\t\tTermina la instancia de la er {time.time() - inicio}')
+    print(f'\tEntra a get props para ER, norm: raw {time.time() - inicio}')
     scalar_values, dist_props = struct.get_props()
     er_scalar_raw[f'ER_{name}'] = scalar_values[f'ER_{name}']
     for prop_name, prop_moments in dist_props[f'ER_{name}'].items():
         er_scalar_raw[f'ER_{name}'][f'Average {prop_name}'] = prop_moments[0]
     
     struct.norm = 'network'
+    print(f'\tEntra a get props para ER, norm: network {time.time() - inicio}')
     scalar_values, dist_props = struct.get_props()
     er_scalar_networknorm[f'ER_{name}'] = scalar_values[f'ER_{name}']
     for prop_name, prop_moments in dist_props[f'ER_{name}'].items():
         er_scalar_networknorm[f'ER_{name}'][f'Average {prop_name}'] = prop_moments[0]
     
+    print(f'\tSe genera el dict final {time.time() - inicio}')
     data_dict = {
         f'scalar_raw_{name}' : scalar_raw,
         f'scalar_networknorm_{name}' : scalar_networknorm,
