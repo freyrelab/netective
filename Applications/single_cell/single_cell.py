@@ -139,10 +139,11 @@ if __name__ == '__main__':
             'hESC_chipunion_KDUnion_intersect.txt'
         ]
     # paths = get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\netective\\data\\mouse_net")
-    paths = get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\aux_netective\\single_cell_analysis\\gold_standard_datasets", validate= True, selected= final_nets)
+    paths = get_paths("Data\\gold_standard_datasets", validate= True, selected= final_nets)
     # paths.extend(get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\aux_netective\\single_cell_analysis\\imputed_inferred_networks"))
 
-    test = [path for i,path in enumerate(paths) if i < 1]
+    # test = [path for i,path in enumerate(paths) if i < 1]
+    test = [x for x in paths if x.endswith('mDC_chipunion_KDUnion_intersect.txt')]
 
     input_dataset = [(net_path, 'GS_') if i < 12 else (net_path, 'INF_') for i,net_path in enumerate(test)]
     # input_dataset = [(net_path, 'INF_') for net_path in test]
