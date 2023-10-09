@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import os
 import math
 import uuid
@@ -358,26 +359,44 @@ class Structure:
         
         norm_scalar_values = {}
         norm_dist_values = {}
+        norm_times = {}
+        times = []
         if norm not in NORM_OPTIONS:
             raise properties.NormalizationError(f"Invalid normalization method: {norm}")
         if self.verbose:
             print("Properties excluded from analysis due to lack of normalization:")
+        inicio = time.time()
+        i = 0
         for name, x in instances.items():
             dict_ = norm_scalar_values if x._return_type == "scalar" else norm_dist_values
             try:
                 if norm == "network":
                     dict_[x.CLASS_NAME] = x.norm_network()
+                    times.append(time.time())
+                    if i == 0:
+                        norm_times[x.CLASS_NAME] = times[i] - inicio
+                    else:
+                        norm_times[x.CLASS_NAME] = times[i] - times[i-1]
+                    i += 1
                 elif norm == "biological":
                     dict_[x.CLASS_NAME] = x.norm_biol()
+                    times.append(time.time())
+                    if i == 0:
+                        norm_times[x.CLASS_NAME] = times[i] - inicio
+                    else:
+                        norm_times[x.CLASS_NAME] = times[i] - times[i-1]
+                    i += 1
             except (NotImplementedError, properties.NormalizationError):
                 # dict_[x.CLASS_NAME] = np.nan
                 if self.verbose:
                     print(f"{x.CLASS_NAME}", end="\n")
                 continue
-        return norm_scalar_values, norm_dist_values
+        
+        return norm_scalar_values, norm_dist_values, norm_times
 
     def __get_modify_directed_graphs(self, property_groups, original_graph):
         graphs = {}
+        times = []
 
         for mask, class_group in property_groups.items():
             directed = mask & DIRECTED != 0
@@ -399,18 +418,24 @@ class Structure:
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
             if get_paths:
+                #TODO esto se tiene que ir
+                inicio = time.time()
                 net_shortest_paths = ShortestPaths(graph_copy)
+                times.append(time.time() - inicio)
+                inicio = time.time()
                 net_shortest_distances = ShortestDistances(graph_copy)
+                times.append(time.time() - inicio)
 
                 # Input requires paths objects besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
                 # Input requires only the modified graph
                 graphs[mask] = graph_copy
-        return graphs
+        return graphs, times
 
     def __get_modify_undirected_graphs(self, property_groups, original_graph):
         graphs = {}
+        times = []
         for mask, class_group in property_groups.items():
             directed = mask & DIRECTED != 0
 
@@ -431,15 +456,20 @@ class Structure:
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
             if get_paths:
+                #TODO esto se tiene que ir
+                inicio = time.time()
                 net_shortest_paths = ShortestPaths(graph_copy)
+                times.append(time.time() - inicio)
+                inicio = time.time()
                 net_shortest_distances = ShortestDistances(graph_copy)
+                times.append(time.time() - inicio)
 
                 # Input requires paths objects besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
                 # Input requires only the modified graph
                 graphs[mask] = graph_copy
-        return graphs
+        return graphs, times
 
     def __get_instances(self, property_groups, original_graph):
 
@@ -448,16 +478,31 @@ class Structure:
         modified_undirected_graphs = {}
 
         if original_graph.is_directed():
+            #TODO esto se tiene que ir 
+            temp_dict, dir_times = self.__get_modify_directed_graphs(property_groups, original_graph)
+            modified_directed_graphs.update(temp_dict)
+            """
             modified_directed_graphs.update(
                 self.__get_modify_directed_graphs(property_groups, original_graph)
             )
+            """
+            #TODO esto se tiene que ir 
+            temp_dict, undir_times = self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
+            modified_undirected_graphs.update(temp_dict)
+            """
             modified_undirected_graphs.update(
                 self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
             )
+            """
         else:
+            #TODO esto se tiene que ir 
+            temp_dict, undir_times = self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
+            modified_undirected_graphs.update(temp_dict)
+            """
             modified_undirected_graphs.update(
                 self.__get_modify_undirected_graphs(property_groups, original_graph)
             )
+            """
 
         # Dict with keys: masks for each property group
         #           values: required input to instance each property in that property group
@@ -483,7 +528,7 @@ class Structure:
                     )
                 else:
                     instances[class_.CLASS_NAME] = class_(property_input)
-        return instances
+        return instances, undir_times
 
     def _compute_props(self, child_classes) -> dict[str, float, int]:
 
@@ -503,7 +548,6 @@ class Structure:
         Returns:
             dict: Dictionary with the structural properties of the network.
         """
-
         if self.verbose:
             print(f"Processing {self.net_id}...", flush=True)
             print(
@@ -520,29 +564,47 @@ class Structure:
         for class_, mask in child_classes.items():
             property_groups[mask].append(class_)
 
-        instances = self.__get_instances(property_groups, self.G)
+        instances, obj_times = self.__get_instances(property_groups, self.G)
         # Computing of global properties
-        self.scalar_values = {
-            x.CLASS_NAME: x.compute()
-            for name, x in instances.items()
-            if x._return_type == "scalar"
-        }
+        # BANDERA
+        # self.scalar_values = {
+            # x.CLASS_NAME: x.compute() for name, x in instances.items() if x._return_type == "scalar"
+        # }
+
+        # TODO esto se tiene que ir
+        inicio = time.time()
+        self.scalar_values = {}
+        self.dist_values = {}
+        prop_times = {}
+        prop_times['shortest_paths_obj'] = obj_times[0]
+        prop_times['shortest_distances_obj'] = obj_times[1]
+        
+        times = []
+        
+        for i,(name, x) in enumerate(instances.items()):
+            dict_ = self.scalar_values if x._return_type == 'scalar' else self.dist_values
+            dict_[x.CLASS_NAME] = x.compute()
+            times.append(time.time())
+            if i == 0:
+                prop_times[x.CLASS_NAME] = times[i] - inicio
+            else:
+                prop_times[x.CLASS_NAME] = times[i] - times[i-1]
 
         # Computing of node-level properties
-        self.dist_values = {
-            x.CLASS_NAME: x.compute()
-            for name, x in instances.items()
-            if x._return_type == "distribution"
-        }
+        # self.dist_values = {
+            # x.CLASS_NAME: x.compute()
+            # for name, x in instances.items()
+            # if x._return_type == "distribution"
+        # }
 
         if self.norm_observer.norm is not None:
-            self.scalar_values, self.dist_values = self._normalize_props(
+            self.scalar_values, self.dist_values, prop_times = self._normalize_props(
                 instances, norm=self.norm_observer.norm
             )
 
         self.dist_values = {k: v for k, v in self.dist_values.items() if not np.isnan(v).all()}
 
-        return self.scalar_values, self.dist_values
+        return self.scalar_values, self.dist_values, prop_times
 
     def get_props(
         self, props: str | list = "all", child_classes: list = None
@@ -596,14 +658,14 @@ class Structure:
                 if child_classes is None:
                     child_classes = get_child_classes(PARENT_CLASS, props)
 
-                # props
-                scalar_values, dist_values = self._compute_props(child_classes)
+                # props y props_times
+                scalar_values, dist_values, prop_times = self._compute_props(child_classes)
                 self._scalar_arrays[self.net_id] = scalar_values
                 self._dist_moments_arrays[self.net_id] = {
                     prop_name: compute_moments(array) for prop_name, array in dist_values.items()
                 }
 
-                return self._scalar_arrays, self._dist_moments_arrays
+                return self._scalar_arrays, self._dist_moments_arrays, prop_times
 
             # This is a general exception handler to catch any error that may occur in the parallelized code
             except Exception as e:
@@ -612,7 +674,7 @@ class Structure:
                     f"\n\nError occurred. Original traceback is\n{tracebackString}\n"
                 )
 
-        return self._scalar_arrays, self._dist_moments_arrays
+        return self._scalar_arrays, self._dist_moments_arrays, prop_times
 
 
 def struc_props_call(
