@@ -1,4 +1,5 @@
 /data/
+/slides/
 *.pyc
 *.ini
 *.pkl
