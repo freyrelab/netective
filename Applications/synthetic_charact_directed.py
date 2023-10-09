@@ -19,7 +19,7 @@ def run_parallel(f, my_iter, workers):
         with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
             futures = {}
             for arg in my_iter:
-                # print(f'Running: {arg[0]} nodes, {arg[1]} density, {arg[2]} random times each model...')
+                print(f'Running: {arg[0]} nodes, {arg[1]} density, {arg[2]} random times each model...')
                 name = f'{arg[0]}_{arg[1]}'
                 futures[executor.submit(f, *arg)] = name
 
@@ -39,8 +39,6 @@ def synthetic_charact(num_nodes, density, random_times):
     child_classes = {}
     for name, obj in inspect.getmembers(properties):
         if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
-            if obj._use_direction:
-                continue
             bool_mask = [
                     obj._use_direction,
                     obj._use_selfloops,

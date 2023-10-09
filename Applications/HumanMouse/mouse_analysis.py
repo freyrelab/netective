@@ -61,13 +61,13 @@ if __name__ == '__main__':
     # Synthetic networks
     from freyrelab.nets import models
 
-    seed = 42
+
     synth_graphs = {}
 
-    for net_id, G in mouse_networks.items():
+    for seed, (net_id, G) in enumerate(mouse_networks.items()):
         n = G.number_of_nodes()
         m = G.number_of_edges()
-        for i in range(1,11):
+        for i in range(1000):
             synth_graphs[f'BA_{net_id}_{i}'] = models.barabasi_albert_graph(n)
             synth_graphs[f'ER_{net_id}_{i}'] = nx.erdos_renyi_graph(n, m/(n*(n-1)), seed=seed, directed=False)
 
