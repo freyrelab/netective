@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from mpmath import fac
 import igraph as ig
 
-from netective.utils import Efficiency, giant_component_size, remove_self_loops
+from netective.utils import Efficiency, giant_component_size
 
 # Decorators for graph characteristics
 
@@ -39,6 +39,10 @@ def return_distribution(cls):
 
 def use_paths(cls):
     cls._use_paths = True
+    return cls
+
+def use_motifs(cls):
+    cls._use_motifs = True
     return cls
 
 
@@ -115,44 +119,7 @@ def get_parent_nodes(G: nx.DiGraph):
     """Get the parent nodes of a graph."""
     return [i for i, k_out in G.out_degree() if k_out > 0]
 
-
-# motifs class
-
-
-class count_3motifs:
-    """Summary."""
-
-    def __init__(self, G):
-        if not G.is_directed():
-            raise TypeError("requires a directed graph")
-        iG = ig.Graph.TupleList(
-            G.edges(data=False),
-            directed=True,
-            vertex_name_attr="name",
-            edge_attrs=None,
-            weights=False,
-        )
-        iG.add_vertices(nx.isolates(G))
-        self.tc = iG.triad_census()
-
-    @property
-    def feedforwards(self):
-        """Summary."""
-        return self.tc.t030T
-
-    @property
-    def complex_feedforwards(self):
-        """Summary."""
-        return self.tc.t120U
-
-    @property
-    def feedbacks(self):
-        """Summary."""
-        return self.tc.t030C + self.tc.t120C + self.tc.t210 + 2 * self.tc.t300
-
-
 # Parent class for all properties
-
 
 class _Property(ABC):
     """Abstract base class for all properties."""
@@ -162,6 +129,7 @@ class _Property(ABC):
     _use_direction = False
     _use_selfloops = False
     _use_giant_component = False
+    _use_motifs = False
 
     def __init__(self, G: nx.DiGraph):
         self.G = G
@@ -454,6 +422,7 @@ class MaxInDegree(_Property):
 
 # TODO: Optimization: Several computations are repeated when calling motif-related properties. Consider caching the results of the motif computation.
 
+@use_motifs
 @return_scalar
 @use_direction
 class FeedbackLoops_3(_Property):
@@ -464,17 +433,16 @@ class FeedbackLoops_3(_Property):
         norm_biol: Normalize the number of feedback loops of length 3 to the number of parents.
         norm_network: Normalize the number of feedback loops of length 3 to the number of nodes.
     """
-
     CLASS_NAME = "3-Feedback Loops"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.DiGraph, **kwargs):
+        self._mc = kwargs['motifs_obj']
         super().__init__(G)
         self._motif_size = 3
         self._tfs_required = 3
 
     def compute(self) -> int:
-        mc = count_3motifs(self.G)
-        self._raw_value = mc.feedbacks
+        self._raw_value = self._mc.feedbacks
         return self._raw_value
 
     @check_raw_value
@@ -490,7 +458,7 @@ class FeedbackLoops_3(_Property):
         max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=self._n_nodes, r_tfs=self._tfs_required)
         return self._raw_value / max_feedbacks3
 
-
+@use_motifs
 @return_scalar
 @use_direction
 class FeedForwardCircuits(_Property):
@@ -504,14 +472,14 @@ class FeedForwardCircuits(_Property):
     
     CLASS_NAME = "Feed-Forward Circuits"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.DiGraph, **kwargs):
+        self._mc = kwargs['motifs_obj']
         super().__init__(G)
         self._motif_size = 3
         self._tfs_required = 2
 
     def compute(self) -> int:
-        mc = count_3motifs(self.G)
-        self._raw_value = mc.feedforwards
+        self._raw_value = self._mc.feedforwards
         return self._raw_value
     
     @check_raw_value
@@ -528,6 +496,7 @@ class FeedForwardCircuits(_Property):
         return self._raw_value / max_ff
 
 
+@use_motifs
 @return_scalar
 @use_direction
 class ComplexFeedForwardCircuits(_Property):
@@ -541,14 +510,14 @@ class ComplexFeedForwardCircuits(_Property):
 
     CLASS_NAME = "Complex Feed-Forward Circuits"
 
-    def __init__(self, G: nx.DiGraph):
+    def __init__(self, G: nx.DiGraph, **kwargs):
+        self._mc = kwargs['motifs_obj']
         super().__init__(G)
         self._motif_size = 3
         self._tfs_required = 2
 
     def compute(self) -> int:
-        mc = count_3motifs(self.G)
-        self._raw_value = mc.complex_feedforwards
+        self._raw_value = self._mc.complex_feedforwards
         return self._raw_value
 
     @check_raw_value

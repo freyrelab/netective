@@ -27,8 +27,8 @@ from netective.utils import (
     concat_path,
     ShortestDistances,
     ShortestPaths,
+    count_3motifs,
     giant_component,
-    giant_component_size,
     remove_self_loops,
     association,
 )
@@ -41,6 +41,7 @@ from typing import Callable, Iterable
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
 PARENT_CLASS = properties._Property
+MOTIFS = 16
 DIRECTED = 8
 SELF_LOOPS = 4
 GIANT_COMPONENT = 2
@@ -61,12 +62,13 @@ def get_child_classes(parent_class, selected_props) -> dict:
             if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
                 # print(obj.CLASS_NAME, end="\n") #TODO: UX: only if vervose
                 bool_mask = [
+                    obj._use_motifs,
                     obj._use_direction,
                     obj._use_selfloops,
                     obj._use_giant_component,
-                    obj._use_paths,
+                    obj._use_paths
                 ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 4
+                child_classes[obj] = np.packbits(bool_mask).item() >> 3
                 all_properties.append(obj.CLASS_NAME)
     else:
         for name, obj in inspect.getmembers(properties):
@@ -78,12 +80,13 @@ def get_child_classes(parent_class, selected_props) -> dict:
             ):
                 # print(obj.CLASS_NAME, end="\n")
                 bool_mask = [
+                    obj._use_motifs,
                     obj._use_direction,
                     obj._use_selfloops,
                     obj._use_giant_component,
-                    obj._use_paths,
+                    obj._use_paths
                 ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 4
+                child_classes[obj] = np.packbits(bool_mask).item() >> 3
                 all_properties.append(obj.CLASS_NAME)
             if (
                 inspect.isclass(obj)
@@ -389,6 +392,7 @@ class Structure:
             haveto_remove_self_loops = mask & SELF_LOOPS == 0
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
+            get_motifs = mask & MOTIFS != 0
 
             # Dummy graph that will be modified, only if it applies
             graph_copy = original_graph.copy()
@@ -401,12 +405,15 @@ class Structure:
             if get_paths:
                 net_shortest_paths = ShortestPaths(graph_copy)
                 net_shortest_distances = ShortestDistances(graph_copy)
-
                 # Input requires paths objects besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
-                # Input requires only the modified graph
-                graphs[mask] = graph_copy
+                if get_motifs: # Input requires motifs object besides the modified graph
+                    motifs_obj = count_3motifs(graph_copy)
+                    graphs[mask] = (graph_copy, motifs_obj)
+                else: # Input requires only the modified graph
+                    graphs[mask] = graph_copy
+        
         return graphs
 
     def __get_modify_undirected_graphs(self, property_groups, original_graph):
@@ -421,6 +428,7 @@ class Structure:
             haveto_remove_self_loops = mask & SELF_LOOPS == 0
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
+            get_motifs  = mask & MOTIFS != 0
 
             # Dummy graph that will be modified, only if it applies
             graph_copy = original_graph.copy()
@@ -433,12 +441,15 @@ class Structure:
             if get_paths:
                 net_shortest_paths = ShortestPaths(graph_copy)
                 net_shortest_distances = ShortestDistances(graph_copy)
-
-                # Input requires paths objects besides the modified graph
+                # Input requires paths objects and motifs object besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
-                # Input requires only the modified graph
-                graphs[mask] = graph_copy
+                if get_motifs: # Input requires motifs object besides the modified graph
+                    motifs_obj = count_3motifs(graph_copy)
+                    graphs[mask] = (graph_copy, motifs_obj)
+                else: # Input requires only the modified graph
+                    graphs[mask] = graph_copy
+        
         return graphs
 
     def __get_instances(self, property_groups, original_graph):
@@ -474,13 +485,20 @@ class Structure:
             for class_ in class_group:
                 if isinstance(property_input, tuple):
                     G = property_input[0]
-                    net_shortest_paths = property_input[1]
-                    net_shortest_distances = property_input[2]
-                    instances[class_.CLASS_NAME] = class_(
-                        G,
-                        net_shortest_paths=net_shortest_paths,
-                        net_shortest_distances=net_shortest_distances,
-                    )
+                    if isinstance(property_input[1], ShortestPaths):
+                        net_shortest_paths = property_input[1]
+                        net_shortest_distances = property_input[2]
+                        instances[class_.CLASS_NAME] = class_(
+                            G,
+                            net_shortest_paths= net_shortest_paths,
+                            net_shortest_distances= net_shortest_distances,
+                        )
+                    else:
+                        motifs_obj = property_input[1]
+                        instances[class_.CLASS_NAME] = class_(
+                            G,
+                            motifs_obj= motifs_obj
+                        )
                 else:
                     instances[class_.CLASS_NAME] = class_(property_input)
         return instances
@@ -815,6 +833,7 @@ def compare_structure(
         ValueError: Raised if there is not enough data to compare.
     """
 
+    print('Si es el bueno')
     if norm not in NORM_OPTIONS:
         raise properties.NormalizationError("Normalization not valid")
 

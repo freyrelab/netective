@@ -508,3 +508,35 @@ class Efficiency:
             nl = ef.shape[0]
             ge.append(ef.sum() / (nl * (nl - 1)))
         return np.array(ge).sum() / self.__num_nodes
+
+# motifs class
+class count_3motifs:
+    """Summary."""
+
+    def __init__(self, G):
+        if not G.is_directed():
+            raise TypeError("requires a directed graph")
+        iG = ig.Graph.TupleList(
+            G.edges(data=False),
+            directed=True,
+            vertex_name_attr="name",
+            edge_attrs=None,
+            weights=False,
+        )
+        iG.add_vertices(nx.isolates(G))
+        self.tc = iG.triad_census()
+
+    @property
+    def feedforwards(self):
+        """Summary."""
+        return self.tc.t030T
+
+    @property
+    def complex_feedforwards(self):
+        """Summary."""
+        return self.tc.t120U
+
+    @property
+    def feedbacks(self):
+        """Summary."""
+        return self.tc.t030C + self.tc.t120C + self.tc.t210 + 2 * self.tc.t300
