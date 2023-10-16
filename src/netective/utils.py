@@ -28,10 +28,15 @@ from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
 from typing import Union, Callable, Iterable
 
+from netective.logging_info import get_logger, set_log_level
+
+import logging
+
 concat_path = os.path.join
 
+utils_logger = get_logger(__name__)
 
-def run_parallel(f, my_iter, workers, verbose=False):
+def run_parallel(f, my_iter, workers, verbose: str = 'WARNING'):
 
     """
     Start the parallel processes.
@@ -50,6 +55,10 @@ def run_parallel(f, my_iter, workers, verbose=False):
     Results: zip object.
         Contains the results of the function f.
     """
+    if verbose != None:
+        current_level = utils_logger.getEffectiveLevel()
+        set_log_level(utils_logger, verbose)
+    
     my_iter = list(zip(*my_iter))
     len_iter = len(my_iter)
     with tqdm(total=len_iter, file=sys.stdout) as pbar:
@@ -58,8 +67,7 @@ def run_parallel(f, my_iter, workers, verbose=False):
                 futures = {}
                 for arg in my_iter:
                     name = arg[1]
-                    if verbose:
-                        print(f"Running {name}")
+                    utils_logger.info(f"Running {name}")
                     futures[executor.submit(f, *arg)] = name
 
                 results = defaultdict(dict)
@@ -68,12 +76,14 @@ def run_parallel(f, my_iter, workers, verbose=False):
                     scalar, dist = future.result()
                     results["scalars"].update(scalar)
                     results["distributions"].update(dist)
+                    utils_logger.info(f'Finilized: {futures[future]}')
                     pbar.update(1)
                     # except Exception as exc:
                     #     print(f"Error: {exc}")
         except NotImplementedError as e:
-            print()
-            print(e.message)
+            utils_logger.critical(e.message)
+    if verbose != None:
+        set_log_level(utils_logger, current_level)
 
     return results
 
@@ -81,9 +91,9 @@ def run_parallel(f, my_iter, workers, verbose=False):
 def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph):
     """Validates the network and returns a DiGraph or Graph object."""
     if not isinstance(G, (nx.Graph, nx.DiGraph)):
-        raise TypeError("G must be a DiGraph or a Graph")
+        utils_logger.critical("G must be a DiGraph or a Graph")
     if G.size() == 0:
-        raise ValueError(f"G must have at least one edge. It has {G.size()} edges.")
+        utils_logger.critical(f"G must have at least one edge. It has {G.size()} edges.")
     return G
 
 
@@ -146,7 +156,7 @@ def parse_network(
         use_position_as_score: If True, the position of the edge in the file will be used as the score of the edge.
     """
     if score and use_position_as_score:
-        raise ValueError("score and use_position_as_score cannot be True at the same time.")
+        utils_logger.critical("score and use_position_as_score cannot be True at the same time.")
 
     if not use_position_as_score:
         G = nx.read_edgelist(
@@ -206,7 +216,7 @@ def association(
             try:
                 mask = np.isfinite(array1) & np.isfinite(array2)
             except ValueError:
-                print(f"Error in {name_dist1} or {name_dist2}")
+                utils_logger.critical(f"Error in {name_dist1} or {name_dist2}")
                 print(f"array1: {dict_data[name_dist1]}")
                 print(f"array2: {dict_data[name_dist2]}")
                 raise ValueError
@@ -214,12 +224,15 @@ def association(
             filtered_array2 = array2[mask]
 
             # Calculate Pearson correlation coefficient and p-value
-            result = corr_func(filtered_array1, filtered_array2)
+            try:
+                result = corr_func(filtered_array1, filtered_array2)
+            except TypeError:
+                utils_logger.critical('Correlation function not accepted.')
 
             accepted_types = (float, Iterable)
 
             if not isinstance(result, accepted_types):
-                raise TypeError(
+                utils_logger.critical(
                     f"Correlation function not admitted, Return Type must be {accepted_types}"
                 )
 
@@ -293,7 +306,7 @@ def get_clusters(
         square_matrix = squareform(dist_mtrx)
     except ValueError:
         # warnings.warn(f"NaNs found in the correlation matrix. Unable to compute clusters.")
-        raise ValueError(f"NaNs found in the correlation matrix. Unable to compute clusters.")
+        utils_logger.critical(f"NaNs found in the correlation matrix. Unable to compute clusters.")
     linkage_mtrx = linkage(square_matrix, method=ch_method, metric=ch_metric)
     index = list(corr_df.index)
     cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")
@@ -328,7 +341,7 @@ class ShortestDistances:
     def __init__(self, G):
         """Summary."""
         if G.is_directed():
-            raise TypeError("requires an undirected graph")
+            utils_logger.critical("requires an undirected graph")
         iG = ig.Graph.TupleList(
             G.edges(data=False),
             directed=False,
@@ -402,7 +415,7 @@ class ShortestPaths:
     def __init__(self, G):
         """Summary."""
         if G.is_directed():
-            raise TypeError("requires an undirected graph")
+            utils_logger.critical("requires an undirected graph")
         self.__G = ig.Graph.TupleList(
             G.edges(data=False),
             directed=False,
@@ -455,9 +468,7 @@ class ShortestPaths:
             else betweenness
         )
 
-
 # Effciciency object
-
 
 class Efficiency:
     """
@@ -515,7 +526,7 @@ class count_3motifs:
 
     def __init__(self, G):
         if not G.is_directed():
-            raise TypeError("requires a directed graph")
+            utils_logger.critical("requires a directed graph")
         iG = ig.Graph.TupleList(
             G.edges(data=False),
             directed=True,

@@ -32,6 +32,11 @@ from netective.utils import (
     remove_self_loops,
     association,
 )
+
+import logging
+
+from netective.logging_info import get_logger
+
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
 
 import matplotlib.pyplot as plt
@@ -47,7 +52,22 @@ SELF_LOOPS = 4
 GIANT_COMPONENT = 2
 PATHS = 1
 
+struct_logger = get_logger(__name__)
+
 # Auxiliar Fxns
+
+def set_log_level(verbose: str = 'CRITICAL'):
+    if isinstance(verbose, str):
+        numeric_level = getattr(logging, verbose.upper(), None)
+    else:
+        numeric_level = verbose
+    
+    if not isinstance(numeric_level, int):
+        struct_logger.critical(f'Invalid verbose level: {verbose}')
+        raise TypeError(f'Invalid verbose level: {verbose}')
+    
+    struct_logger.setLevel(numeric_level)
+
 def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
 
@@ -272,7 +292,7 @@ class Structure:
         G: DiGraph | Graph,
         norm: None | str | pd.Series = None,
         net_id: str = None,
-        verbose: bool = False,
+        verbose: str = None,
     ):
 
         """
@@ -296,7 +316,7 @@ class Structure:
             net_id: str.
                 Name of the network. If None, a random uuid is assigned.
                 Used for verbose mode and raising errors.
-            verbose: bool.
+            verbose: str.
                 Whether to print information about the network.
 
         Returns:
@@ -324,7 +344,7 @@ class Structure:
         self.norm_observer = NormObserver(
             norm
         )  # object to observe changes in the normalization strategy
-        self.verbose = verbose
+        self.verbose = verbose   
         self.net_id = net_id if net_id is not None else str(uuid.uuid4())
 
     @property
@@ -356,15 +376,14 @@ class Structure:
     def _normalize_props(self, instances, norm):
         """Normalizes the structural properties of a network."""
 
-        if self.verbose:
-            print("Normalizing...", flush=True)
+        struct_logger.info("Normalizing...")
         
         norm_scalar_values = {}
         norm_dist_values = {}
         if norm not in NORM_OPTIONS:
+            struct_logger.critical(f"Invalid normalization method: {norm}")
             raise properties.NormalizationError(f"Invalid normalization method: {norm}")
-        if self.verbose:
-            print("Properties excluded from analysis due to lack of normalization:")
+        struct_logger.warning("Properties excluded from analysis due to lack of normalization:")
         for name, x in instances.items():
             dict_ = norm_scalar_values if x._return_type == "scalar" else norm_dist_values
             try:
@@ -374,8 +393,7 @@ class Structure:
                     dict_[x.CLASS_NAME] = x.norm_biol()
             except (NotImplementedError, properties.NormalizationError):
                 # dict_[x.CLASS_NAME] = np.nan
-                if self.verbose:
-                    print(f"{x.CLASS_NAME}", end="\n")
+                struct_logger.warning(f"{x.CLASS_NAME}")
                 continue
         return norm_scalar_values, norm_dist_values
 
@@ -476,8 +494,8 @@ class Structure:
 
         for mask, class_group in property_groups.items():
             if mask not in inputs:
-                for class_ in class_group:
-                    print(f"{class_.CLASS_NAME} cannot be computed for the input graph.")
+                for class_ in class_group: # Será sólo un warning
+                    struct_logger.warning(f"{class_.CLASS_NAME} cannot be computed for the input graph.")
                 continue
 
             property_input = inputs[mask]
@@ -522,14 +540,11 @@ class Structure:
             dict: Dictionary with the structural properties of the network.
         """
 
-        if self.verbose:
-            print(f"Processing {self.net_id}...", flush=True)
-            print(
-                f"{self.net_id} has {self.G.number_of_nodes()} nodes and {self.G.number_of_edges()} edges.",
-                flush=True,
-            )
+        struct_logger.info(f"Processing {self.net_id}...")
+        struct_logger.info(f"{self.net_id} has {self.G.number_of_nodes()} nodes and {self.G.number_of_edges()} edges.")
 
         if not self.G.is_directed() and self.norm_observer.norm == "biological":
+            struct_logger.critical("Biological normalization is only available for directed graphs")
             raise properties.NormalizationError(
                 "Biological normalization is only available for directed graphs"
             )
@@ -539,6 +554,18 @@ class Structure:
             property_groups[mask].append(class_)
 
         instances = self.__get_instances(property_groups, self.G)
+
+        self.scalar_values = {}
+        self.dist_values = {}
+        struct_logger.debug('Starting properties computation...')
+        for name,x in instances.items():
+            if x._return_type == 'scalar':
+                self.scalar_values[x.CLASS_NAME] = x.compute()
+            else:
+                self.dist_values[x.CLASS_NAME] = x.compute()
+            struct_logger.debug(f'Finished computing: {x.CLASS_NAME}')
+        
+        """
         # Computing of global properties
         self.scalar_values = {
             x.CLASS_NAME: x.compute()
@@ -552,6 +579,7 @@ class Structure:
             for name, x in instances.items()
             if x._return_type == "distribution"
         }
+        """
 
         if self.norm_observer.norm is not None:
             self.scalar_values, self.dist_values = self._normalize_props(
@@ -592,13 +620,9 @@ class Structure:
             self.graph_observer.graph_hash is None
             or self.graph_observer.changed(self._original_G, update_G=True)
         ) or self.norm_observer.change():
-            if self.verbose:
-                print(
-                    "The network or the normalization method has changed. Computing its properties...",
-                    flush=True,
-                )
-                # TODO Optimization: cache the raw values?
-                # TODO: include a verbose message when normalization has changed
+            struct_logger.warning('The network or the normalization method has changed. Computing its properties...')
+            # TODO Optimization: cache the raw values?
+            # TODO: include a verbose message when normalization has changed
 
             # TODO: Refactor code: First run is None and self.graph_observer.changed(self._original_G is not evaluated due to bypass.
             if self.graph_observer.graph_hash is None:
@@ -626,6 +650,9 @@ class Structure:
             # This is a general exception handler to catch any error that may occur in the parallelized code
             except Exception as e:
                 tracebackString = traceback.format_exc(e)
+                struct_logger.critical(
+                    f"Error occurred. Original traceback is\n{tracebackString}\n"
+                )
                 raise NotImplementedError(
                     f"\n\nError occurred. Original traceback is\n{tracebackString}\n"
                 )
@@ -638,7 +665,7 @@ def struc_props_call(
     net_id: str,
     norm: None | str | pd.Series,
     erdos_renyi: int,
-    verbose: bool = False,
+    verbose: str = 'CRITICAL',
 ) -> list(tuple(str, dict)):
 
     """
@@ -747,7 +774,7 @@ def characterize_network(
     norm: str | None = None,
     selected_props: str | list = "all",
     child_classes: dict = None,
-    verbose: bool = False,
+    verbose: str = None,
     return_prop_dicts: bool = False,
 ) -> None | Tuple[dict, dict]:
     """Module-level function to characterize a single network.
@@ -758,7 +785,7 @@ def characterize_network(
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
         child_classes (dict, optional): Dict of child classes to compute. Defaults to None. Use either selected_props or child_classes.
             if child_classes is not None, selected_props is ignored.
-        verbose (bool, optional): If True, print messages. Defaults to False.
+        verbose (str, optional): If , print messages. Defaults to False.
 
     Returns:
         dict: Dictionary with the properties of the network if return_prop_dicts is True.
@@ -769,6 +796,10 @@ def characterize_network(
 
     """
 
+    if verbose != None:
+        current_level = struct_logger.getEffectiveLevel()
+        set_log_level(verbose)
+    
     struc = Structure(G, norm=norm, net_id=name, verbose=verbose)
     if child_classes is not None:
         scalar_values, dist_values = struc.get_props(child_classes=child_classes)
@@ -776,6 +807,7 @@ def characterize_network(
         scalar_values, dist_values = struc.get_props(props=selected_props)
 
     if len(dist_values) == 0 and len(scalar_values) == 0:
+        struct_logger.critical("Not enough data, try with more properties or another normalization")
         raise ValueError("Not enough data, try with more properties or another normalization")
 
     if return_prop_dicts:
@@ -785,23 +817,26 @@ def characterize_network(
         fig_dist, _ = plot_distributions(dist_values[name])
     if len(scalar_values) != 0:
         fig_scalar, _ = plot_scalars(scalar_values[name])
+    
+    if verbose != None:
+        set_log_level(current_level)
 
 def common_props_dict(networks):
     new = defaultdict(lambda:defaultdict())
 
-    for i, (net_name, props) in enumerate(networks.items()):
+    for i, (net_id, props) in enumerate(networks.items()):
         if i == 0:
             common = set(props.keys())
         else:
             common.intersection_update(set(props.keys()))
 
     new = {
-        net_name : {
+        net_id : {
             prop_name : value 
             for prop_name, value in props.items()
             if prop_name in common
         }
-        for net_name, props in networks.items()
+        for net_id, props in networks.items()
     }
 
     return new
@@ -814,7 +849,7 @@ def compare_structure(
     workers: str | int = "auto",
     return_prop_dicts: bool = False,
     association_metric: Callable = pearsonr,
-    verbose: bool = False,
+    verbose: str = 'CRITICAL',
 ) -> Tuple[dict, dict] | plt.Figure:
 
     """Module-level function to compare multiple networks.
@@ -832,9 +867,8 @@ def compare_structure(
         NormalizationError: Raised if the normalization is not valid.
         ValueError: Raised if there is not enough data to compare.
     """
-
-    print('Si es el bueno')
     if norm not in NORM_OPTIONS:
+        struct_logger.critical("Normalization not valid")
         raise properties.NormalizationError("Normalization not valid")
 
     # handle workers
@@ -842,7 +876,7 @@ def compare_structure(
     if workers == "auto":
         workers = usable_workers
     elif workers > usable_workers:
-        warn(
+        struct_logger.warning(
             f"{workers} workers requested, but only {usable_workers} are available. Using {usable_workers} workers instead."
         )
         workers = usable_workers
@@ -858,21 +892,22 @@ def compare_structure(
         [norm] * len(networks),
         [selected_props] * len(networks),
         [child_classes] * len(networks),
-        [False] * len(networks),  # verbose
+        [verbose] * len(networks),  # verbose
         [True] * len(networks),  # keep_names
     ]
 
     # run parallel
     results = run_parallel(characterize_network, data, workers, verbose=verbose)
+    struct_logger.info('Finished computing properties for all networks.')
     name_scalars_array = results["scalars"]
     name_moments_arrays = results["distributions"]
     
-    for net_name, prop in results['distributions'].items():
+    for net_id, prop in results['distributions'].items():
         for prop_name, values in prop.items():
-            name_scalars_array[net_name][f'Average {prop_name}'] = values[0]
-            name_scalars_array[net_name][f'Variation {prop_name}'] = values[1]
-            name_scalars_array[net_name][f'Skewness {prop_name}'] = values[2]
-            name_scalars_array[net_name][f'Kurtosis {prop_name}'] = values[3]
+            name_scalars_array[net_id][f'Average {prop_name}'] = values[0]
+            name_scalars_array[net_id][f'Variation {prop_name}'] = values[1]
+            name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
+            name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
     
     if return_prop_dicts:
         return name_scalars_array, name_moments_arrays
@@ -880,11 +915,13 @@ def compare_structure(
     # TODO: Optimization:  only compute the common properties
     name_scalars_array = common_props_dict(name_scalars_array)
 
+    struct_logger.info('Starting comparison and building symmetric heatmap...')
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
         df = association(name_scalars_array, corr_func=association_metric)
         fig_scalar = create_symmetric_heatmap(df, title=f"Global properties")
     else:
+        struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")
 
     return fig_scalar
