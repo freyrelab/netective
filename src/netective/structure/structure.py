@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import gc
 import math
 import uuid
 import inspect
@@ -585,6 +586,11 @@ class Structure:
             self.scalar_values, self.dist_values = self._normalize_props(
                 instances, norm=self.norm_observer.norm
             )
+        
+        # eliminate instances to free memory
+        # TODO: Memory Optimization: Instaces are regenerated even when only the normalization has changed. Consider including a cache for the instances.
+        del instances
+        gc.collect()
 
         self.dist_values = {k: v for k, v in self.dist_values.items() if not np.isnan(v).all()}
 
@@ -748,86 +754,82 @@ def er_nets_per_net_analysis(
         ValueError: if erdos_renyi is less than 0.
     """
 
-    if erdos_renyi < 0:
-        struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
-        raise ValueError("erdos_renyi must be 0 or greater")
 
-    else:
-        er_networks = {}
-        n = G.number_of_nodes()
-        m = G.number_of_edges()
-        # Creating erdos_renyi number of ER networks
-        for i in range(erdos_renyi):
-            er_networks[f'{net_id}_{i}'] = fast_gnp_random_graph(n, m / (n**2), directed=True)
-        data = [
-            list(er_networks.values()),
-            list(er_networks.keys()),
-            [norm] * len(er_networks),
-            [selected_props] * len(er_networks),
-            [child_classes] * len(er_networks),
-            [verbose] * len(er_networks),  # verbose
-            [True] * len(er_networks),  # keep_names
-        ]
-        # Computing properties for each ER network created
-        results = run_parallel(characterize_network, data, workers, verbose=verbose, process=f'analysis of ER networks for {net_id}')
-        name_er_scalars_array = results["scalars"]
-        name_er_moments_arrays = results["distributions"]
+    er_networks = {}
+    n = G.number_of_nodes()
+    m = G.number_of_edges()
+    # Creating erdos_renyi number of ER networks
+    for i in range(erdos_renyi):
+        er_networks[f'{net_id}_{i}'] = fast_gnp_random_graph(n, m / (n**2), directed=True)
+    data = [
+        list(er_networks.values()),
+        list(er_networks.keys()),
+        [norm] * len(er_networks),
+        [selected_props] * len(er_networks),
+        [child_classes] * len(er_networks),
+        [verbose] * len(er_networks),  # verbose
+        [True] * len(er_networks),  # keep_names
+    ]
+    # Computing properties for each ER network created
+    results = run_parallel(characterize_network, data, workers, verbose=verbose, process=f'analysis of ER networks for {net_id}')
+    name_er_scalars_array = results["scalars"]
+    name_er_moments_arrays = results["distributions"]
 
-        for temp_net_id, prop in name_er_moments_arrays.items():
-            for prop_name, values in prop.items():
-                name_er_scalars_array[temp_net_id][f'Average {prop_name}'] = values[0]
-                name_er_scalars_array[temp_net_id][f'Variation {prop_name}'] = values[1]
-                name_er_scalars_array[temp_net_id][f'Skewness {prop_name}'] = values[2]
-                name_er_scalars_array[temp_net_id][f'Kurtosis {prop_name}'] = values[3]
-        
-        # Determining averages for all scalar properties computed for each ER network
-        scalars_props_avg = {}
-        properties = {}
-        for i,(temp_net_id, prop) in enumerate(name_er_scalars_array.items()):
-            for prop_name, value in prop.items():
-                if i == 0:
-                    properties[prop_name] = []
-                properties[prop_name].append(value)
-        
-        for prop_name, values in properties.items():
-            scalars_props_avg[prop_name] = sum(values) / erdos_renyi
-        
-        # Determining averages for all distribution properties computed for each ER network
-        properties = {}
-        for i, (temp_net_id, prop)  in enumerate(name_er_moments_arrays.items()):
-            for prop_name, values in prop.items():
-                if i == 0:
-                    properties[prop_name] = {
-                        'Average' : [],
-                        'Variation' : [],
-                        'Skewness' : [],
-                        'Kurtosis' : []
-                    }
-                for k, value in enumerate(values):
-                    if k == 0:
-                        moment = 'Average'
-                    elif k == 1:
-                        moment = 'Variation'
-                    elif k == 2:
-                        moment = 'Skewness'
-                    elif k == 3:
-                        moment = 'Kurtosis'
-                    properties[prop_name][moment].append(value)
+    for temp_net_id, prop in name_er_moments_arrays.items():
+        for prop_name, values in prop.items():
+            name_er_scalars_array[temp_net_id][f'Average {prop_name}'] = values[0]
+            name_er_scalars_array[temp_net_id][f'Variation {prop_name}'] = values[1]
+            name_er_scalars_array[temp_net_id][f'Skewness {prop_name}'] = values[2]
+            name_er_scalars_array[temp_net_id][f'Kurtosis {prop_name}'] = values[3]
+    
+    # Determining averages for all scalar properties computed for each ER network
+    scalars_props_avg = {}
+    properties = {}
+    for i,(temp_net_id, prop) in enumerate(name_er_scalars_array.items()):
+        for prop_name, value in prop.items():
+            if i == 0:
+                properties[prop_name] = []
+            properties[prop_name].append(value)
+    
+    for prop_name, values in properties.items():
+        scalars_props_avg[prop_name] = sum(values) / erdos_renyi
+    
+    # Determining averages for all distribution properties computed for each ER network
+    properties = {}
+    for i, (temp_net_id, prop)  in enumerate(name_er_moments_arrays.items()):
+        for prop_name, values in prop.items():
+            if i == 0:
+                properties[prop_name] = {
+                    'Average' : [],
+                    'Variation' : [],
+                    'Skewness' : [],
+                    'Kurtosis' : []
+                }
+            for k, value in enumerate(values):
+                if k == 0:
+                    moment = 'Average'
+                elif k == 1:
+                    moment = 'Variation'
+                elif k == 2:
+                    moment = 'Skewness'
+                elif k == 3:
+                    moment = 'Kurtosis'
+                properties[prop_name][moment].append(value)
 
-        dist_props_avg = {}
-        for prop_name, moments in properties.items():
-            dist_props_avg[prop_name] = []
-            for moment, values in moments.items():
-                moment_avg = sum(values) / len(values)
-                dist_props_avg[prop_name].append(moment_avg)
-        
-        scalars_avg_er_net = {
-            f'{net_id}_Avg_ER' : scalars_props_avg
-        }
+    dist_props_avg = {}
+    for prop_name, moments in properties.items():
+        dist_props_avg[prop_name] = []
+        for moment, values in moments.items():
+            moment_avg = sum(values) / len(values)
+            dist_props_avg[prop_name].append(moment_avg)
+    
+    scalars_avg_er_net = {
+        f'{net_id}_Avg_ER' : scalars_props_avg
+    }
 
-        dist_avg_er_net = {
-            f'{net_id}_Avg_ER' : dist_props_avg
-        }
+    dist_avg_er_net = {
+        f'{net_id}_Avg_ER' : dist_props_avg
+    }
 
     return scalars_avg_er_net, dist_avg_er_net
 
@@ -937,6 +939,8 @@ def characterize_network(
     
     if verbose != None:
         set_log_level(current_level)
+    
+    return fig_scalar, fig_dist
 
 def common_props_dict(networks):
     new = defaultdict(lambda:defaultdict())
@@ -967,7 +971,7 @@ def compare_structure(
     return_prop_dicts: bool = False,
     association_metric: Callable = pearsonr,
     verbose: str = None,
-    erdos_renyi : int = None
+    erdos_renyi : int = 0
 ) -> Tuple[dict, dict] | plt.Figure:
 
     """Module-level function to compare multiple networks.
@@ -1029,7 +1033,12 @@ def compare_structure(
             name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
     
     # TODO aqui se agregaría llamada a struc props call para cada red
-    if erdos_renyi != None:
+    if erdos_renyi:
+
+        if erdos_renyi < 0:
+            struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
+            raise ValueError("erdos_renyi must be 0 or greater")
+    
         struct_logger.info('Analyzing ER networks...')
         for net_id, net in networks.items():
             er_scalars_array, er_moments_arrays = er_nets_per_net_analysis(

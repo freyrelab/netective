@@ -3,10 +3,41 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
+def format_title(input_str):
+    # Check if the length of the string is greater than 22
+    if len(input_str) > 22:
+
+        words = input_str.split()
+
+        result = []
+        current_line = words[0]
+
+        # Iterate through the words
+        for word in words[1:]:
+            # Check if the word fits in the current line
+            if len(current_line) + len(word) + 1 <= 22:
+                current_line += ' ' + word
+            else:
+                result.append(current_line)
+                current_line = word
+
+        # Add the last line to the result
+        result.append(current_line)
+
+        formatted_result = '\n'.join(result)
+
+        return formatted_result
+
+    else:
+        return input_str
+
+
 
 def plot_distributions(dist_values):
     # Determine the grid shape based on the number of items
     num_items = len(dist_values)
+    if num_items == 0:
+        return None, None
     if num_items > 1:
         grid_shape = (int(np.sqrt(num_items)) + 1, int(np.ceil(np.sqrt(num_items))) + 1)
     else:
@@ -25,7 +56,7 @@ def plot_distributions(dist_values):
     for i, (title, data) in enumerate(dist_values.items()):
         ax = axs[i] if num_items > 1 else axs  # Use a single axis if there's only one item
         sns.kdeplot(data, ax=ax, fill=True, color="#384265")
-        ax.set_title(title)
+        ax.set_title(format_title(title))
 
     # Remove any extra empty subplots, only if there is more than one distribution to plot
     if num_items > 1:
