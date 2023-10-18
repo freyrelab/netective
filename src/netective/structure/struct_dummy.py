@@ -28,8 +28,8 @@ from netective.utils import (
     concat_path,
     ShortestDistances,
     ShortestPaths,
+    count_3motifs,
     giant_component,
-    giant_component_size,
     remove_self_loops,
     association,
 )
@@ -42,6 +42,7 @@ from typing import Callable, Iterable
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
 PARENT_CLASS = properties._Property
+MOTIFS = 16
 DIRECTED = 8
 SELF_LOOPS = 4
 GIANT_COMPONENT = 2
@@ -62,12 +63,13 @@ def get_child_classes(parent_class, selected_props) -> dict:
             if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
                 # print(obj.CLASS_NAME, end="\n") #TODO: UX: only if vervose
                 bool_mask = [
+                    obj._use_motifs,
                     obj._use_direction,
                     obj._use_selfloops,
                     obj._use_giant_component,
                     obj._use_paths,
                 ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 4
+                child_classes[obj] = np.packbits(bool_mask).item() >> 3
                 all_properties.append(obj.CLASS_NAME)
     else:
         for name, obj in inspect.getmembers(properties):
@@ -79,12 +81,13 @@ def get_child_classes(parent_class, selected_props) -> dict:
             ):
                 # print(obj.CLASS_NAME, end="\n")
                 bool_mask = [
+                    obj._use_motifs,
                     obj._use_direction,
                     obj._use_selfloops,
                     obj._use_giant_component,
                     obj._use_paths,
                 ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 4
+                child_classes[obj] = np.packbits(bool_mask).item() >> 3
                 all_properties.append(obj.CLASS_NAME)
             if (
                 inspect.isclass(obj)
@@ -408,6 +411,7 @@ class Structure:
             haveto_remove_self_loops = mask & SELF_LOOPS == 0
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
+            get_motifs = mask & MOTIFS != 0
 
             # Dummy graph that will be modified, only if it applies
             graph_copy = original_graph.copy()
@@ -429,8 +433,14 @@ class Structure:
                 # Input requires paths objects besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
-                # Input requires only the modified graph
-                graphs[mask] = graph_copy
+                if get_motifs:
+                    inicio = time.time()
+                    motifs_obj = count_3motifs(graph_copy)
+                    times.append(time.time() - inicio)
+                    graphs[mask] = (graph_copy, motifs_obj)
+                else:
+                    # Input requires only the modified graph
+                    graphs[mask] = graph_copy
         return graphs, times
 
     def __get_modify_undirected_graphs(self, property_groups, original_graph):
@@ -446,6 +456,7 @@ class Structure:
             haveto_remove_self_loops = mask & SELF_LOOPS == 0
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
+            get_motifs = mask & MOTIFS != 0
 
             # Dummy graph that will be modified, only if it applies
             graph_copy = original_graph.copy()
@@ -467,8 +478,14 @@ class Structure:
                 # Input requires paths objects besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
+                if get_motifs:
+                    inicio = time.time()
+                    motifs_obj = count_3motifs(graph_copy)
+                    times.append(time.time() - inicio)
+                    graphs[mask] = (graph_copy, motifs_obj)
                 # Input requires only the modified graph
-                graphs[mask] = graph_copy
+                else:
+                    graphs[mask] = graph_copy
         return graphs, times
 
     def __get_instances(self, property_groups, original_graph):
@@ -478,31 +495,13 @@ class Structure:
         modified_undirected_graphs = {}
 
         if original_graph.is_directed():
-            #TODO esto se tiene que ir 
             temp_dict, dir_times = self.__get_modify_directed_graphs(property_groups, original_graph)
             modified_directed_graphs.update(temp_dict)
-            """
-            modified_directed_graphs.update(
-                self.__get_modify_directed_graphs(property_groups, original_graph)
-            )
-            """
-            #TODO esto se tiene que ir 
             temp_dict, undir_times = self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
             modified_undirected_graphs.update(temp_dict)
-            """
-            modified_undirected_graphs.update(
-                self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
-            )
-            """
         else:
-            #TODO esto se tiene que ir 
             temp_dict, undir_times = self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
             modified_undirected_graphs.update(temp_dict)
-            """
-            modified_undirected_graphs.update(
-                self.__get_modify_undirected_graphs(property_groups, original_graph)
-            )
-            """
 
         # Dict with keys: masks for each property group
         #           values: required input to instance each property in that property group
@@ -519,15 +518,23 @@ class Structure:
             for class_ in class_group:
                 if isinstance(property_input, tuple):
                     G = property_input[0]
-                    net_shortest_paths = property_input[1]
-                    net_shortest_distances = property_input[2]
-                    instances[class_.CLASS_NAME] = class_(
-                        G,
-                        net_shortest_paths=net_shortest_paths,
-                        net_shortest_distances=net_shortest_distances,
-                    )
+                    if isinstance(property_input[1], ShortestPaths):
+                        net_shortest_paths = property_input[1]
+                        net_shortest_distances = property_input[2]
+                        instances[class_.CLASS_NAME] = class_(
+                            G,
+                            net_shortest_paths=net_shortest_paths,
+                            net_shortest_distances=net_shortest_distances,
+                        )
+                    else:
+                        motifs_obj = property_input[1]
+                        instances[class_.CLASS_NAME] = class_(
+                            G,
+                            motifs_obj= motifs_obj
+                        )
                 else:
                     instances[class_.CLASS_NAME] = class_(property_input)
+        undir_times.extend(dir_times)
         return instances, undir_times
 
     def _compute_props(self, child_classes) -> dict[str, float, int]:
@@ -565,19 +572,16 @@ class Structure:
             property_groups[mask].append(class_)
 
         instances, obj_times = self.__get_instances(property_groups, self.G)
-        # Computing of global properties
-        # BANDERA
-        # self.scalar_values = {
-            # x.CLASS_NAME: x.compute() for name, x in instances.items() if x._return_type == "scalar"
-        # }
 
-        # TODO esto se tiene que ir
+
         inicio = time.time()
         self.scalar_values = {}
         self.dist_values = {}
         prop_times = {}
+
         prop_times['shortest_paths_obj'] = obj_times[0]
         prop_times['shortest_distances_obj'] = obj_times[1]
+        prop_times['motifs_obj'] = obj_times[2]
         
         times = []
         
@@ -589,13 +593,6 @@ class Structure:
                 prop_times[x.CLASS_NAME] = times[i] - inicio
             else:
                 prop_times[x.CLASS_NAME] = times[i] - times[i-1]
-
-        # Computing of node-level properties
-        # self.dist_values = {
-            # x.CLASS_NAME: x.compute()
-            # for name, x in instances.items()
-            # if x._return_type == "distribution"
-        # }
 
         if self.norm_observer.norm is not None:
             self.scalar_values, self.dist_values, prop_times = self._normalize_props(
@@ -657,7 +654,7 @@ class Structure:
 
                 if child_classes is None:
                     child_classes = get_child_classes(PARENT_CLASS, props)
-
+                
                 # props y props_times
                 scalar_values, dist_values, prop_times = self._compute_props(child_classes)
                 self._scalar_arrays[self.net_id] = scalar_values
@@ -676,61 +673,106 @@ class Structure:
 
         return self._scalar_arrays, self._dist_moments_arrays, prop_times
 
-
-def struc_props_call(
+def er_nets_per_net_analysis(
     G: DiGraph | Graph,
     net_id: str,
     norm: None | str | pd.Series,
-    erdos_renyi: int,
-    verbose: bool = False,
-) -> list(tuple(str, dict)):
+    erdos_renyi: int = 2,
+    selected_props : str | list = 'all',
+    workers: str | int = "auto",
+    verbose: str = None
+) -> Tuple[dict, dict]:
 
     """
-    Call the function struc_props with erdos_renyi random graphs with the same number of nodes and edges as G.
+    Call the function er_nets_per_net_analysis to generate erdos_renyi number of ER networks for a given network.
+    The function will compute properties for all ER networks generated, then calculate averages for each property.
+
+    It returns a tuple of dictionaries, one for the average scalar properties and one for the average moments of each distribution.
 
     Args:
-        G: DiGraph or Graph.
-            Network to compute the structural properties.
-        net_id: str.
-            Name of the network.
-        norm: bool.
-            If True, the properties are normalized (biological criteria).
-        erdos_renyi: int.
-            Number of random graphs to generate with the same number of nodes and edges as G.
-            If 0, only the properties of G are computed.
-            If greater than 0, the properties of G and the average properties of the random graphs are computed.
+        G (DiGraph or Graph): Network to use as temple for ER networks created.
+        norm (str, optional): Normalization to apply.
+            Valid values are 'network', 'biological' or None. Defaults to None.
+        selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
+        erdos_renyi (int): Number of random graphs to generate with the same number of nodes and density as G. Defaults to 2.
+        workers (int, optional): Number of workers to use. Defaults to 'auto'.
+            Auto means number of cpu's - 1. 
+        verbose (str, optional): Level of verbose desired for logging process.
+            View logging levels from Logging library.
 
     Returns:
-        list(tuple(str, dict)): list of tuples with the network id and the properties of the network.
-
-    Raises:
-        ValueError: if erdos_renyi is less than 0.
+        Tuple[dict, dict]: Tuple of dictionaries with the network id and the properties of the network.
     """
-    S_bio = Structure(G, norm=norm, net_id=net_id, verbose=verbose)
-    props = S_bio.get_props()
 
-    if erdos_renyi < 0:
-        raise ValueError("erdos_renyi must be 0 or greater")
+    # Creating erdos_renyi number of ER networks, with the same number of nodes, density and direction
+    n = G.number_of_nodes()
+    m = G.number_of_edges()
+    er_networks = {
+        f'{net_id}_{i}' : fast_gnp_random_graph(n, m / (n**2), directed= G.is_directed())
+        for i in range(erdos_renyi)
+    }
+    
+    # Computing properties for erdos_renyi number of ER networks created
+    name_er_scalars_array, name_er_moments_arrays = compare_structure(
+                            networks= er_networks,
+                            norm= norm,
+                            selected_props= selected_props,
+                            workers= workers,
+                            return_prop_dicts= True,
+                            verbose= verbose,
+                            erdos_renyi= None
+    )
 
-    elif erdos_renyi == 0:
-        netid_props = [(net_id, props)]
+    # Determining averages for all scalar properties computed for each ER network
+    properties = {}
+    for i,(temp_net_id, prop) in enumerate(name_er_scalars_array.items()):
+        for prop_name, value in prop.items():
+            if i == 0:
+                properties[prop_name] = []
+            properties[prop_name].append(value)
+    scalars_props_avg = {
+        prop_name : sum(values) / erdos_renyi
+        for prop_name, values in properties.items()
+    }
+    
+    # Determining averages for all distribution properties computed for each ER network
+    properties = {}
+    for i, (temp_net_id, prop)  in enumerate(name_er_moments_arrays.items()):
+        for prop_name, values in prop.items():
+            if i == 0:
+                properties[prop_name] = {
+                    'Average' : [],
+                    'Variation' : [],
+                    'Skewness' : [],
+                    'Kurtosis' : []
+                }
+            for k, value in enumerate(values):
+                if k == 0:
+                    moment = 'Average'
+                elif k == 1:
+                    moment = 'Variation'
+                elif k == 2:
+                    moment = 'Skewness'
+                elif k == 3:
+                    moment = 'Kurtosis'
+                properties[prop_name][moment].append(value)
 
-    else:
-        props_er = defaultdict(list)
-        n = G.number_of_nodes()
-        m = G.number_of_edges()
-        for i in range(erdos_renyi):
-            ER = fast_gnp_random_graph(n, m / (n**2), directed=True)
-            S_er = Structure(ER, norm=norm, net_id=f"{net_id}_ER_{i}", verbose=verbose)
-            props_i = S_er.get_props()
-            for k, v in props_i.items():
-                props_er[k].append(v)
+    dist_props_avg = {}
+    for prop_name, moments in properties.items():
+        dist_props_avg[prop_name] = []
+        for moment, values in moments.items():
+            moment_avg = sum(values) / len(values)
+            dist_props_avg[prop_name].append(moment_avg)
+    
+    # Final dictionaries
+    scalars_avg_er_net = {
+        f'{net_id}_Avg_ER' : scalars_props_avg
+    }
+    dist_avg_er_net = {
+        f'{net_id}_Avg_ER' : dist_props_avg
+    }
 
-        props_er_avg = {prop: sum(vals) / len(vals) for prop, vals in props_er.items()}
-        netid_props = [(net_id, props), (f"{net_id}_ER_avg", props_er_avg)]
-
-    return netid_props
-
+    return scalars_avg_er_net, dist_avg_er_net
 
 def save_strucs(
     scalar_props: dict,

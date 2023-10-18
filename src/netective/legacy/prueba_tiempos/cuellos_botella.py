@@ -107,26 +107,27 @@ if __name__ == '__main__':
             'hESC_chipunion.txt',
             'hESC_chipunion_KDUnion_intersect.txt'
         ]
-    """
+    
     test_nets = [
          'yeast_chipunion_KDUnion_intersect.txt',
          'mESC_chipunion_KDUnion_intersect.txt',
          'mDC_chipunion_KDUnion_intersect.txt',
          'hESC_chipunion_KDUnion_intersect.txt'
     ]
+    """
     paths = get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\netective\\data\\mouse_net")
     # paths.extend(get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\netective\\data\\human_net"))
     # paths = get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\aux_netective\\single_cell_analysis\\gold_standard_datasets", validate= True, selected= test_nets)
     # paths.extend(get_paths("H:\\Mi unidad\\Respaldo\\Genomicas\\aux_netective\\single_cell_analysis\\imputed_inferred_networks"))
 
-    test = [path for i,path in enumerate(paths) if i < 2]
+    test = [path for i,path in enumerate(paths)]
 
     # input_dataset = [(net_path, 'GS_') if i < 12 else (net_path, 'INF_') for i,net_path in enumerate(paths)]
     input_dataset = [(net_path, 'INF_') for net_path in test]
     raw_props_times = {}
     norm_props_times = {}
 
-    for j,(name, data_dict) in enumerate(run_parallel(analyze, input_dataset, workers=2).items()):
+    for j,(name, data_dict) in enumerate(run_parallel(analyze, input_dataset, workers=6).items()):
         for i,(name_2, data) in enumerate(data_dict.items()):
             dict_ = raw_props_times if re.search('raw', name_2) else norm_props_times
             if i == 0 and j == 0:

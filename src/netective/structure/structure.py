@@ -56,16 +56,14 @@ PATHS = 1
 struct_logger = get_logger(__name__)
 
 # Auxiliar Fxns
-
 def set_log_level(verbose: str = 'CRITICAL'):
     if isinstance(verbose, str):
         numeric_level = getattr(logging, verbose.upper(), None)
     else:
         numeric_level = verbose
-    
     if not isinstance(numeric_level, int):
         struct_logger.critical(f'Invalid verbose level: {verbose}')
-        raise TypeError(f'Invalid verbose level: {verbose}')
+        raise TypeError(f'Invalid verbose level.')
     
     struct_logger.setLevel(numeric_level)
 
@@ -77,11 +75,11 @@ def get_child_classes(parent_class, selected_props) -> dict:
     child_classes = {}
     all_properties = []
     
-    # print(f"Properties used for analysis: ") #TODO: UX: only if vervose
+    struct_logger.info("Properties used for analysis (based on selected_props): ")
     if selected_props == "all":
         for name, obj in inspect.getmembers(properties):
             if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
-                # print(obj.CLASS_NAME, end="\n") #TODO: UX: only if vervose
+                struct_logger.info(f'{obj.CLASS_NAME}')
                 bool_mask = [
                     obj._use_motifs,
                     obj._use_direction,
@@ -99,7 +97,7 @@ def get_child_classes(parent_class, selected_props) -> dict:
                 and obj != parent_class
                 and obj.CLASS_NAME in selected_props
             ):
-                # print(obj.CLASS_NAME, end="\n")
+                struct_logger.info(f'{obj.CLASS_NAME}')
                 bool_mask = [
                     obj._use_motifs,
                     obj._use_direction,
@@ -116,10 +114,11 @@ def get_child_classes(parent_class, selected_props) -> dict:
                 and obj.CLASS_NAME not in all_properties
             ):
                 all_properties.append(obj.CLASS_NAME)
-    # print("\n")
+    struct_logger.info('')
     if len(child_classes) == 0:
+        struct_logger.critical(f"Sorry, no matches for properties inquired.\nList of available properties is: {all_properties}")
         raise Exception(
-            f"Sorry, no matches for properties inquired.\nList of available properties is: {all_properties}"
+            f"Invalid list of properties."
         )
     return child_classes
 
@@ -301,24 +300,20 @@ class Structure:
         Structure inherits from pandas.Series.
 
         Creating a Structure object does not compute the structural properties.
-        Insted, it sets the attributes of the object for future property computation.
+        Instead, it sets the attributes of the object for future property computation.
         Use the get_props() method to compute the structural properties.
         If the network has changed, the properties and the normalization factors are recomputed when get_props() is called.
 
         Args:
-            G: DiGraph or Graph.
-                Network to compute the structural properties.
-            norm: None|str|pd.Series.
-                Normalization factor for each property.
+            G (DiGraph | Graph): Network to compute the structural properties.
+            norm (None | str | pd.Series): Normalization factor for each property. Defaults to None.
                 Use None to disable normalization.
                 Use 'biol' to normalize by the biological scale factors.
                 Use a dictionary to normalize by custom scale factors.
                 Missing properties are reported as NaN.
-            net_id: str.
-                Name of the network. If None, a random uuid is assigned.
+            net_id (str): Name of the network. If None, a random uuid is assigned.
                 Used for verbose mode and raising errors.
-            verbose: str.
-                Whether to print information about the network.
+            verbose (str, optional): Whether to print information about the network. Defaults to None.
 
         Returns:
             Structure: Object with the structural properties of the network.
@@ -346,7 +341,7 @@ class Structure:
             norm
         )  # object to observe changes in the normalization strategy
         self.verbose = verbose   
-        self.net_id = net_id if net_id is not None else str(uuid.uuid4())
+        self.net_id = net_id if net_id is not None else str(uuid.uuid4())[:8]
 
     @property
     def norm(self) -> None | str | pd.Series:
@@ -528,14 +523,11 @@ class Structure:
         Computes the structural properties of a network.
 
         Args:
-            G: DiGraph or Graph.
-                Network to compute the structural properties.
-            norm: None|str|pd.Series.
-                Normalization factor for each property.
-            net_id: str.
-                Name of the network. If None, a random uuid is assigned.
-            child_classes: dict.
-                Dict of classes to compute the structural properties.
+            G (DiGraph | Graph): Network to compute the structural properties.
+            norm (None | str | pd.Series): Normalization factor for each property.
+            net_id (str): Name of the network. If None, a random uuid is assigned.
+            child_classes (dict): Dict of classes to compute the structural properties.
+                dict[str, float, int]
 
         Returns:
             dict: Dictionary with the structural properties of the network.
@@ -565,22 +557,6 @@ class Structure:
             else:
                 self.dist_values[x.CLASS_NAME] = x.compute()
             struct_logger.debug(f'Finished computing: {x.CLASS_NAME}')
-        
-        """
-        # Computing of global properties
-        self.scalar_values = {
-            x.CLASS_NAME: x.compute()
-            for name, x in instances.items()
-            if x._return_type == "scalar"
-        }
-
-        # Computing of node-level properties
-        self.dist_values = {
-            x.CLASS_NAME: x.compute()
-            for name, x in instances.items()
-            if x._return_type == "distribution"
-        }
-        """
 
         if self.norm_observer.norm is not None:
             self.scalar_values, self.dist_values = self._normalize_props(
@@ -605,14 +581,11 @@ class Structure:
         If both are provided, props is ignored.
 
         Args:
-            props: str|list.
-                Structural properties to compute.
+            props (str|list): Structural properties to compute.
                 Use 'all' to compute all the properties.
                 Use a list of property names to compute only those properties.
                 Use a list of property classes to compute all the properties of those classes.
-            child_classes: dict.
-                List of property classes to compute all the properties of those classes.
-
+            child_classes (dict): List of property classes to compute all the properties of those classes.
 
         Returns:
             If keep_names is True, it returns a dictionary with the name_id as key and as its value, a dict with property names as keys.
@@ -665,134 +638,67 @@ class Structure:
 
         return self._scalar_arrays, self._dist_moments_arrays
 
-
-def struc_props_call(
-    G: DiGraph | Graph,
-    net_id: str,
-    norm: None | str | pd.Series,
-    erdos_renyi: int,
-    verbose: str = None,
-) -> list(tuple(str, dict)):
-
-    """
-    Call the function struc_props with erdos_renyi random graphs with the same number of nodes and edges as G.
-
-    Args:
-        G: DiGraph or Graph.
-            Network to compute the structural properties.
-        net_id: str.
-            Name of the network.
-        norm: bool.
-            If True, the properties are normalized (biological criteria).
-        erdos_renyi: int.
-            Number of random graphs to generate with the same number of nodes and edges as G.
-            If 0, only the properties of G are computed.
-            If greater than 0, the properties of G and the average properties of the random graphs are computed.
-
-    Returns:
-        list(tuple(str, dict)): list of tuples with the network id and the properties of the network.
-
-    Raises:
-        ValueError: if erdos_renyi is less than 0.
-    """
-    S_bio = Structure(G, norm=norm, net_id=net_id, verbose=verbose)
-    props = S_bio.get_props()
-
-    if erdos_renyi < 0:
-        struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
-        raise ValueError("erdos_renyi must be 0 or greater")
-
-    elif erdos_renyi == 0:
-        netid_props = [(net_id, props)]
-
-    else:
-        props_er = defaultdict(list)
-        n = G.number_of_nodes()
-        m = G.number_of_edges()
-        for i in range(erdos_renyi):
-            ER = fast_gnp_random_graph(n, m / (n**2), directed=True)
-            S_er = Structure(ER, norm=norm, net_id=f"{net_id}_ER_{i}", verbose=verbose)
-            props_i = S_er.get_props()
-            for k, v in props_i.items():
-                props_er[k].append(v)
-
-        props_er_avg = {prop: sum(vals) / len(vals) for prop, vals in props_er.items()}
-        netid_props = [(net_id, props), (f"{net_id}_ER_avg", props_er_avg)]
-
-    return netid_props
-
 def er_nets_per_net_analysis(
     G: DiGraph | Graph,
     net_id: str,
     norm: None | str | pd.Series,
-    erdos_renyi: int,
-    child_classes = list,
+    erdos_renyi: int = 2,
     selected_props : str | list = 'all',
-    verbose: str = None,
-    workers = int
-) -> list(tuple(str, dict)):
+    workers: str | int = "auto",
+    verbose: str = None
+) -> Tuple[dict, dict]:
 
     """
-    Call the function struc_props with erdos_renyi random graphs with the same number of nodes and edges as G.
+    Call the function er_nets_per_net_analysis to generate erdos_renyi number of ER networks for a given network.
+    The function will compute properties for all ER networks generated, then calculate averages for each property.
+
+    It returns a tuple of dictionaries, one for the average scalar properties and one for the average moments of each distribution.
 
     Args:
-        G: DiGraph or Graph.
-            Network to compute the structural properties.
-        net_id: str.
-            Name of the network.
-        norm: bool.
-            If True, the properties are normalized (biological criteria).
-        erdos_renyi: int.
-            Number of random graphs to generate with the same number of nodes and edges as G.
-            If 0, only the properties of G are computed.
-            If greater than 0, the properties of G and the average properties of the random graphs are computed.
+        G (DiGraph or Graph): Network to use as temple for ER networks created.
+        norm (str, optional): Normalization to apply.
+            Valid values are 'network', 'biological' or None. Defaults to None.
+        selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
+        erdos_renyi (int): Number of random graphs to generate with the same number of nodes and density as G. Defaults to 2.
+        workers (int, optional): Number of workers to use. Defaults to 'auto'.
+            Auto means number of cpu's - 1. 
+        verbose (str, optional): Level of verbose desired for logging process.
+            View logging levels from Logging library.
 
     Returns:
-        list(tuple(str, dict)): list of tuples with the network id and the properties of the network.
-
-    Raises:
-        ValueError: if erdos_renyi is less than 0.
+        Tuple[dict, dict]: Tuple of dictionaries with the network id and the properties of the network.
     """
 
-
-    er_networks = {}
+    # Creating erdos_renyi number of ER networks, with the same number of nodes, density and direction
     n = G.number_of_nodes()
     m = G.number_of_edges()
-    # Creating erdos_renyi number of ER networks
-    for i in range(erdos_renyi):
-        er_networks[f'{net_id}_{i}'] = fast_gnp_random_graph(n, m / (n**2), directed=True)
-    data = [
-        list(er_networks.values()),
-        list(er_networks.keys()),
-        [norm] * len(er_networks),
-        [selected_props] * len(er_networks),
-        [child_classes] * len(er_networks),
-        [verbose] * len(er_networks),  # verbose
-        [True] * len(er_networks),  # keep_names
-    ]
-    # Computing properties for each ER network created
-    results = run_parallel(characterize_network, data, workers, verbose=verbose, process=f'analysis of ER networks for {net_id}')
-    name_er_scalars_array = results["scalars"]
-    name_er_moments_arrays = results["distributions"]
-
-    for temp_net_id, prop in name_er_moments_arrays.items():
-        for prop_name, values in prop.items():
-            name_er_scalars_array[temp_net_id][f'Average {prop_name}'] = values[0]
-            name_er_scalars_array[temp_net_id][f'Variation {prop_name}'] = values[1]
-            name_er_scalars_array[temp_net_id][f'Skewness {prop_name}'] = values[2]
-            name_er_scalars_array[temp_net_id][f'Kurtosis {prop_name}'] = values[3]
+    er_networks = {
+        f'{net_id}_{i}' : fast_gnp_random_graph(n, m / (n**2), directed= G.is_directed())
+        for i in range(erdos_renyi)
+    }
     
+    # Computing properties for erdos_renyi number of ER networks created
+    name_er_scalars_array, name_er_moments_arrays = compare_structure(
+                            networks= er_networks,
+                            norm= norm,
+                            selected_props= selected_props,
+                            workers= workers,
+                            return_prop_dicts= True,
+                            verbose= verbose,
+                            erdos_renyi= None
+    )
+
     # Determining averages for all scalar properties computed for each ER network
-    scalars_props_avg = {}
     properties = {}
     for i,(temp_net_id, prop) in enumerate(name_er_scalars_array.items()):
         for prop_name, value in prop.items():
             if i == 0:
                 properties[prop_name] = []
             properties[prop_name].append(value)
-    
-    for prop_name, values in properties.items():
-        scalars_props_avg[prop_name] = sum(values) / erdos_renyi
+    scalars_props_avg = {
+        prop_name : sum(values) / erdos_renyi
+        for prop_name, values in properties.items()
+    }
     
     # Determining averages for all distribution properties computed for each ER network
     properties = {}
@@ -823,10 +729,10 @@ def er_nets_per_net_analysis(
             moment_avg = sum(values) / len(values)
             dist_props_avg[prop_name].append(moment_avg)
     
+    # Final dictionaries
     scalars_avg_er_net = {
         f'{net_id}_Avg_ER' : scalars_props_avg
     }
-
     dist_avg_er_net = {
         f'{net_id}_Avg_ER' : dist_props_avg
     }
@@ -841,21 +747,17 @@ def save_strucs(
     delimiter: str = "\t",
     cl: str = None,
 ) -> None:
-
     """
     Save the structural properties in a file containing the name of the network and the properties.
 
     Args:
-        scalar_props: dict.
-            Dictionary with the scalar properties of the networks. {network_name: {property_name: property_value}}.
-        dist_props: dict.
-            Dictionary with the distribution properties of the networks. {network_name: {property_name: property_value}}.
-        output_dir: str.
-            Path to the output directory.
-        delimiter: str.
-            Delimiter to use in the output file.
-        cl: str.
-            Command line used to run the script.
+        scalar_props (dict): Dictionary with the scalar properties of the networks.
+            {network_name: {property_name: property_value}}.
+        dist_props (dict): Dictionary with the distribution properties of the networks.
+            {network_name: {property_name: property_moments}}.
+        output_dir (str): Path to the output directory. Defaults to current directory.
+        delimiter (str): Delimiter to use in the output file. Defaults to tab.
+        cl (str): Command line used to run the script.
 
     Returns:
         None.
@@ -885,18 +787,19 @@ def save_strucs(
     df_d.to_csv(file_p_d, sep=delimiter)
     
 
-# User Fxns
+# User Fxn's
 # Characterization of one network
 def characterize_network(
     G: DiGraph | Graph,
-    name: str,
+    net_id: str = None,
     norm: str | None = None,
     selected_props: str | list = "all",
     child_classes: dict = None,
     verbose: str = None,
     return_prop_dicts: bool = False,
 ) -> None | Tuple[dict, dict]:
-    """Module-level function to characterize a single network.
+    """
+    Module-level function to characterize a single network.
 
     Args:
         G (DiGraph | Graph): Network to characterize.
@@ -912,14 +815,13 @@ def characterize_network(
 
     Raises:
         Exception: Raised if the normalization is not valid.
-
     """
-
     if verbose != None:
         current_level = struct_logger.getEffectiveLevel()
         set_log_level(verbose)
     
-    struc = Structure(G, norm=norm, net_id=name, verbose=verbose)
+    net_id = net_id if net_id is not None else str(uuid.uuid4())[:8]
+    struc = Structure(G, norm= norm, net_id= net_id, verbose= verbose)
     if child_classes is not None:
         scalar_values, dist_values = struc.get_props(child_classes=child_classes)
     else:
@@ -931,11 +833,12 @@ def characterize_network(
 
     if return_prop_dicts:
         return scalar_values, dist_values
-
+    
     if len(dist_values) != 0:
-        fig_dist, _ = plot_distributions(dist_values[name])
+        fig_dist, _ = plot_distributions(dist_values[net_id])
+
     if len(scalar_values) != 0:
-        fig_scalar, _ = plot_scalars(scalar_values[name])
+        fig_scalar, _ = plot_scalars(scalar_values[net_id])
     
     if verbose != None:
         set_log_level(current_level)
@@ -973,17 +876,20 @@ def compare_structure(
     verbose: str = None,
     erdos_renyi : int = 0
 ) -> Tuple[dict, dict] | plt.Figure:
-
-    """Module-level function to compare multiple networks.
+    """
+    Module-level function to compare multiple networks.
 
     Returns a tuple of figures, one for the scalar properties and one for the distributions if return_prop_dicts is False.
     Otherwise, it returns a tuple of dictionaries, one for the scalar properties and one for the distributions.
 
     Args:
-        networks (dict): Dictionary of networks to compare {'name':DiGraph | Graph}.
-        norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
+        networks (dict): Dictionary of networks to compare.
+            {'net_id': DiGraph | Graph}
+        norm (str, optional): Normalization to apply. Defaults to None.
+            Valid values are 'network', 'biological' or None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
         workers (int, optional): Number of workers to use. Defaults to 'auto'.
+            Auto means number of cpu's - 1.
 
     Raises:
         NormalizationError: Raised if the normalization is not valid.
@@ -1032,7 +938,6 @@ def compare_structure(
             name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
             name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
     
-    # TODO aqui se agregaría llamada a struc props call para cada red
     if erdos_renyi:
 
         if erdos_renyi < 0:
@@ -1047,7 +952,6 @@ def compare_structure(
                                                                 norm= norm, 
                                                                 erdos_renyi= erdos_renyi, 
                                                                 selected_props= selected_props,
-                                                                child_classes= child_classes,
                                                                 workers= workers
                                                             )
             name_scalars_array.update(er_scalars_array)
