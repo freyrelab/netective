@@ -71,53 +71,68 @@ def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
 
 # Get properties selected Fxn
-def get_child_classes(parent_class, selected_props) -> dict:
+def get_child_classes(parent_class: type=properties._Property, selected_props: str|list="all", include_env: None|dict=None) -> dict:
+    """Returns a dict of child classes of parent_class based on selected_props.
+    
+    Args:
+        parent_class (type): Parent class to search for child classes.
+            This function is intented to work for the properties.Property abscract class.
+        selected_props (str|list, optional): Properties to search for. Defaults to "all".
+            Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names.
+        include_env (None|dict, optional): Dictionary with the environment variables to include. Defaults to None.
+    
+    Returns:
+        dict: Dictionary with the child classes found and their corresponding mask to process the graph.
+    
+    Raises:
+        ValueError: If no valid property names are provided.
+    """
+
+    def _valid_child_cls(cls, parent_class):
+        return inspect.isclass(cls) and issubclass(cls, parent_class) and cls != parent_class
+    
+    def _define_mask(cls):
+        bool_mask = [
+            cls._use_motifs,
+            cls._use_direction,
+            cls._use_selfloops,
+            cls._use_giant_component,
+            cls._use_paths
+        ]
+        return np.packbits(bool_mask).item() >> 3
+
     child_classes = {}
     all_properties = []
-    
+    property_childs = inspect.getmembers(properties)
+
+    if include_env is not None:
+        if not isinstance(include_env, dict):
+            raise ValueError(f'Invalid environment variables. Must be a dictionary.')
+        for key, value in include_env.items():
+            if _valid_child_cls(value, parent_class):
+                struct_logger.info(f'{key} is a user-defined property.')
+                all_properties.append(key)
+                child_classes[value] = _define_mask(value)
+        
     struct_logger.info("Properties used for analysis (based on selected_props): ")
-    if selected_props == "all":
-        for name, obj in inspect.getmembers(properties):
-            if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
-                struct_logger.info(f'{obj.CLASS_NAME}')
-                bool_mask = [
-                    obj._use_motifs,
-                    obj._use_direction,
-                    obj._use_selfloops,
-                    obj._use_giant_component,
-                    obj._use_paths
-                ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 3
-                all_properties.append(obj.CLASS_NAME)
-    else:
-        for name, obj in inspect.getmembers(properties):
-            if (
-                inspect.isclass(obj)
-                and issubclass(obj, parent_class)
-                and obj != parent_class
-                and obj.CLASS_NAME in selected_props
-            ):
-                struct_logger.info(f'{obj.CLASS_NAME}')
-                bool_mask = [
-                    obj._use_motifs,
-                    obj._use_direction,
-                    obj._use_selfloops,
-                    obj._use_giant_component,
-                    obj._use_paths
-                ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 3
-                all_properties.append(obj.CLASS_NAME)
-            if (
-                inspect.isclass(obj)
-                and issubclass(obj, parent_class)
-                and obj != parent_class
-                and obj.CLASS_NAME not in all_properties
-            ):
-                all_properties.append(obj.CLASS_NAME)
+
+    for name, cls in property_childs:
+        if _valid_child_cls(cls, parent_class):
+            all_properties.append(cls.CLASS_NAME)
+            child_classes[cls] = _define_mask(cls)
+
+    if selected_props != "all":
+        if not isinstance(selected_props, list):
+            selected_props = [selected_props]
+        child_classes = {cls: mask for cls, mask in child_classes.items() if cls.CLASS_NAME in selected_props}
+    
+    for cls in child_classes:
+        struct_logger.info(f'{cls.CLASS_NAME}')
+        
     struct_logger.info('')
     if len(child_classes) == 0:
-        struct_logger.critical(f"Sorry, no matches for properties inquired.\nList of available properties is: {all_properties}")
-        raise Exception(
+        struct_logger.critical(f"Sorry, no matches for properties inquired.\nThe available properties are: {all_properties}")
+        raise ValueError(
             f"Invalid list of properties."
         )
     return child_classes
@@ -573,7 +588,7 @@ class Structure:
         return self.scalar_values, self.dist_values
 
     def get_props(
-        self, props: str | list = "all", child_classes: list = None
+        self, selected_props: str | list = "all", child_classes: list = None, include_env: None | dict = None
     ) -> Tuple[dict[str, dict], dict[str, dict]]:
         """
         Computes the structural properties of a network.
@@ -581,15 +596,13 @@ class Structure:
         If both are provided, props is ignored.
 
         Args:
-            props (str|list): Structural properties to compute.
-                Use 'all' to compute all the properties.
-                Use a list of property names to compute only those properties.
-                Use a list of property classes to compute all the properties of those classes.
-            child_classes (dict): List of property classes to compute all the properties of those classes.
+            selected_props (str|list): Structural properties to compute.
+                Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names. Ignored if child_classes is provided.
+            child_classes (dict): List of property classes to compute all the properties of those classes. If provided, selected_props and include_env is ignored.
+            include_env (None|dict, optional): Dictionary with the environment variables to include. Defaults to None. Ignored if child_classes is provided.
 
         Returns:
-            If keep_names is True, it returns a dictionary with the name_id as key and as its value, a dict with property names as keys.
-            Otherwise, it returns a flattened array with the values.
+            Tuple[dict, dict]: Tuple of dictionaries with the network id and the properties, values of the network.
         """
         # Compute the properties if they have not been computed yet or if the network has changed
         # print(
@@ -615,7 +628,7 @@ class Structure:
                 self._dist_moments_arrays = {}
 
                 if child_classes is None:
-                    child_classes = get_child_classes(PARENT_CLASS, props)
+                    child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
 
                 # props
                 scalar_values, dist_values = self._compute_props(child_classes)
@@ -645,7 +658,8 @@ def er_nets_per_net_analysis(
     erdos_renyi: int = 2,
     selected_props : str | list = 'all',
     workers: str | int = "auto",
-    verbose: str = None
+    verbose: str = None,
+    include_env: None | dict = None,
 ) -> Tuple[dict, dict]:
 
     """
@@ -685,7 +699,8 @@ def er_nets_per_net_analysis(
                             workers= workers,
                             return_prop_dicts= True,
                             verbose= verbose,
-                            erdos_renyi= None
+                            erdos_renyi= None,
+                            include_env= include_env
     )
 
     # Determining averages for all scalar properties computed for each ER network
@@ -795,8 +810,9 @@ def characterize_network(
     norm: str | None = None,
     selected_props: str | list = "all",
     child_classes: dict = None,
-    verbose: str = None,
+    include_env: None | dict = None,
     return_prop_dicts: bool = False,
+    verbose: str = None,
 ) -> None | Tuple[dict, dict]:
     """
     Module-level function to characterize a single network.
@@ -805,13 +821,18 @@ def characterize_network(
         G (DiGraph | Graph): Network to characterize.
         norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
-        child_classes (dict, optional): Dict of child classes to compute. Defaults to None. Use either selected_props or child_classes.
-            if child_classes is not None, selected_props is ignored.
-        verbose (str, optional): If , print messages. Defaults to False.
+            Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names. Ignored if child_classes is provided.
+        child_classes (dict, optional): Dict of child classes to compute. Defaults to None.
+            if child_classes is not None, selected_props and include_env is ignored.
+        include_env (None | dict, optional): Dictionary with the environment variables to include. Defaults to None. Ignored if child_classes is provided.
+        verbose (str, optional): Level of verbose desired for logging process. Defaults to None.
+            View logging levels from Logging library.
+        return_prop_dicts (bool, optional): Whether to return the properties as dictionaries. Defaults to False.
+            If False, the figures are shown.
 
     Returns:
         dict: Dictionary with the properties of the network if return_prop_dicts is True.
-        None: If return_prop_dicts is False. The figures are shown.
+        tuple: Tuple of figures with the properties of the network if return_prop_dicts is False.
 
     Raises:
         Exception: Raised if the normalization is not valid.
@@ -825,7 +846,7 @@ def characterize_network(
     if child_classes is not None:
         scalar_values, dist_values = struc.get_props(child_classes=child_classes)
     else:
-        scalar_values, dist_values = struc.get_props(props=selected_props)
+        scalar_values, dist_values = struc.get_props(selected_props=selected_props, include_env=include_env)
 
     if len(dist_values) == 0 and len(scalar_values) == 0:
         struct_logger.critical("Not enough data, try with more properties or another normalization")
@@ -871,6 +892,7 @@ def compare_structure(
     norm: str | None = None,
     selected_props: str | list = "all",
     workers: str | int = "auto",
+    include_env: None | dict = None,
     return_prop_dicts: bool = False,
     association_metric: Callable = pearsonr,
     verbose: str = None,
@@ -911,7 +933,8 @@ def compare_structure(
 
     # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
     # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
-    child_classes = get_child_classes(PARENT_CLASS, selected_props)
+    child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
+    print(child_classes)
 
     # prepare data
     data = [
@@ -952,7 +975,8 @@ def compare_structure(
                                                                 norm= norm, 
                                                                 erdos_renyi= erdos_renyi, 
                                                                 selected_props= selected_props,
-                                                                workers= workers
+                                                                workers= workers,
+                                                                include_env= include_env,
                                                             )
             name_scalars_array.update(er_scalars_array)
             name_moments_arrays.update(er_moments_arrays)
