@@ -5,3 +5,4 @@
 *.pkl
 *[Dd]ata/
 *.pred
+src/netective/stats/GS.txt
