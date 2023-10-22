@@ -12,7 +12,7 @@ from networkx import Graph, DiGraph
 
 from netective.utils import remove_self_loops
 
-# SENT TO GLOBALS.PY
+# TODO: SENT TO GLOBALS.PY
 FONT_SIZE = 11
 FACE_COLOR = "#F2F0F2"
 FONT_COLOR = "#060307"
