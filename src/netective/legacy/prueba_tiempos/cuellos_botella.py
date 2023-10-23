@@ -5,9 +5,9 @@ import os
 import networkx as nx
 import numpy as np
 import re
-from netective.structure.struct_dummy import Structure
+from netective.structure.timed_structure import Structure
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("once")
 import time
 
 
@@ -58,15 +58,15 @@ def analyze(net_path= str, name= str):
     scalar_networknorm = {}
 
     with open(net_path) as f:
-        net = nx.DiGraph([line.split()[:2] for line in f if not re.search('regulator', line)])
-
-    struct = Structure(net, norm=None, net_id=name, verbose=False)
+        net = nx.DiGraph([line.split()[3:5] for line in f if not re.search('regulator', line)])
+    
+    struct = Structure(net, norm= None, net_id= name, verbose= 'critical')
     inicio_get_props = time.time()
-    scalar_values, dist_props, prop_times = struct.get_props()
+    scalar_values, dist_props, process_times = struct.get_props()
     fin_get_props = time.time()
-    prop_times['get_props'] = fin_get_props - inicio_get_props
-    prop_times['edges'] = net.number_of_edges()
-    prop_times['nodes'] = net.number_of_nodes()
+    process_times['get_props'] = fin_get_props - inicio_get_props
+    process_times['edges'] = net.number_of_edges()
+    process_times['nodes'] = net.number_of_nodes()
 
     scalar_raw[name] = scalar_values[name]
     for prop_name, prop_moments in dist_props[name].items():
@@ -85,8 +85,7 @@ def analyze(net_path= str, name= str):
         scalar_networknorm[name][f'Average {prop_name}'] = prop_moments[0]
     
     data_dict = {
-        f'raw_props_{name}' : prop_times,
-        f'norm_props_{name}' : norm_times
+        f'raw_processes_{name}' : process_times,
     }
 
     return data_dict
@@ -124,12 +123,11 @@ if __name__ == '__main__':
 
     # input_dataset = [(net_path, 'GS_') if i < 12 else (net_path, 'INF_') for i,net_path in enumerate(paths)]
     input_dataset = [(net_path, 'INF_') for net_path in test]
-    raw_props_times = {}
-    norm_props_times = {}
+    raw_processes_times = {}
 
     for j,(name, data_dict) in enumerate(run_parallel(analyze, input_dataset, workers=6).items()):
         for i,(name_2, data) in enumerate(data_dict.items()):
-            dict_ = raw_props_times if re.search('raw', name_2) else norm_props_times
+            dict_ = raw_processes_times
             if i == 0 and j == 0:
                 for prop in data.keys():
                     dict_[prop] = []
@@ -141,7 +139,4 @@ if __name__ == '__main__':
     
     
     with open(f'results\\raw_times.pkl', 'wb') as f:
-                pickle.dump(raw_props_times, f)
-    
-    with open(f'results\\norm_times.pkl', 'wb') as f:
-                pickle.dump(norm_props_times, f)     
+                pickle.dump(raw_processes_times, f)

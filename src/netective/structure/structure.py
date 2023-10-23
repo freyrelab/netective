@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import gc
-import math
 import uuid
 import inspect
 import hashlib
@@ -42,7 +41,7 @@ from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, 
 
 import matplotlib.pyplot as plt
 
-from typing import Callable, Iterable
+from typing import Callable
 
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
@@ -608,6 +607,10 @@ class Structure:
         # print(
         #         f", is None?: {self.graph_observer.graph_hash is None}, graph changed: {self.graph_observer.changed(self._original_G, update_G=True)}, norm changed: {self.norm_observer.change()}"
         #     )
+        if self.verbose != None:
+            current_level = struct_logger.getEffectiveLevel()
+            set_log_level(self.verbose)
+
         if (
             self.graph_observer.graph_hash is None
             or self.graph_observer.changed(self._original_G, update_G=True)
@@ -648,7 +651,10 @@ class Structure:
                 raise NotImplementedError(
                     f"\n\nError occurred. Original traceback is\n{tracebackString}\n"
                 )
-
+        
+        if self.verbose != None:
+            set_log_level(current_level)
+        
         return self._scalar_arrays, self._dist_moments_arrays
 
 def er_nets_per_net_analysis(
@@ -988,10 +994,12 @@ def compare_structure(
     name_scalars_array = common_props_dict(name_scalars_array)
 
     struct_logger.info('Starting comparison and building symmetric heatmap...')
+
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
         df = association(name_scalars_array, corr_func=association_metric)
         fig_scalar = create_symmetric_heatmap(df, title=f"Global properties")
+    
     else:
         struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")

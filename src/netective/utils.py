@@ -268,11 +268,12 @@ def compute_moments(data: np.ndarray, ddof: int = 1) -> tuple[float, float, floa
         Uniform distributions have np.NAN as kurtosis and skewness.
         Nan will be propagated
     """
+    warnings.filterwarnings(action='ignore')
     mean = np.nanmean(data)
     variance = np.nanvar(data, ddof=ddof)
     skewness = skew(data, nan_policy="omit")
     kurt = kurtosis(data, nan_policy="omit")
-
+    warnings.resetwarnings()
     return mean, variance, skewness, kurt
 
 

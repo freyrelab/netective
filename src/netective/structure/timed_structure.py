@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import os
-import math
+import gc
 import uuid
 import inspect
 import hashlib
@@ -33,11 +33,16 @@ from netective.utils import (
     remove_self_loops,
     association,
 )
+
+import logging
+
+from netective.logging_info import get_logger
+
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
 
 import matplotlib.pyplot as plt
 
-from typing import Callable, Iterable
+from typing import Callable
 
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
@@ -48,58 +53,87 @@ SELF_LOOPS = 4
 GIANT_COMPONENT = 2
 PATHS = 1
 
+struct_logger = get_logger(__name__)
+
 # Auxiliar Fxns
+def set_log_level(verbose: str = 'CRITICAL'):
+    if isinstance(verbose, str):
+        numeric_level = getattr(logging, verbose.upper(), None)
+    else:
+        numeric_level = verbose
+    if not isinstance(numeric_level, int):
+        struct_logger.critical(f'Invalid verbose level: {verbose}')
+        raise TypeError(f'Invalid verbose level.')
+    
+    struct_logger.setLevel(numeric_level)
+
 def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
 
 # Get properties selected Fxn
-def get_child_classes(parent_class, selected_props) -> dict:
+def get_child_classes(parent_class: type=properties._Property, selected_props: str|list="all", include_env: None|dict=None) -> dict:
+    """Returns a dict of child classes of parent_class based on selected_props.
+    
+    Args:
+        parent_class (type): Parent class to search for child classes.
+            This function is intented to work for the properties.Property abscract class.
+        selected_props (str|list, optional): Properties to search for. Defaults to "all".
+            Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names.
+        include_env (None|dict, optional): Dictionary with the environment variables to include. Defaults to None.
+    
+    Returns:
+        dict: Dictionary with the child classes found and their corresponding mask to process the graph.
+    
+    Raises:
+        ValueError: If no valid property names are provided.
+    """
+
+    def _valid_child_cls(cls, parent_class):
+        return inspect.isclass(cls) and issubclass(cls, parent_class) and cls != parent_class
+    
+    def _define_mask(cls):
+        bool_mask = [
+            cls._use_motifs,
+            cls._use_direction,
+            cls._use_selfloops,
+            cls._use_giant_component,
+            cls._use_paths
+        ]
+        return np.packbits(bool_mask).item() >> 3
+
     child_classes = {}
     all_properties = []
+    property_childs = inspect.getmembers(properties)
+
+    if include_env is not None:
+        if not isinstance(include_env, dict):
+            raise ValueError(f'Invalid environment variables. Must be a dictionary.')
+        for key, value in include_env.items():
+            if _valid_child_cls(value, parent_class):
+                struct_logger.info(f'{key} is a user-defined property.')
+                all_properties.append(key)
+                child_classes[value] = _define_mask(value)
+        
+    struct_logger.info("Properties used for analysis (based on selected_props): ")
+
+    for name, cls in property_childs:
+        if _valid_child_cls(cls, parent_class):
+            all_properties.append(cls.CLASS_NAME)
+            child_classes[cls] = _define_mask(cls)
+
+    if selected_props != "all":
+        if not isinstance(selected_props, list):
+            selected_props = [selected_props]
+        child_classes = {cls: mask for cls, mask in child_classes.items() if cls.CLASS_NAME in selected_props}
     
-    # print(f"Properties used for analysis: ") #TODO: UX: only if vervose
-    if selected_props == "all":
-        for name, obj in inspect.getmembers(properties):
-            if inspect.isclass(obj) and issubclass(obj, parent_class) and obj != parent_class:
-                # print(obj.CLASS_NAME, end="\n") #TODO: UX: only if vervose
-                bool_mask = [
-                    obj._use_motifs,
-                    obj._use_direction,
-                    obj._use_selfloops,
-                    obj._use_giant_component,
-                    obj._use_paths,
-                ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 3
-                all_properties.append(obj.CLASS_NAME)
-    else:
-        for name, obj in inspect.getmembers(properties):
-            if (
-                inspect.isclass(obj)
-                and issubclass(obj, parent_class)
-                and obj != parent_class
-                and obj.CLASS_NAME in selected_props
-            ):
-                # print(obj.CLASS_NAME, end="\n")
-                bool_mask = [
-                    obj._use_motifs,
-                    obj._use_direction,
-                    obj._use_selfloops,
-                    obj._use_giant_component,
-                    obj._use_paths,
-                ]
-                child_classes[obj] = np.packbits(bool_mask).item() >> 3
-                all_properties.append(obj.CLASS_NAME)
-            if (
-                inspect.isclass(obj)
-                and issubclass(obj, parent_class)
-                and obj != parent_class
-                and obj.CLASS_NAME not in all_properties
-            ):
-                all_properties.append(obj.CLASS_NAME)
-    # print("\n")
+    for cls in child_classes:
+        struct_logger.info(f'{cls.CLASS_NAME}')
+        
+    struct_logger.info('')
     if len(child_classes) == 0:
-        raise Exception(
-            f"Sorry, no matches for properties inquired.\nList of available properties is: {all_properties}"
+        struct_logger.critical(f"Sorry, no matches for properties inquired.\nThe available properties are: {all_properties}")
+        raise ValueError(
+            f"Invalid list of properties."
         )
     return child_classes
 
@@ -273,7 +307,7 @@ class Structure:
         G: DiGraph | Graph,
         norm: None | str | pd.Series = None,
         net_id: str = None,
-        verbose: bool = False,
+        verbose: str = None,
     ):
 
         """
@@ -281,24 +315,20 @@ class Structure:
         Structure inherits from pandas.Series.
 
         Creating a Structure object does not compute the structural properties.
-        Insted, it sets the attributes of the object for future property computation.
+        Instead, it sets the attributes of the object for future property computation.
         Use the get_props() method to compute the structural properties.
         If the network has changed, the properties and the normalization factors are recomputed when get_props() is called.
 
         Args:
-            G: DiGraph or Graph.
-                Network to compute the structural properties.
-            norm: None|str|pd.Series.
-                Normalization factor for each property.
+            G (DiGraph | Graph): Network to compute the structural properties.
+            norm (None | str | pd.Series): Normalization factor for each property. Defaults to None.
                 Use None to disable normalization.
                 Use 'biol' to normalize by the biological scale factors.
                 Use a dictionary to normalize by custom scale factors.
                 Missing properties are reported as NaN.
-            net_id: str.
-                Name of the network. If None, a random uuid is assigned.
+            net_id (str): Name of the network. If None, a random uuid is assigned.
                 Used for verbose mode and raising errors.
-            verbose: bool.
-                Whether to print information about the network.
+            verbose (str, optional): Whether to print information about the network. Defaults to None.
 
         Returns:
             Structure: Object with the structural properties of the network.
@@ -325,8 +355,8 @@ class Structure:
         self.norm_observer = NormObserver(
             norm
         )  # object to observe changes in the normalization strategy
-        self.verbose = verbose
-        self.net_id = net_id if net_id is not None else str(uuid.uuid4())
+        self.verbose = verbose   
+        self.net_id = net_id if net_id is not None else str(uuid.uuid4())[:8]
 
     @property
     def norm(self) -> None | str | pd.Series:
@@ -357,49 +387,30 @@ class Structure:
     def _normalize_props(self, instances, norm):
         """Normalizes the structural properties of a network."""
 
-        if self.verbose:
-            print("Normalizing...", flush=True)
+        struct_logger.info("Normalizing...")
         
         norm_scalar_values = {}
         norm_dist_values = {}
-        norm_times = {}
-        times = []
         if norm not in NORM_OPTIONS:
+            struct_logger.critical(f"Invalid normalization method: {norm}")
             raise properties.NormalizationError(f"Invalid normalization method: {norm}")
-        if self.verbose:
-            print("Properties excluded from analysis due to lack of normalization:")
-        inicio = time.time()
-        i = 0
+        struct_logger.warning("Properties excluded from analysis due to lack of normalization:")
         for name, x in instances.items():
             dict_ = norm_scalar_values if x._return_type == "scalar" else norm_dist_values
             try:
                 if norm == "network":
                     dict_[x.CLASS_NAME] = x.norm_network()
-                    times.append(time.time())
-                    if i == 0:
-                        norm_times[x.CLASS_NAME] = times[i] - inicio
-                    else:
-                        norm_times[x.CLASS_NAME] = times[i] - times[i-1]
-                    i += 1
                 elif norm == "biological":
                     dict_[x.CLASS_NAME] = x.norm_biol()
-                    times.append(time.time())
-                    if i == 0:
-                        norm_times[x.CLASS_NAME] = times[i] - inicio
-                    else:
-                        norm_times[x.CLASS_NAME] = times[i] - times[i-1]
-                    i += 1
             except (NotImplementedError, properties.NormalizationError):
                 # dict_[x.CLASS_NAME] = np.nan
-                if self.verbose:
-                    print(f"{x.CLASS_NAME}", end="\n")
+                struct_logger.warning(f"{x.CLASS_NAME}")
                 continue
-        
-        return norm_scalar_values, norm_dist_values, norm_times
+        return norm_scalar_values, norm_dist_values
 
     def __get_modify_directed_graphs(self, property_groups, original_graph):
         graphs = {}
-        times = []
+        temp_times = []
 
         for mask, class_group in property_groups.items():
             directed = mask & DIRECTED != 0
@@ -422,30 +433,24 @@ class Structure:
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
             if get_paths:
-                #TODO esto se tiene que ir
-                inicio = time.time()
                 net_shortest_paths = ShortestPaths(graph_copy)
-                times.append(time.time() - inicio)
-                inicio = time.time()
                 net_shortest_distances = ShortestDistances(graph_copy)
-                times.append(time.time() - inicio)
-
                 # Input requires paths objects besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
-                if get_motifs:
+                if get_motifs: # Input requires motifs object besides the modified graph
                     inicio = time.time()
                     motifs_obj = count_3motifs(graph_copy)
-                    times.append(time.time() - inicio)
+                    temp_times.append(time.time() - inicio)
                     graphs[mask] = (graph_copy, motifs_obj)
-                else:
-                    # Input requires only the modified graph
+                else: # Input requires only the modified graph
                     graphs[mask] = graph_copy
-        return graphs, times
+        
+        return graphs, temp_times
 
     def __get_modify_undirected_graphs(self, property_groups, original_graph):
         graphs = {}
-        times = []
+        temp_times = []
         for mask, class_group in property_groups.items():
             directed = mask & DIRECTED != 0
 
@@ -456,7 +461,7 @@ class Structure:
             haveto_remove_self_loops = mask & SELF_LOOPS == 0
             get_giant_component = mask & GIANT_COMPONENT != 0
             get_paths = mask & PATHS != 0
-            get_motifs = mask & MOTIFS != 0
+            get_motifs  = mask & MOTIFS != 0
 
             # Dummy graph that will be modified, only if it applies
             graph_copy = original_graph.copy()
@@ -467,41 +472,38 @@ class Structure:
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
             if get_paths:
-                #TODO esto se tiene que ir
                 inicio = time.time()
                 net_shortest_paths = ShortestPaths(graph_copy)
-                times.append(time.time() - inicio)
+                temp_times.append(time.time() - inicio)
                 inicio = time.time()
                 net_shortest_distances = ShortestDistances(graph_copy)
-                times.append(time.time() - inicio)
-
-                # Input requires paths objects besides the modified graph
+                temp_times.append(time.time() - inicio)
+                # Input requires paths objects and motifs object besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
-                if get_motifs:
-                    inicio = time.time()
+                if get_motifs: # Input requires motifs object besides the modified graph
                     motifs_obj = count_3motifs(graph_copy)
-                    times.append(time.time() - inicio)
                     graphs[mask] = (graph_copy, motifs_obj)
-                # Input requires only the modified graph
-                else:
+                else: # Input requires only the modified graph
                     graphs[mask] = graph_copy
-        return graphs, times
+        
+        return graphs, temp_times
 
     def __get_instances(self, property_groups, original_graph):
-
         instances = {}
         modified_directed_graphs = {}
         modified_undirected_graphs = {}
 
         if original_graph.is_directed():
-            temp_dict, dir_times = self.__get_modify_directed_graphs(property_groups, original_graph)
-            modified_directed_graphs.update(temp_dict)
-            temp_dict, undir_times = self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
-            modified_undirected_graphs.update(temp_dict)
+            temp_dic, directed_times = self.__get_modify_directed_graphs(property_groups, original_graph)
+            modified_directed_graphs.update(temp_dic)
+            temp_dic, undirected_times = self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
+            modified_undirected_graphs.update(temp_dic)
         else:
-            temp_dict, undir_times = self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
-            modified_undirected_graphs.update(temp_dict)
+            modified_undirected_graphs.update(
+                self.__get_modify_undirected_graphs(property_groups, original_graph)
+            )
+        unified_times = directed_times + undirected_times
 
         # Dict with keys: masks for each property group
         #           values: required input to instance each property in that property group
@@ -509,8 +511,8 @@ class Structure:
 
         for mask, class_group in property_groups.items():
             if mask not in inputs:
-                for class_ in class_group:
-                    print(f"{class_.CLASS_NAME} cannot be computed for the input graph.")
+                for class_ in class_group: # Será sólo un warning
+                    struct_logger.warning(f"{class_.CLASS_NAME} cannot be computed for the input graph.")
                 continue
 
             property_input = inputs[mask]
@@ -523,8 +525,8 @@ class Structure:
                         net_shortest_distances = property_input[2]
                         instances[class_.CLASS_NAME] = class_(
                             G,
-                            net_shortest_paths=net_shortest_paths,
-                            net_shortest_distances=net_shortest_distances,
+                            net_shortest_paths= net_shortest_paths,
+                            net_shortest_distances= net_shortest_distances,
                         )
                     else:
                         motifs_obj = property_input[1]
@@ -534,35 +536,28 @@ class Structure:
                         )
                 else:
                     instances[class_.CLASS_NAME] = class_(property_input)
-        undir_times.extend(dir_times)
-        return instances, undir_times
+        return instances, unified_times
 
     def _compute_props(self, child_classes) -> dict[str, float, int]:
-
         """
         Computes the structural properties of a network.
 
         Args:
-            G: DiGraph or Graph.
-                Network to compute the structural properties.
-            norm: None|str|pd.Series.
-                Normalization factor for each property.
-            net_id: str.
-                Name of the network. If None, a random uuid is assigned.
-            child_classes: dict.
-                Dict of classes to compute the structural properties.
+            G (DiGraph | Graph): Network to compute the structural properties.
+            norm (None | str | pd.Series): Normalization factor for each property.
+            net_id (str): Name of the network. If None, a random uuid is assigned.
+            child_classes (dict): Dict of classes to compute the structural properties.
+                dict[str, float, int]
 
         Returns:
             dict: Dictionary with the structural properties of the network.
         """
-        if self.verbose:
-            print(f"Processing {self.net_id}...", flush=True)
-            print(
-                f"{self.net_id} has {self.G.number_of_nodes()} nodes and {self.G.number_of_edges()} edges.",
-                flush=True,
-            )
+
+        struct_logger.info(f"Processing {self.net_id}...")
+        struct_logger.info(f"{self.net_id} has {self.G.number_of_nodes()} nodes and {self.G.number_of_edges()} edges.")
 
         if not self.G.is_directed() and self.norm_observer.norm == "biological":
+            struct_logger.critical("Biological normalization is only available for directed graphs")
             raise properties.NormalizationError(
                 "Biological normalization is only available for directed graphs"
             )
@@ -571,40 +566,40 @@ class Structure:
         for class_, mask in child_classes.items():
             property_groups[mask].append(class_)
 
-        instances, obj_times = self.__get_instances(property_groups, self.G)
+        instances, obj_creation_times = self.__get_instances(property_groups, self.G)
+        process_times = {}
+        process_times['motifs obj'] = obj_creation_times[0]
+        process_times['shortest paths obj'] = obj_creation_times[1]
+        process_times['shortest distances'] = obj_creation_times[2]
 
-
-        inicio = time.time()
         self.scalar_values = {}
         self.dist_values = {}
-        prop_times = {}
-
-        prop_times['shortest_paths_obj'] = obj_times[0]
-        prop_times['shortest_distances_obj'] = obj_times[1]
-        prop_times['motifs_obj'] = obj_times[2]
-        
-        times = []
-        
-        for i,(name, x) in enumerate(instances.items()):
-            dict_ = self.scalar_values if x._return_type == 'scalar' else self.dist_values
-            dict_[x.CLASS_NAME] = x.compute()
-            times.append(time.time())
-            if i == 0:
-                prop_times[x.CLASS_NAME] = times[i] - inicio
+        struct_logger.debug('Starting properties computation...')
+        for name,x in instances.items():
+            inicio = time.time()
+            if x._return_type == 'scalar':
+                self.scalar_values[x.CLASS_NAME] = x.compute()
             else:
-                prop_times[x.CLASS_NAME] = times[i] - times[i-1]
+                self.dist_values[x.CLASS_NAME] = x.compute()
+            process_times[x.CLASS_NAME] = time.time() - inicio
+            struct_logger.debug(f'Finished computing: {x.CLASS_NAME}')
 
         if self.norm_observer.norm is not None:
-            self.scalar_values, self.dist_values, prop_times = self._normalize_props(
+            self.scalar_values, self.dist_values = self._normalize_props(
                 instances, norm=self.norm_observer.norm
             )
+        
+        # eliminate instances to free memory
+        # TODO: Memory Optimization: Instaces are regenerated even when only the normalization has changed. Consider including a cache for the instances.
+        del instances
+        gc.collect()
 
         self.dist_values = {k: v for k, v in self.dist_values.items() if not np.isnan(v).all()}
 
-        return self.scalar_values, self.dist_values, prop_times
+        return self.scalar_values, self.dist_values, process_times
 
     def get_props(
-        self, props: str | list = "all", child_classes: list = None
+        self, selected_props: str | list = "all", child_classes: list = None, include_env: None | dict = None
     ) -> Tuple[dict[str, dict], dict[str, dict]]:
         """
         Computes the structural properties of a network.
@@ -612,34 +607,29 @@ class Structure:
         If both are provided, props is ignored.
 
         Args:
-            props: str|list.
-                Structural properties to compute.
-                Use 'all' to compute all the properties.
-                Use a list of property names to compute only those properties.
-                Use a list of property classes to compute all the properties of those classes.
-            child_classes: dict.
-                List of property classes to compute all the properties of those classes.
-
+            selected_props (str|list): Structural properties to compute.
+                Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names. Ignored if child_classes is provided.
+            child_classes (dict): List of property classes to compute all the properties of those classes. If provided, selected_props and include_env is ignored.
+            include_env (None|dict, optional): Dictionary with the environment variables to include. Defaults to None. Ignored if child_classes is provided.
 
         Returns:
-            If keep_names is True, it returns a dictionary with the name_id as key and as its value, a dict with property names as keys.
-            Otherwise, it returns a flattened array with the values.
+            Tuple[dict, dict]: Tuple of dictionaries with the network id and the properties, values of the network.
         """
         # Compute the properties if they have not been computed yet or if the network has changed
         # print(
         #         f", is None?: {self.graph_observer.graph_hash is None}, graph changed: {self.graph_observer.changed(self._original_G, update_G=True)}, norm changed: {self.norm_observer.change()}"
         #     )
+        if self.verbose != None:
+            current_level = struct_logger.getEffectiveLevel()
+            set_log_level(self.verbose)
+        
         if (
             self.graph_observer.graph_hash is None
             or self.graph_observer.changed(self._original_G, update_G=True)
         ) or self.norm_observer.change():
-            if self.verbose:
-                print(
-                    "The network or the normalization method has changed. Computing its properties...",
-                    flush=True,
-                )
-                # TODO Optimization: cache the raw values?
-                # TODO: include a verbose message when normalization has changed
+            struct_logger.warning('The network or the normalization method has changed. Computing its properties...')
+            # TODO Optimization: cache the raw values?
+            # TODO: include a verbose message when normalization has changed
 
             # TODO: Refactor code: First run is None and self.graph_observer.changed(self._original_G is not evaluated due to bypass.
             if self.graph_observer.graph_hash is None:
@@ -653,25 +643,31 @@ class Structure:
                 self._dist_moments_arrays = {}
 
                 if child_classes is None:
-                    child_classes = get_child_classes(PARENT_CLASS, props)
-                
-                # props y props_times
-                scalar_values, dist_values, prop_times = self._compute_props(child_classes)
+                    child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
+
+                # props
+                scalar_values, dist_values, process_times = self._compute_props(child_classes)
                 self._scalar_arrays[self.net_id] = scalar_values
                 self._dist_moments_arrays[self.net_id] = {
                     prop_name: compute_moments(array) for prop_name, array in dist_values.items()
                 }
 
-                return self._scalar_arrays, self._dist_moments_arrays, prop_times
+                return self._scalar_arrays, self._dist_moments_arrays, process_times
 
             # This is a general exception handler to catch any error that may occur in the parallelized code
             except Exception as e:
                 tracebackString = traceback.format_exc(e)
+                struct_logger.critical(
+                    f"Error occurred. Original traceback is\n{tracebackString}\n"
+                )
                 raise NotImplementedError(
                     f"\n\nError occurred. Original traceback is\n{tracebackString}\n"
                 )
-
-        return self._scalar_arrays, self._dist_moments_arrays, prop_times
+        
+        if self.verbose != None:
+            set_log_level(current_level)
+        
+        return self._scalar_arrays, self._dist_moments_arrays, process_times
 
 def er_nets_per_net_analysis(
     G: DiGraph | Graph,
@@ -680,7 +676,8 @@ def er_nets_per_net_analysis(
     erdos_renyi: int = 2,
     selected_props : str | list = 'all',
     workers: str | int = "auto",
-    verbose: str = None
+    verbose: str = None,
+    include_env: None | dict = None,
 ) -> Tuple[dict, dict]:
 
     """
@@ -720,7 +717,8 @@ def er_nets_per_net_analysis(
                             workers= workers,
                             return_prop_dicts= True,
                             verbose= verbose,
-                            erdos_renyi= None
+                            erdos_renyi= None,
+                            include_env= include_env
     )
 
     # Determining averages for all scalar properties computed for each ER network
@@ -774,6 +772,7 @@ def er_nets_per_net_analysis(
 
     return scalars_avg_er_net, dist_avg_er_net
 
+
 def save_strucs(
     scalar_props: dict,
     dist_props: dict,
@@ -781,21 +780,17 @@ def save_strucs(
     delimiter: str = "\t",
     cl: str = None,
 ) -> None:
-
     """
     Save the structural properties in a file containing the name of the network and the properties.
 
     Args:
-        scalar_props: dict.
-            Dictionary with the scalar properties of the networks. {network_name: {property_name: property_value}}.
-        dist_props: dict.
-            Dictionary with the distribution properties of the networks. {network_name: {property_name: property_value}}.
-        output_dir: str.
-            Path to the output directory.
-        delimiter: str.
-            Delimiter to use in the output file.
-        cl: str.
-            Command line used to run the script.
+        scalar_props (dict): Dictionary with the scalar properties of the networks.
+            {network_name: {property_name: property_value}}.
+        dist_props (dict): Dictionary with the distribution properties of the networks.
+            {network_name: {property_name: property_moments}}.
+        output_dir (str): Path to the output directory. Defaults to current directory.
+        delimiter (str): Delimiter to use in the output file. Defaults to tab.
+        cl (str): Command line used to run the script.
 
     Returns:
         None.
@@ -825,69 +820,86 @@ def save_strucs(
     df_d.to_csv(file_p_d, sep=delimiter)
     
 
-# User Fxns
+# User Fxn's
 # Characterization of one network
 def characterize_network(
     G: DiGraph | Graph,
-    name: str,
+    net_id: str = None,
     norm: str | None = None,
     selected_props: str | list = "all",
     child_classes: dict = None,
-    verbose: bool = False,
+    include_env: None | dict = None,
     return_prop_dicts: bool = False,
+    verbose: str = None,
 ) -> None | Tuple[dict, dict]:
-    """Module-level function to characterize a single network.
+    """
+    Module-level function to characterize a single network.
 
     Args:
         G (DiGraph | Graph): Network to characterize.
         norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
-        child_classes (dict, optional): Dict of child classes to compute. Defaults to None. Use either selected_props or child_classes.
-            if child_classes is not None, selected_props is ignored.
-        verbose (bool, optional): If True, print messages. Defaults to False.
+            Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names. Ignored if child_classes is provided.
+        child_classes (dict, optional): Dict of child classes to compute. Defaults to None.
+            if child_classes is not None, selected_props and include_env is ignored.
+        include_env (None | dict, optional): Dictionary with the environment variables to include. Defaults to None. Ignored if child_classes is provided.
+        verbose (str, optional): Level of verbose desired for logging process. Defaults to None.
+            View logging levels from Logging library.
+        return_prop_dicts (bool, optional): Whether to return the properties as dictionaries. Defaults to False.
+            If False, the figures are shown.
 
     Returns:
         dict: Dictionary with the properties of the network if return_prop_dicts is True.
-        None: If return_prop_dicts is False. The figures are shown.
+        tuple: Tuple of figures with the properties of the network if return_prop_dicts is False.
 
     Raises:
         Exception: Raised if the normalization is not valid.
-
     """
-
-    struc = Structure(G, norm=norm, net_id=name, verbose=verbose)
+    if verbose != None:
+        current_level = struct_logger.getEffectiveLevel()
+        set_log_level(verbose)
+    
+    net_id = net_id if net_id is not None else str(uuid.uuid4())[:8]
+    struc = Structure(G, norm= norm, net_id= net_id, verbose= verbose)
     if child_classes is not None:
         scalar_values, dist_values = struc.get_props(child_classes=child_classes)
     else:
-        scalar_values, dist_values = struc.get_props(props=selected_props)
+        scalar_values, dist_values = struc.get_props(selected_props=selected_props, include_env=include_env)
 
     if len(dist_values) == 0 and len(scalar_values) == 0:
+        struct_logger.critical("Not enough data, try with more properties or another normalization")
         raise ValueError("Not enough data, try with more properties or another normalization")
 
     if return_prop_dicts:
         return scalar_values, dist_values
-
+    
     if len(dist_values) != 0:
-        fig_dist, _ = plot_distributions(dist_values[name])
+        fig_dist, _ = plot_distributions(dist_values[net_id])
+
     if len(scalar_values) != 0:
-        fig_scalar, _ = plot_scalars(scalar_values[name])
+        fig_scalar, _ = plot_scalars(scalar_values[net_id])
+    
+    if verbose != None:
+        set_log_level(current_level)
+    
+    return fig_scalar, fig_dist
 
 def common_props_dict(networks):
     new = defaultdict(lambda:defaultdict())
 
-    for i, (net_name, props) in enumerate(networks.items()):
+    for i, (net_id, props) in enumerate(networks.items()):
         if i == 0:
             common = set(props.keys())
         else:
             common.intersection_update(set(props.keys()))
 
     new = {
-        net_name : {
+        net_id : {
             prop_name : value 
             for prop_name, value in props.items()
             if prop_name in common
         }
-        for net_name, props in networks.items()
+        for net_id, props in networks.items()
     }
 
     return new
@@ -898,28 +910,33 @@ def compare_structure(
     norm: str | None = None,
     selected_props: str | list = "all",
     workers: str | int = "auto",
+    include_env: None | dict = None,
     return_prop_dicts: bool = False,
     association_metric: Callable = pearsonr,
-    verbose: bool = False,
+    verbose: str = None,
+    erdos_renyi : int = 0
 ) -> Tuple[dict, dict] | plt.Figure:
-
-    """Module-level function to compare multiple networks.
+    """
+    Module-level function to compare multiple networks.
 
     Returns a tuple of figures, one for the scalar properties and one for the distributions if return_prop_dicts is False.
     Otherwise, it returns a tuple of dictionaries, one for the scalar properties and one for the distributions.
 
     Args:
-        networks (dict): Dictionary of networks to compare {'name':DiGraph | Graph}.
-        norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
+        networks (dict): Dictionary of networks to compare.
+            {'net_id': DiGraph | Graph}
+        norm (str, optional): Normalization to apply. Defaults to None.
+            Valid values are 'network', 'biological' or None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
         workers (int, optional): Number of workers to use. Defaults to 'auto'.
+            Auto means number of cpu's - 1.
 
     Raises:
         NormalizationError: Raised if the normalization is not valid.
         ValueError: Raised if there is not enough data to compare.
     """
-
     if norm not in NORM_OPTIONS:
+        struct_logger.critical("Normalization not valid")
         raise properties.NormalizationError("Normalization not valid")
 
     # handle workers
@@ -927,14 +944,15 @@ def compare_structure(
     if workers == "auto":
         workers = usable_workers
     elif workers > usable_workers:
-        warn(
+        struct_logger.warning(
             f"{workers} workers requested, but only {usable_workers} are available. Using {usable_workers} workers instead."
         )
         workers = usable_workers
 
     # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
     # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
-    child_classes = get_child_classes(PARENT_CLASS, selected_props)
+    child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
+    print(child_classes)
 
     # prepare data
     data = [
@@ -943,21 +961,43 @@ def compare_structure(
         [norm] * len(networks),
         [selected_props] * len(networks),
         [child_classes] * len(networks),
-        [False] * len(networks),  # verbose
+        [verbose] * len(networks),  # verbose
         [True] * len(networks),  # keep_names
     ]
 
     # run parallel
-    results = run_parallel(characterize_network, data, workers, verbose=verbose)
+    struct_logger.info('Analayzing inputed networks...')
+    results = run_parallel(characterize_network, data, workers, verbose=verbose, process='analysis of inputed networks')
+    struct_logger.info('Finished computing properties for all networks.')
     name_scalars_array = results["scalars"]
     name_moments_arrays = results["distributions"]
     
-    for net_name, prop in results['distributions'].items():
+    for net_id, prop in name_moments_arrays.items():
         for prop_name, values in prop.items():
-            name_scalars_array[net_name][f'Average {prop_name}'] = values[0]
-            name_scalars_array[net_name][f'Variation {prop_name}'] = values[1]
-            name_scalars_array[net_name][f'Skewness {prop_name}'] = values[2]
-            name_scalars_array[net_name][f'Kurtosis {prop_name}'] = values[3]
+            name_scalars_array[net_id][f'Average {prop_name}'] = values[0]
+            name_scalars_array[net_id][f'Variation {prop_name}'] = values[1]
+            name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
+            name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
+    
+    if erdos_renyi:
+
+        if erdos_renyi < 0:
+            struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
+            raise ValueError("erdos_renyi must be 0 or greater")
+    
+        struct_logger.info('Analyzing ER networks...')
+        for net_id, net in networks.items():
+            er_scalars_array, er_moments_arrays = er_nets_per_net_analysis(
+                                                                G= net, 
+                                                                net_id= net_id, 
+                                                                norm= norm, 
+                                                                erdos_renyi= erdos_renyi, 
+                                                                selected_props= selected_props,
+                                                                workers= workers,
+                                                                include_env= include_env,
+                                                            )
+            name_scalars_array.update(er_scalars_array)
+            name_moments_arrays.update(er_moments_arrays)
     
     if return_prop_dicts:
         return name_scalars_array, name_moments_arrays
@@ -965,11 +1005,13 @@ def compare_structure(
     # TODO: Optimization:  only compute the common properties
     name_scalars_array = common_props_dict(name_scalars_array)
 
+    struct_logger.info('Starting comparison and building symmetric heatmap...')
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
         df = association(name_scalars_array, corr_func=association_metric)
         fig_scalar = create_symmetric_heatmap(df, title=f"Global properties")
     else:
+        struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")
 
     return fig_scalar
