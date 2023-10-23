@@ -2,6 +2,9 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from netective.logging_info import get_logger, set_log_level
+
+dataviz_logger = get_logger(__name__)
 
 def format_title(input_str):
     # Check if the length of the string is greater than 22
@@ -103,19 +106,23 @@ def create_symmetric_heatmap(dataframe, title: str, method="ward"):
     # fig, axs = plt.subplots()
 
     # Plot the heatmap
-    g = sns.clustermap(
-        dataframe.astype(float),
-        cmap="Blues",
-        # vmin=0,
-        vmax=1,
-        annot=True if dataframe.shape[0] < 10 else False,
-        fmt=".2f",
-        cbar=True,
-        method=method,
-    )
+    try: 
+        g = sns.clustermap(
+            dataframe.astype(float),
+            cmap="Blues",
+            # vmin=0,
+            vmax=1,
+            annot=True if dataframe.shape[0] < 10 else False,
+            fmt=".2f",
+            cbar=True,
+            method=method,
+        )
+    except ValueError:
+        dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
+        raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
 
     # Set the title
     g.ax_heatmap.set_title(title)
 
     # Return the figure and axes
-    return g.fig#, g.ax_heatmap
+    return g.fig #, g.ax_heatmap

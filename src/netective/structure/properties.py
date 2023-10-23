@@ -36,7 +36,6 @@ def return_distribution(cls):
     cls._return_type = "distribution"
     return cls
 
-
 def use_paths(cls):
     cls._use_paths = True
     return cls
@@ -44,7 +43,6 @@ def use_paths(cls):
 def use_motifs(cls):
     cls._use_motifs = True
     return cls
-
 
 def validate_network_characteristics(self):
 

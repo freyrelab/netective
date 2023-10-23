@@ -43,18 +43,17 @@ def run_parallel(f, my_iter, workers, verbose: str = 'WARNING', process = str):
 
     Parameters
     ----------
-    f: function.
-        Function to be executed in parallel.
-    my_iter: Iterable.
-        Iterable with the inputs for f.
+    f (function): Function to be executed in parallel.
+    my_iter (Iterable): Iterable with the inputs for f.
         Each element of iterable will be unzipped before calling f.
-    workers: Numer of processes to run in parallel.
+    workers (int): Numer of processes to run in parallel.
 
     Returns
     -------
     Results: zip object.
         Contains the results of the function f.
     """
+    warnings.filterwarnings('once')
     if verbose != None:
         current_level = utils_logger.getEffectiveLevel()
         set_log_level(utils_logger, verbose)
@@ -86,6 +85,7 @@ def run_parallel(f, my_iter, workers, verbose: str = 'WARNING', process = str):
     if verbose != None:
         set_log_level(utils_logger, current_level)
 
+    warnings.resetwarnings()
     return results
 
 
@@ -105,12 +105,12 @@ def parse_network(
     Parse a network file and return a networkx.DiGraph or networkx.Graph depending on the directed parameter.
 
     Args:
-        file_path: Path to the network file.
-        comments: Comment character.
-        delimiter: Delimiter character.
-        directed: If True, the network will be a DiGraph, otherwise it will be a Graph.
-        score: If True, the network will use the third column of the file as the score of the edge.
-        use_position_as_score: If True, the position of the edge in the file will be used as the score of the edge.
+        file_path (str): Path to the network file.
+        comments (str): Comment character.
+        delimiter (str): Delimiter character.
+        directed (bool): If True, the network will be a DiGraph, otherwise it will be a Graph.
+        score (bool): If True, the network will use the third column of the file as the score of the edge.
+        use_position_as_score (bool): If True, the position of the edge in the file will be used as the score of the edge.
     """
     if score and use_position_as_score:
         utils_logger.critical("score and use_position_as_score cannot be True at the same time.")
@@ -143,11 +143,11 @@ def association(
     Computes correlation between elements in a dictionary
 
     Args:
-        dict_data : dictionary with keys as IDs for each element and values as np.arrays with data.
-        corr_func : correlation function desired for analysis. Default is pearsonr from scipy.
+        dict_data (dict): dictionary with keys as IDs for each element and values as np.arrays with data.
+        corr_func (function): correlation function desired for analysis. Default is pearsonr from scipy.
 
     Returns:
-        corr_df : DataFrame with the correlation results of the input data.
+        corr_df (numpy.DataFrame): DataFrame with the correlation results of the input data.
 
     Note:
         Correlation function must return either a float with the correlation value
@@ -213,9 +213,9 @@ def compute_moments(data: np.ndarray, ddof: int = 1) -> tuple[float, float, floa
     """Computes the four first moments of a distribution.
 
     Args:
-        data: An array containing the data points of the distribution.
-        ddof: The delta degrees of freedom. The divisor used in calculations is N - ddof,
-        where N represents the number of elements. By default ddof is 1 (for sample data).
+        data (numpy.array): An array containing the data points of the distribution.
+        ddof (int, optional): The delta degrees of freedom. The divisor used in calculations is N - ddof.
+            where N represents the number of elements. By default ddof is 1 (for sample data).
 
     Returns:
         A tuple containing the mean, variance, skewness, and kurtosis of the distribution.
@@ -243,11 +243,11 @@ def get_clusters(
     """Get clusters from a correlation matrix.
 
     Args:
-        corr_df: A correlation matrix.
-        clust_num: The number of clusters to be obtained.
-        ch_method: The linkage method to be used.
-        ch_metric: The distance metric to be used.
-        map_ids: If True, the clusters will be returned as a dictionary.
+        corr_df (pandas.DataFrame): A correlation matrix.
+        clust_num (int): The number of clusters to be obtained.
+        ch_method (str, optional): The linkage method to be used. Dafaults to 'ward'.
+        ch_metric (str, optional): The distance metric to be used. Defaults to 'euclidean'.
+        map_ids (bool, optional): If True, the clusters will be returned as a dictionary. Defaults to True.
 
     Returns:
         A list containing the cluster number for each node.
@@ -265,6 +265,7 @@ def get_clusters(
     except ValueError:
         # warnings.warn(f"NaNs found in the correlation matrix. Unable to compute clusters.")
         utils_logger.critical(f"NaNs found in the correlation matrix. Unable to compute clusters.")
+        raise ValueError(f"NaNs found in the correlation matrix. Unable to compute clusters.")
     linkage_mtrx = linkage(square_matrix, method=ch_method, metric=ch_metric)
     index = list(corr_df.index)
     cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")
@@ -370,7 +371,8 @@ class ShortestPaths:
     def __init__(self, G):
         """Summary."""
         if G.is_directed():
-            utils_logger.critical("requires an undirected graph")
+            utils_logger.critical("Requires an undirected graph")
+            raise TypeError('Requires an undirected graph')
         self.__G = ig.Graph.TupleList(
             G.edges(data=False),
             directed=False,
@@ -434,7 +436,8 @@ class Efficiency:
     def __init__(self, G, shortest_distances=None):
         """Summary."""
         if G.is_directed():
-            raise TypeError("efficiency is not defined for directed graphs")
+            utils_logger.critical("Efficiency is not defined for directed graphs")
+            raise TypeError("Efficiency is not defined for directed graphs")
         if shortest_distances is None:
             sp = ShortestDistances(G)
         else:

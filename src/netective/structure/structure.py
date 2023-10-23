@@ -957,7 +957,6 @@ def compare_structure(
     # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
     # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
     child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
-    print(child_classes)
 
     # prepare data
     networks = {net_id: __remove_network_data(G) for net_id, G in networks.items()} # to avoid serialization error py3.8 with nx's data structures
@@ -972,7 +971,6 @@ def compare_structure(
     ]
 
     # run parallel
-    struct_logger.info('Analayzing inputed networks...')
     results = run_parallel(characterize_network, data, workers, verbose=verbose, process='analysis of inputed networks')
     struct_logger.info('Finished computing properties for all networks.')
     name_scalars_array = results["scalars"]
