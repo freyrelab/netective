@@ -892,6 +892,23 @@ def common_props_dict(networks):
 
     return new
 
+def __remove_network_data(G: Graph) -> Graph:
+    """
+    Remove all the data from a network.
+
+    Args:
+        G (Graph): Network to remove the data.
+
+    Returns:
+        Graph: Network without data.
+    """
+    G = G.copy()
+    for n in G.nodes:
+        G.nodes[n].clear()
+    for u, v in G.edges:
+        G.edges[u, v].clear()
+    return G
+
 # Comparison of multiple networks
 def compare_structure(
     networks: dict,
@@ -943,6 +960,7 @@ def compare_structure(
     print(child_classes)
 
     # prepare data
+    networks = {net_id: __remove_network_data(G) for net_id, G in networks.items()} # to avoid serialization error py3.8 with nx's data structures
     data = [
         list(networks.values()),
         list(networks.keys()),

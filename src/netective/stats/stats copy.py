@@ -12,7 +12,7 @@ from networkx import Graph, DiGraph
 
 from netective.utils import remove_self_loops
 
-# TODO: SENT TO GLOBALS.PY
+# SENT TO GLOBALS.PY
 FONT_SIZE = 11
 FACE_COLOR = "#F2F0F2"
 FONT_COLOR = "#060307"
@@ -53,6 +53,7 @@ class NetworkInferenceStats:
         self.__inference = inference
         self.__greater_is_better = greater_score_is_better
         self.__allow_self_loops = allow_self_loops
+        self.__cutoff = cutoff
 
         # Validate the networks
         for name, network in [("Gold standard", self.gold_standard), ("Inference", self.inference)]:
@@ -75,10 +76,9 @@ class NetworkInferenceStats:
 
         # Define evaluation
         # Used as flags to know if the curves data points have been computed
-        self.__fpr_dist = None
-        self.__precision_dist = None
-        self.__sensitivity_dist = None
-        self.__f1_score_dist = None
+        self.__fpr = None
+        self.__precision = None
+        self.__sensitivity = None
 
         (
             self.__gold_standard_edges,
@@ -87,10 +87,6 @@ class NetworkInferenceStats:
         ) = self.__anonymize_edges()
         self.__size_gold_standard = len(self.__gold_standard_edges)
         self.__size_negatives = self.__size_universe - self.__size_gold_standard
-        # At the last step, every edge is considered as a positive by inference
-        self.__precision_baseline = (self.size_gold_standard / self.size_universe)  # (GS/(GS + (Universe-GS)))
-        if not cutoff:
-            self.__cutoff = min([score for score, _ in self.inference_edges]) if self.greater_is_better else max([score for score, _ in self.inference_edges])
 
     def __repr__(self) -> str:
         return f"BinClassEval(gold_standard={self.gold_standard}, inference={self.inference}, greater_is_better={self.greater_is_better}, directed={self.directed})"
@@ -108,29 +104,27 @@ class NetworkInferenceStats:
 
     @property
     def cutoff(self) -> float | None:
-        """Return the less restrictive score used to compute the evaluation metrics."""
         return self.__cutoff
 
     @cutoff.setter
     def cutoff(self, cutoff: float | None):
         self.__cutoff = cutoff
         # Reset the cache
-        self.__precision_dist = None
-        self.__sensitivity_dist = None
-        self.__fpr_dist = None
-        self.__f1_score_dist = None
+        self.__precision = None
+        self.__sensitivity = None
+        self.__fpr = None
 
     @property
-    def precision_dist(self) -> np.ndarray:
-        return self.__precision_dist
+    def precision(self) -> np.ndarray:
+        return self.__precision
 
     @property
-    def sensitivity_dist(self) -> np.ndarray:
-        return self.__sensitivity_dist
+    def sensitivity(self) -> np.ndarray:
+        return self.__sensitivity
 
     @property
-    def fpr_dist(self) -> np.ndarray:
-        return self.__fpr_dist
+    def fpr(self) -> np.ndarray:
+        return self.__fpr
 
     @property
     def precision_baseline(self) -> float:
@@ -257,9 +251,8 @@ class NetworkInferenceStats:
 
         Args:
         cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None (default) the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
-
+            If None (default) the cutoff provided in the initialization is used. Use False to avoid using a cutoff.
+            The cutoff follows the greater_is_better rule.
 
         Returns:
         precision: np.ndarray
@@ -274,20 +267,19 @@ class NetworkInferenceStats:
         The inference edges must be sorted by score following the greater_is_better rule.
         It returns the cache values if the cutoff is the same as the one provided in the initialization or if cutoff is None.
         """
-        cutoff = self.__validate_cutoff(cutoff)
+        cutoff = self.cutoff if cutoff is None else cutoff
         cache = True if cutoff == self.cutoff else False
-        # TODO:!!! optimization: use a subset of the computed datapoints.
 
         if (
             cache
-            and self.precision_dist is not None
-            and self.sensitivity_dist is not None
-            and self.fpr_dist is not None
+            and self.precision is not None
+            and self.sensitivity is not None
+            and self.fpr is not None
         ):
             # print("The evaluation metrics have already been computed for this cutoff. Returning cached values.")
-            return self.precision_dist, self.sensitivity_dist, self.fpr_dist
+            return self.precision, self.sensitivity, self.fpr
 
-        if cutoff == self.cutoff:
+        if cutoff is False:
             inference_edges = [edges for _, edges in self.inference_edges]
         else:
             if self.greater_is_better:
@@ -301,14 +293,14 @@ class NetworkInferenceStats:
 
         num_points = len(inference_edges) + 2
         # Initialize arrays to store the evaluation metrics coordinates
-        fpr_dist = np.empty(num_points)
-        precision_dist = np.empty(num_points)
-        sensitivity_dist = np.empty(num_points)  # same as recall and TPR
+        fpr = np.empty(num_points)
+        precision = np.empty(num_points)
+        sensitivity = np.empty(num_points)  # same as recall and TPR
 
         # Start-values
-        fpr_dist[0] = 0
-        precision_dist[0] = 0
-        sensitivity_dist[0] = 0
+        fpr[0] = 0
+        precision[0] = 0
+        sensitivity[0] = 0
 
         predicted_positives = set()
         for i, edges in enumerate(inference_edges, 1):
@@ -316,29 +308,33 @@ class NetworkInferenceStats:
             true_positives = len(self.gold_standard_edges & predicted_positives)
             false_positives = len(predicted_positives - self.gold_standard_edges)
             # remplace the corresponding values in the arrays
-            fpr_dist[i] = false_positives / self.size_negatives
-            sensitivity_dist[i] = true_positives / self.size_gold_standard
-            precision_dist[i] = true_positives / (true_positives + false_positives)
+            fpr[i] = false_positives / self.size_negatives
+            sensitivity[i] = true_positives / self.size_gold_standard
+            precision[i] = true_positives / (true_positives + false_positives)
 
         # End-values
-        precision_dist[-1] = self.precision_baseline
-        sensitivity_dist[-1] = 1  # no FN (no negatives)
-        fpr_dist[-1] = 1  # no TN (no negatives)
+        # At the last step, every edge is considered as a positive by inference
+        self.__precision_baseline = (
+            self.size_gold_standard / self.size_universe
+        )  # (GS/(GS + (Universe-GS)))
+        precision[-1] = self.precision_baseline
+        sensitivity[-1] = 1  # no FN (no negatives)
+        fpr[-1] = 1  # no TN (no negatives)
 
         # The first precision values must equal the second one
-        precision_dist[0] = precision_dist[1]
+        precision[0] = precision[1]
 
         if cache:
             # enters only when the three arrays are None
-            self.__precision_dist = precision_dist
-            self.__sensitivity_dist = sensitivity_dist
-            self.__fpr_dist = fpr_dist
+            self.__precision = precision
+            self.__sensitivity = sensitivity
+            self.__fpr = fpr
 
-        return precision_dist, sensitivity_dist, fpr_dist
+        return precision, sensitivity, fpr
 
     def __compute_auc(self, x, y) -> float:
         """Computes the area under the curve using the trapezoidal rule."""
-        return np.trapz(x=x, y=y, dx=0.05)
+        return np.trapz(x=x, y=y, dx=0.01)
 
     def area_under_precision_recall_curve(self, cutoff=None) -> float:
         """Computes the area under the precision-recall curve.
@@ -346,7 +342,7 @@ class NetworkInferenceStats:
         Args:
         cutoff (float): Cutoff to use to compute the evaluation metrics.
             If None, the cutoff provided in the initialization is used. Use False to avoid using a cutoff.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
+            The cutoff follows the greater_is_better rule.
 
         Returns:
         -------
@@ -363,7 +359,7 @@ class NetworkInferenceStats:
         Args:
         cutoff (float): Cutoff to use to compute the evaluation metrics.
             If None, the cutoff provided in the initialization is used. Use False to avoid using a cutoff.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
+            The cutoff follows the greater_is_better rule.
 
         Returns:
         -------
@@ -372,45 +368,24 @@ class NetworkInferenceStats:
         """
         _, sensitivity, fpr = self.__compute_roc_pr_datapoints(cutoff=cutoff)
         return self.__compute_auc(x=fpr, y=sensitivity)
-    
-    def __build_ax(self, ax=None, ylim=(0, 1), xlim=(0, 1), figsize=(2, 2)):
+
+    def __plot_curve(self, x, y, xlabel, ylabel, title="AUC", ax=None, **kwargs):
         if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
+            fig, ax = plt.subplots(figsize=(2, 2))
 
         # Graph
         ax.set_facecolor(FACE_COLOR)
-        ax.set_ylim(ylim)
-        ax.set_xlim(xlim)
-        return ax
-
-    def __plot_curve(self, x, y, xlabel, ylabel, title="AUC", ax=None, **kwargs):
-        
-        ax = self.__build_ax(ax)
         ax.fill_between(x, y, color=MAIN_PLOT_COLOR, alpha=0.5)
         ax.plot(x, y, color=MAIN_PLOT_COLOR, alpha=1)
+        ax.set_ylim(0, 1)
+        ax.set_xlim(0, 1)
+
         # Add titles
         ax.set_title(title, loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_xlabel(xlabel, size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_ylabel(ylabel, size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
-    
-    def __validate_cutoff(self, cutoff):
-
-        if cutoff is None or cutoff==self.cutoff:
-            return self.cutoff
-
-        if self.greater_is_better:
-            if cutoff is not None and cutoff < self.cutoff:
-                raise ValueError(
-                    f"The cutoff must be greater than the one provided in the initialization ({self.cutoff})."
-                )
-        else:
-            if cutoff is not None and cutoff > self.cutoff:
-                raise ValueError(
-                    f"The cutoff must be lower or equal than the one provided in the initialization ({self.cutoff})."
-                )
-        return cutoff
 
     def plot_precision_recall_curve(self, cutoff=None, ax=None, **kwargs):
         """Plots the precision-recall curve.
@@ -418,7 +393,7 @@ class NetworkInferenceStats:
         Args:
         cutoff (float): Cutoff to use to compute the evaluation metrics.
             If None, the evaluation metrics are computed for every score in the inference.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
+            The cutoff follows the greater_is_better rule.
         ax (matplotlib.axes.Axes): Axes object to plot the curve.
             If None, a new figure and axes are created.
         **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
@@ -437,7 +412,6 @@ class NetworkInferenceStats:
             title=f"AUC-PR = {self.__compute_auc(x=sensitivity, y=precision):.3f}",
             ax=ax,
         )
-        return ax
 
     def plot_roc_curve(self, cutoff=None, ax=None, **kwargs):
         """Plots the ROC curve.
@@ -445,7 +419,7 @@ class NetworkInferenceStats:
         Args:
         cutoff (float): Cutoff to use to compute the evaluation metrics.
             If None, the evaluation metrics are computed for every score in the inference.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
+            The cutoff follows the greater_is_better rule.
         ax (matplotlib.axes.Axes): Axes object to plot the curve.
             If None, a new figure and axes are created.
         **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
@@ -457,190 +431,41 @@ class NetworkInferenceStats:
         """
         _, sensitivity, fpr = self.__compute_roc_pr_datapoints(cutoff=cutoff)
         ax = self.__plot_curve(
-            self.fpr_dist,
-            self.sensitivity_dist,
+            self.fpr,
+            self.sensitivity,
             xlabel="False positive rate",
             ylabel="True positive rate",
             title=f"AUC-ROC = {self.__compute_auc(x=fpr, y=sensitivity):.3f}",
             ax=ax,
         )
-        return ax
-
-    def __filtered_inference_edges(self, cutoff=None) -> set:
-        """Returns the set of edges predicted by the inference for a given cutoff.
-
-        Args:
-        cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None, the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization.
-
-        Returns:
-        -------
-        predicted_edges: set
-            Set of edges predicted by the inference for the given cutoff.
-        """
-        if self.greater_is_better:
-            return set().union(*[edges for score, edges in self.inference_edges if score >= cutoff])
-        else:
-            return set().union(*[edges for score, edges in self.inference_edges if score <= cutoff])
 
     # TODO: Optimization: Create a cache to keep {(cutoff, metric): value)}
-    def recall(self, cutoff:None|float=None) -> float:
+    def recall(self, cutoff) -> float:
         """Computes the recall for a given cutoff.
 
         Args:
         cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None, the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization.
+            The cutoff follows the greater_is_better rule.
 
         Returns:
+        -------
         recall: float
             Recall for the given cutoff.
         """
-        cutoff = self.__validate_cutoff(cutoff)
+        _, sensitivity, _ = self.__compute_roc_pr_datapoints(cutoff=cutoff)
+        return sensitivity[-2]  # last value is always 1
 
-        if cutoff == self.cutoff and self.__sensitivity_dist is not None:
-            sensitivity = self.__sensitivity_dist[-2]
-        else:
-            predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
-            true_positives = len(self.gold_standard_edges & predicted_edges)
-            sensitivity = true_positives / self.size_gold_standard
-        return sensitivity
-
-    def precision(self, cutoff:None|float=None) -> float:
+    def overall_precision(self, cutoff) -> float:
         """Computes the precision for a given cutoff.
 
         Args:
         cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None, the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization.
-        
-        Returns:
-        precision: float
-            Precision for the given cutoff.
-        """
-        cutoff = self.__validate_cutoff(cutoff)
-        
-        if cutoff == self.cutoff and self.__precision_dist is not None:
-            precision = self.__precision_dist[-2]
-        else:
-            predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
-            true_positives = len(self.gold_standard_edges & predicted_edges)
-            false_positives = len(predicted_edges - self.gold_standard_edges)
-            precision = true_positives / (true_positives + false_positives)
-        return precision
-    
-    def fpr(self, cutoff:None|float) -> float:
-        """Computes the false positive rate for a given cutoff.
-        
-        Args:
-        cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None, the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization.
-
-        Returns:
-        fpr: float
-            False positive rate for the given cutoff.
-        """
-        cutoff = self.__validate_cutoff(cutoff)
-
-        if cutoff == self.cutoff and self.__fpr_dist is not None:
-            fpr = self.__fpr_dist[-2]
-        else:
-            predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
-            false_positives = len(predicted_edges - self.gold_standard_edges)
-            fpr = false_positives / self.size_negatives
-        return fpr
-    
-    def accuracy(self, cutoff:None|float=None) -> float:
-        """Computes the accuracy for a given cutoff.
-
-        Args:
-        cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None, the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization.
-
-        Returns:
-        accuracy: float
-            Accuracy for the given cutoff.
-        """
-        cutoff = self.__validate_cutoff(cutoff)
-        if cutoff == self.cutoff:
-            predicted_edges = set().union(*[edges for _, edges in self.inference_edges])
-        else:
-            predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
-        true_positives = len(self.gold_standard_edges & predicted_edges)
-        false_positives = len(predicted_edges - self.gold_standard_edges)
-        false_negatives = self.size_gold_standard - true_positives
-        true_negatives = self.size_negatives - false_positives
-
-
-        return (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
-    
-
-    def f1_score(self, cutoff:None|float=None) -> float:
-        """Computes the F1 score for a given cutoff.
-
-        Args:
-        cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None, the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
-
-        Returns:
-        f1_score: float
-            F1 score for the given cutoff.
-        """
-        cutoff = self.__validate_cutoff(cutoff)
-        precision = self.precision(cutoff=cutoff)
-        recall = self.recall(cutoff=cutoff)
-        return 2 * (precision * recall) / (precision + recall)
-    
-    def __compute_f1_score_dist(self) -> np.ndarray:
-        """Computes the F1 score for every score in the inference.
-
-        Returns:
-        f1_score_dist: dict[float, float]
-            Dictionary containing the F1 score for every score in the inference.
-        """
-        f1_score_dist = {}
-        for score, _ in self.inference_edges:
-            f1_score_dist[score] = self.f1_score(cutoff=score)
-        self.__f1_score_dist = f1_score_dist
-        return f1_score_dist
-    
-    def optimal_cutoff(self) -> float:
-        """Computes the optimal cutoff for the inference, that required to maximize the F1 score.
-
-        Returns:
-        optimal_cutoff: float
-            Optimal cutoff for the inference.
-        """
-        self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
-        return max(self.__f1_score_dist, key=self.__f1_score_dist.get)
-    
-    def optimal_cutoff_plot(self, ax=None, **kwargs):
-        """Plots the precision and the recall values for every score in the inference, showing the optimal cutoff.
-
-        Args:
-        ax (matplotlib.axes.Axes): Axes object to plot the curve.
-            If None, a new figure and axes are created.
-        **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
+            The cutoff follows the greater_is_better rule.
 
         Returns:
         -------
-        ax: matplotlib.axes.Axes
-            Axes object containing the plot.
+        precision: float
+            Precision for the given cutoff.
         """
-        self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
-        optimal_cutoff = self.optimal_cutoff()
-        precision_dist, sensitivity_dist, _ = self.__compute_roc_pr_datapoints() # use the default cutoff to get the cached values
-        ax = self.__build_ax(ax, xlim=(min(self.__f1_score_dist), max(self.__f1_score_dist)), figsize=(4, 2))
-        ax.plot(self.__f1_score_dist.keys(), precision_dist[1:-1], label="Precision", color="#DC3220")
-        ax.plot(self.__f1_score_dist.keys(), sensitivity_dist[1:-1], label="Recall", color="#005AB5")
-        ax.vlines(optimal_cutoff, ymin=0, ymax=1, color="k", linestyles='dashed', label="Optimal cutoff")
-        ax.set_title(f"Optimal cutoff = {optimal_cutoff}", loc="right", size=FONT_SIZE, color=FONT_COLOR)
-        ax.set_xlabel("Score", size=FONT_SIZE, color=MINOR_FONT_COLOR)
-        ax.set_ylabel("Precision and recall", size=FONT_SIZE, color=MINOR_FONT_COLOR)
-        ax.legend(loc=0)
-        # print(self.__f1_score_dist.values(), precision_dist[1:-1], sensitivity_dist[1:-1])
-        return ax
+        precision, _, _ = self.__compute_roc_pr_datapoints(cutoff=cutoff)
+        return precision[-2]  # last value is always the baseline
