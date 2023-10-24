@@ -956,7 +956,7 @@ class LocalityIndex(_Property):
 class AverageOutDegreeNearestNeighbors(_Property):
     """Average Out-Degree of Nearest Neighbors
 
-    Average out-degree of nearest neighbors is defined as de average of out-degrees of each memeber of a node's neighborhood.
+    Average out-degree of nearest neighbors is defined as de average of out-degrees of each member of a node's neighborhood.
     In this case, the neighborhood of each node is the list of its successors.
 
     Methods:

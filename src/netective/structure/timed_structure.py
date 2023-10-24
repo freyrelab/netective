@@ -538,7 +538,7 @@ class Structure:
                     instances[class_.CLASS_NAME] = class_(property_input)
         return instances, unified_times
 
-    def _compute_props(self, child_classes) -> dict[str, float, int]:
+    def _compute_props(self, child_classes, return_instances) -> dict[str, float, int]:
         """
         Computes the structural properties of a network.
 
@@ -567,6 +567,8 @@ class Structure:
             property_groups[mask].append(class_)
 
         instances, obj_creation_times = self.__get_instances(property_groups, self.G)
+        if return_instances:
+            return instances
         process_times = {}
         process_times['motifs obj'] = obj_creation_times[0]
         process_times['shortest paths obj'] = obj_creation_times[1]
@@ -599,7 +601,7 @@ class Structure:
         return self.scalar_values, self.dist_values, process_times
 
     def get_props(
-        self, selected_props: str | list = "all", child_classes: list = None, include_env: None | dict = None
+        self, selected_props: str | list = "all", child_classes: list = None, include_env: None | dict = None, return_instances: bool = False
     ) -> Tuple[dict[str, dict], dict[str, dict]]:
         """
         Computes the structural properties of a network.
@@ -646,7 +648,10 @@ class Structure:
                     child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
 
                 # props
-                scalar_values, dist_values, process_times = self._compute_props(child_classes)
+                if not return_instances:
+                    scalar_values, dist_values, process_times = self._compute_props(child_classes)
+                else: 
+                    return self._compute_props(child_classes, return_instances= return_instances)
                 self._scalar_arrays[self.net_id] = scalar_values
                 self._dist_moments_arrays[self.net_id] = {
                     prop_name: compute_moments(array) for prop_name, array in dist_values.items()
