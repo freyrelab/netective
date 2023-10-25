@@ -97,7 +97,6 @@ def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph):
         utils_logger.critical(f"G must have at least one edge. It has {G.size()} edges.")
     return G
 
-
 def parse_network(
     file_path, comments="#", delimiter="\t", directed=True, score=False, use_position_as_score=False
 ) -> Union(nx.DiGraph, nx.Graph):
@@ -290,6 +289,73 @@ def giant_component_size(G):
 def is_iterable(obj):
     return hasattr(obj, "__iter__") and not isinstance(obj, str)
 
+def save_prop_dicts(
+    array: dict,
+    net_id: str,
+    type : str,
+    output_dir: str = os.getcwd(),
+    delimiter: str = "\t",
+    cl: str = None,
+) -> None:
+    """
+    Save the structural properties in a file containing the name of the network and the properties.
+
+    Args:
+        array (dict): Dictionary with the properties of the networks.
+            {network_name: {property_name: property_value}}.
+        net_id (str): Name of the network.
+        type (str): Type of properties stored in array.
+        output_dir (str): Path to the output directory. Defaults to current directory.
+        delimiter (str): Delimiter to use in the output file. Defaults to tab.
+        cl (str): Command line used to run the script.
+
+    Returns:
+        None.
+    """
+
+    exts = {",": "csv", "\t": "tsv"}
+    ext = exts.get(delimiter, "txt")
+
+    file_p = concat_path(output_dir, f"{net_id}_{type}_props.{ext}")
+
+    if cl is not None:
+        with open(file_p, "w") as f:
+            f.write(f"# {cl}\n")
+
+    # save scalar props as csv
+    df_s = pd.DataFrame.from_dict(array, orient="index")
+    df_s.to_csv(file_p, sep=delimiter)
+
+def save_figs(
+    fig: matplotlib.figure.Figure,
+    type : str = None,
+    net_id: str = None,
+    output_dir: str = os.getcwd(),
+    cl: str = None,
+    compare: bool = True,
+) -> None:
+    """
+    Save the structural properties in a file containing the name of the network and the properties.
+
+    Args:
+        scalar_props (dict): Dictionary with the scalar properties of the networks.
+            {network_name: {property_name: property_value}}.
+        dist_props (dict): Dictionary with the distribution properties of the networks.
+            {network_name: {property_name: property_moments}}.
+        output_dir (str): Path to the output directory. Defaults to current directory.
+        delimiter (str): Delimiter to use in the output file. Defaults to tab.
+        cl (str): Command line used to run the script.
+
+    Returns:
+        None.
+    """
+    if compare:
+        file_p = concat_path(output_dir, f"nets_comparison.png")
+    else:
+        file_p = concat_path(output_dir, f"{net_id}_{type}_props.png")
+    print(file_p)
+    
+    fig.savefig(fname= file_p)
 
 class ShortestDistances:
     """Summary."""

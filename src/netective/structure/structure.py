@@ -759,53 +759,6 @@ def er_nets_per_net_analysis(
     }
 
     return scalars_avg_er_net, dist_avg_er_net
-
-
-def save_strucs(
-    scalar_props: dict,
-    dist_props: dict,
-    output_dir: str = os.getcwd(),
-    delimiter: str = "\t",
-    cl: str = None,
-) -> None:
-    """
-    Save the structural properties in a file containing the name of the network and the properties.
-
-    Args:
-        scalar_props (dict): Dictionary with the scalar properties of the networks.
-            {network_name: {property_name: property_value}}.
-        dist_props (dict): Dictionary with the distribution properties of the networks.
-            {network_name: {property_name: property_moments}}.
-        output_dir (str): Path to the output directory. Defaults to current directory.
-        delimiter (str): Delimiter to use in the output file. Defaults to tab.
-        cl (str): Command line used to run the script.
-
-    Returns:
-        None.
-    """
-
-    exts = {",": "csv", "\t": "tsv"}
-    ext = exts.get(delimiter, "txt")
-    # file_p = concat_path(output, f"{output_file}.{ext}")
-
-    network_name = list(scalar_props.keys())[0]
-
-    file_p_s = concat_path(output_dir, f"{network_name}_scalar_props.{ext}")
-    file_p_d = concat_path(output_dir, f"{network_name}_dist_props.{ext}")
-
-    if cl is not None:
-        with open(file_p_s, "w") as f:
-            f.write(f"# {cl}\n")
-        with open(file_p_d, "w") as f:
-            f.write(f"# {cl}\n")
-
-    # save scalar props as csv
-    df_s = pd.DataFrame.from_dict(scalar_props, orient="index")
-    df_s.to_csv(file_p_s, sep=delimiter)
-
-    # save dist props as csv
-    df_d = pd.DataFrame.from_dict(dist_props, orient="index")
-    df_d.to_csv(file_p_d, sep=delimiter)
     
 
 # User Fxn's
