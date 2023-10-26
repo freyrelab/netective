@@ -597,6 +597,7 @@ class Diameter(_Property):
         Note: the diameter of the giant component is not necessarily the same as the diameter of the graph.
         we are using the diameter of the giant component here given that the computation of the diameter is performed on the giant component.
         """
+        # this was commented out because currently Paths only computes the diameter of undirected graphs.
         """
         n_parents = len(get_parent_nodes(self.G))
         return self._raw_value / n_parents

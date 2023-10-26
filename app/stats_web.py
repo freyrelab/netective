@@ -3,6 +3,7 @@ import os
 from shutil import copyfile
 from PIL import Image
 from netective.stats import stats
+from netective.utils import parse_network
 import matplotlib.pyplot as plt
 
 # Header
@@ -44,6 +45,13 @@ allow_self_loops = st.checkbox(
     help="Check if you want to consider self-loops in the assessment.",
 )
 cutoff_enabled = st.checkbox("Cutoff Value", value=False, help="Check to enable the cutoff value.")
+use_position_as_score = st.checkbox(
+    "Use position as score",
+    value=False,
+    help="Check if you want to use the position of the interaction in the prediction file as the score. Interactions at the top of the file will have a higher score than those at the bottom.",
+)
+
+score = True if not use_position_as_score else False
 
 # Set cutoff_value to False if cutoff is not enabled
 if cutoff_enabled:
@@ -57,18 +65,20 @@ if st.button("Run"):
         # Copy uploaded files to specified directories
         gold_standard_path = copy_to_directory(gold_standard_file, gold_standard_dir)
         prediction_path = copy_to_directory(prediction_file, prediction_dir)
+        gs = parse_network(gold_standard_path, comments="#", delimiter="\t", directed=directed)
+        pred = parse_network(prediction_path, comments="#", delimiter="\t", directed=directed, score=score, use_position_as_score=use_position_as_score) # TODO: make comments and delimiter configurable
 
         evaluation = stats.NetworkInferenceStats(
-            gold_standard_path,
-            prediction_path,
+            gs,
+            pred,
             greater_is_better,
-            directed,
             allow_self_loops,
             cutoff_value,
         )
-        fig, ax = plt.subplots(ncols=2, figsize=(6, 3))
+        fig, ax = plt.subplots(ncols=3, figsize=(9, 3))
         evaluation.plot_precision_recall_curve(ax=ax[0])
         evaluation.plot_roc_curve(ax=ax[1])
+        evaluation.optimal_cutoff_plot(ax=ax[2])
         plt.tight_layout()
         st.pyplot(fig)
 
