@@ -984,6 +984,7 @@ def classify_networks(
             'Entropy of Degree Distribution',
             'Self-Loops'],
         workers: str | int = "auto",
+        get_clusters_kargs: dict = None,
 ) -> dict:
     """
     Module-level function to classify multiple networks.
@@ -997,6 +998,7 @@ def classify_networks(
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
         workers (int, optional): Number of workers to use. Defaults to 'auto'.
             Auto means number of cpu's - 1.
+        get_clusters_kargs (dict, optional): Keyword arguments for the get_clusters function. Defaults to None.
 
     Raises:
         NormalizationError: Raised if the normalization is not valid.
@@ -1017,6 +1019,9 @@ def classify_networks(
     merged_df = pd.DataFrame.from_dict(scalar).T
     merged_df.dropna(axis=1, inplace=True, how='any')
 
-    clusters = get_clusters(merged_df.T.corr(), map_ids=True)
+    if get_clusters_kargs is not None:
+        clusters = get_clusters(merged_df.T.corr(), map_ids=True, **get_clusters_kargs)
+    else:
+        clusters = get_clusters(merged_df.T.corr(), map_ids=True)
 
     return clusters
