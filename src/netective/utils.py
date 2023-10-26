@@ -36,7 +36,7 @@ concat_path = os.path.join
 
 utils_logger = get_logger(__name__)
 
-def run_parallel(f, my_iter, workers, verbose: str = 'WARNING', process = str):
+def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL', process = str):
 
     """
     Start the parallel processes.
@@ -78,6 +78,8 @@ def run_parallel(f, my_iter, workers, verbose: str = 'WARNING', process = str):
                     results["distributions"].update(dist)
                     utils_logger.info(f'Finilized: {futures[future]}')
                     pbar.update(1)
+                    print('\n')
+
                     # except Exception as exc:
                     #     print(f"Error: {exc}")
         except NotImplementedError as e:
@@ -320,18 +322,17 @@ def save_prop_dicts(
 
     if cl is not None:
         with open(file_p, "w") as f:
-            f.write(f"# {cl}\n")
+            f.write(f"{cl}")
 
     # save scalar props as csv
-    df_s = pd.DataFrame.from_dict(array, orient="index")
-    df_s.to_csv(file_p, sep=delimiter)
+    df_s = pd.DataFrame.from_dict(array, orient="index").T
+    df_s.to_csv(file_p, sep=delimiter, mode= 'a')
 
 def save_figs(
     fig: matplotlib.figure.Figure,
     type : str = None,
     net_id: str = None,
     output_dir: str = os.getcwd(),
-    cl: str = None,
     compare: bool = True,
 ) -> None:
     """
@@ -353,9 +354,28 @@ def save_figs(
         file_p = concat_path(output_dir, f"nets_comparison.png")
     else:
         file_p = concat_path(output_dir, f"{net_id}_{type}_props.png")
-    print(file_p)
     
     fig.savefig(fname= file_p)
+
+def common_props_dict(networks):
+    new = defaultdict(lambda:defaultdict())
+
+    for i, (net_id, props) in enumerate(networks.items()):
+        if i == 0:
+            common = set(props.keys())
+        else:
+            common.intersection_update(set(props.keys()))
+
+    new = {
+        net_id : {
+            prop_name : value 
+            for prop_name, value in props.items()
+            if prop_name in common
+        }
+        for net_id, props in networks.items()
+    }
+
+    return new
 
 class ShortestDistances:
     """Summary."""

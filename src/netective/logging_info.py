@@ -33,7 +33,7 @@ def get_logger(logger_name):
    handler.setFormatter(formatter)
 
    logger = getLogger(logger_name)
-   logger.setLevel(WARNING)
+   logger.setLevel(CRITICAL)
    logger.addHandler(handler)
    logger.propagate = False
 

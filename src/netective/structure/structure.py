@@ -31,6 +31,7 @@ from netective.utils import (
     giant_component,
     remove_self_loops,
     association,
+    common_props_dict
 )
 
 import logging
@@ -698,6 +699,8 @@ def er_nets_per_net_analysis(
     }
     
     # Computing properties for erdos_renyi number of ER networks created
+    struct_logger.info('---------------------------------------------------------------------------------------------------------------------\n\n')
+    struct_logger.info(f'Starting analysis of {erdos_renyi} ER networks created from: {net_id}...')
     name_er_scalars_array, name_er_moments_arrays = compare_structure(
                             networks= er_networks,
                             norm= norm,
@@ -825,26 +828,6 @@ def characterize_network(
     
     return fig_scalar, fig_dist
 
-def common_props_dict(networks):
-    new = defaultdict(lambda:defaultdict())
-
-    for i, (net_id, props) in enumerate(networks.items()):
-        if i == 0:
-            common = set(props.keys())
-        else:
-            common.intersection_update(set(props.keys()))
-
-    new = {
-        net_id : {
-            prop_name : value 
-            for prop_name, value in props.items()
-            if prop_name in common
-        }
-        for net_id, props in networks.items()
-    }
-
-    return new
-
 def __remove_network_data(G: Graph) -> Graph:
     """
     Remove all the data from a network.
@@ -872,7 +855,8 @@ def compare_structure(
     return_prop_dicts: bool = False,
     association_metric: Callable = pearsonr,
     verbose: str = None,
-    erdos_renyi : int = 0
+    erdos_renyi : int = 0,
+    process : str = None
 ) -> Tuple[dict, dict] | plt.Figure:
     """
     Module-level function to compare multiple networks.
@@ -893,6 +877,10 @@ def compare_structure(
         NormalizationError: Raised if the normalization is not valid.
         ValueError: Raised if there is not enough data to compare.
     """
+    if verbose != None:
+        current_level = struct_logger.getEffectiveLevel()
+        set_log_level(verbose)
+    
     if norm not in NORM_OPTIONS:
         struct_logger.critical("Normalization not valid")
         raise properties.NormalizationError("Normalization not valid")
@@ -924,8 +912,7 @@ def compare_structure(
     ]
 
     # run parallel
-    results = run_parallel(characterize_network, data, workers, verbose=verbose, process='analysis of inputed networks')
-    struct_logger.info('Finished computing properties for all networks.')
+    results = run_parallel(characterize_network, data, workers, verbose= verbose, process= process)
     name_scalars_array = results["scalars"]
     name_moments_arrays = results["distributions"]
     
@@ -942,7 +929,6 @@ def compare_structure(
             struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
             raise ValueError("erdos_renyi must be 0 or greater")
     
-        struct_logger.info('Analyzing ER networks...')
         for net_id, net in networks.items():
             er_scalars_array, er_moments_arrays = er_nets_per_net_analysis(
                                                                 G= net, 
@@ -957,6 +943,8 @@ def compare_structure(
             name_moments_arrays.update(er_moments_arrays)
     
     if return_prop_dicts:
+        if verbose != None:
+            set_log_level(current_level)
         return name_scalars_array, name_moments_arrays
     
     # TODO: Optimization:  only compute the common properties
@@ -972,5 +960,8 @@ def compare_structure(
     else:
         struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")
-
+    
+    if verbose != None:
+        set_log_level(current_level)
+    
     return fig_scalar

@@ -2,12 +2,13 @@ import os
 from pandas import DataFrame
 
 from netective.cli import _arguments
-from netective.utils import parse_network, save_prop_dicts, save_figs
-
+from netective.utils import parse_network, save_prop_dicts, save_figs, common_props_dict, association
+from netective.structure.dataviz import create_symmetric_heatmap
 from netective import compare_structure, characterize_network
 
-from matplotlib.pyplot import savefig
 import networkx as nx
+
+from netective.logging_info import get_logger, set_log_level
 
 try:
     import pretty_traceback
@@ -16,6 +17,7 @@ try:
 except ImportError:
     pass
 
+cli_logger = get_logger(__name__)
 
 def main():
 
@@ -35,73 +37,22 @@ def main():
         workers = int(args.workers)
     except ValueError:
         workers = args.workers
-    return_prop_dicts = args.keep_props
+    return_prop_dicts = args.keep
     verbose = args.verbose
-    erdos_renyi = args.erdos_renyi
+    erdos_renyi = args.er
 
     # Technical Args
     comments = args.comments
     delimiter = args.delimiter
     output = args.output
-    output_file = args.output_file
 
-    cl = f"{comments} command: python {__file__} --path {nets_path} --norm {norm} --comments {comments} --delimiter {delimiter} --output {output} --output_file {output_file} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose}"
+    cl = f"{comments} command: python {__file__} --path {nets_path} --norm {norm} --comments {comments} --delimiter {delimiter} --output {output} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose}\n"
     
     # Creation of dictionary with networks
     networks = {}
-    # print(os.path.isdir(nets_path))
-    for root, dir, files in os.walk(nets_path):
-        if len(files) != 0:
-            for net_name in files:
-                net_path = os.path.join(os.getcwd(), root, net_name)
-                networks[net_name] = parse_network(net_path, comments, delimiter)
-    
-
-    if len(networks) > 1:
-    # Multiple networks to compare
-        if return_prop_dicts:
-            scalars_array, dist_array = compare_structure(
-                networks= networks, 
-                norm= norm, 
-                workers= workers, 
-                selected_props= selected_props,
-                verbose= verbose,
-                return_prop_dicts= True,
-                erdos_renyi= erdos_renyi
-            )
-            for net_id, props in scalars_array.items():
-                save_prop_dicts(
-                    array= props,
-                    net_id= net_id,
-                    type= 'scalars',
-                    output_dir= output,
-                    delimiter= delimiter,
-                    cl= cl
-                )
-            for net_id, props in dist_array.items():
-                save_prop_dicts(
-                    array= props,
-                    net_id= net_id,
-                    type= 'distributions',
-                    output_dir= output,
-                    delimiter= delimiter,
-                    cl= cl
-                )
-        else:
-            fig_scalars = compare_structure(
-                networks=networks, 
-                norm= norm, 
-                workers= workers, 
-                selected_props= selected_props,
-                verbose= verbose,
-                erdos_renyi= erdos_renyi,
-                return_prop_dicts= False
-            )
-            # Aqui va la fxn que guarde la fig
-            save_figs(fig_scalars, output_dir= output, cl= cl)
-    
-    # Only one network to characterize
-    else:
+    if not os.path.isdir(nets_path):
+        cli_logger.info('Starting Network Characterization...')
+        networks[os.path.basename(nets_path)] = parse_network(nets_path, comments, delimiter)
         net_id = list(networks.keys())[0]
         network = list(networks.values())[0]
         if return_prop_dicts:
@@ -111,7 +62,7 @@ def main():
                 norm= norm,
                 selected_props= selected_props,
                 verbose= verbose,
-                return_prop_dicts= return_prop_dicts
+                return_prop_dicts= True
             )
             save_prop_dicts(
                 array= scalars_array,
@@ -137,25 +88,96 @@ def main():
                 return_prop_dicts= False,
                 verbose= verbose
             )
-            # Aqui va la fxn que guarde las figs
             save_figs(
                 fig= fig_scalars,
                 type= 'scalars',
                 net_id= net_id,
                 compare= False,
-                output_dir= output,
-                cl= cl
+                output_dir= output
             )
             save_figs(
                 fig= fig_dist,
                 type= 'distributions',
                 net_id= net_id,
                 compare= False,
-                output_dir= output,
-                cl= cl
+                output_dir= output
             )
+    
+    # More than one network
+    else:
+        scalars_array = {}
+        dist_array = {}
+        for root, dir, files in os.walk(nets_path):
+            if len(files) != 0:
+                completed = 0
+                # Network analysis
+                for net_id in files:
+                    net_path = os.path.join(os.getcwd(), root, net_id)
+                    networks[net_id] = parse_network(net_path, comments, delimiter)
+                    # Number of inputed nets is > to workers, batch processing
+                    if (len(networks) == workers or completed == len(files) // workers) and len(files) > workers:
+                        temp_scalars_array, temp_dist_array = compare_structure(
+                            networks= networks, 
+                            norm= norm, 
+                            workers= workers, 
+                            selected_props= selected_props,
+                            verbose= verbose,
+                            return_prop_dicts= True,
+                            erdos_renyi= erdos_renyi,
+                            process= f'analysis of INPUTED networks: {list(networks.keys())}'
+                        )
+                        scalars_array.update(temp_scalars_array)
+                        dist_array.update(temp_dist_array)
+                        networks = {}
+                        completed += 1
+                # Number of inputed nets is <= to workers
+                if len(files) <= workers:
+                    scalars_array, dist_array = compare_structure(
+                        networks= networks, 
+                        norm= norm, 
+                        workers= workers, 
+                        selected_props= selected_props,
+                        verbose= verbose,
+                        return_prop_dicts= True,
+                        erdos_renyi= erdos_renyi,
+                        process= f'analysis of INPUTED networks: {list(networks.keys())}'
+                    )
+
+                # 
+                if return_prop_dicts:
+                    for net_id, props in scalars_array.items():
+                        save_prop_dicts(
+                            array= props,
+                            net_id= net_id,
+                            type= 'scalars',
+                            output_dir= output,
+                            delimiter= delimiter,
+                            cl= cl
+                        )
+                    for net_id, props in dist_array.items():
+                        save_prop_dicts(
+                            array= props,
+                            net_id= net_id,
+                            type= 'distributions',
+                            output_dir= output,
+                            delimiter= delimiter,
+                            cl= cl
+                        )
+                else:
+                    scalars_array = common_props_dict(scalars_array)
+                    # Scalar properties
+                    if len(scalars_array) > 0 and len(list(scalars_array.values())[0]) > 1:
+                        df = association(scalars_array)
+                        fig_scalars = create_symmetric_heatmap(df, title=f"Global properties")
+                        save_figs(fig_scalars, output_dir= output)
+                    else:
+                        cli_logger.critical("Not enough data to compare.")
+                        raise ValueError("Not enough data to compare.")
 
 
+                    
+    
+    
 ## read arguments
 if __name__ == "__main__":
     main()
