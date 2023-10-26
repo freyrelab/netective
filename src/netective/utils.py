@@ -241,16 +241,18 @@ def flatten_list_of_iterables(lst):
 
 
 def get_clusters(
-    corr_df, clust_num, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True
+    corr_df, clust_num=None, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True, fcluster_kwargs: dict = None
 ):
     """Get clusters from a correlation matrix.
 
     Args:
         corr_df (pandas.DataFrame): A correlation matrix.
-        clust_num (int): The number of clusters to be obtained.
+        clust_num (int, optional): The number of clusters to be obtained. None to automatically obtain the number of clusters.
         ch_method (str, optional): The linkage method to be used. Dafaults to 'ward'.
         ch_metric (str, optional): The distance metric to be used. Defaults to 'euclidean'.
         map_ids (bool, optional): If True, the clusters will be returned as a dictionary. Defaults to True.
+        fcluster_kwargs (dict, optional): Keyword arguments to be passed to scipy.cluster.hierarchy.fcluster.
+            t=0.5, criterion="distance" will be used if fcluster_kwargs is None.
 
     Returns:
         A list containing the cluster number for each node.
@@ -271,7 +273,13 @@ def get_clusters(
         raise ValueError(f"NaNs found in the correlation matrix. Unable to compute clusters.")
     linkage_mtrx = linkage(square_matrix, method=ch_method, metric=ch_metric)
     index = list(corr_df.index)
-    cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")
+    if clust_num is not None:
+        cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")
+    elif fcluster_kwargs is not None:
+        cluster_vector = fcluster(linkage_mtrx, **fcluster_kwargs)
+    else:
+        cluster_vector = fcluster(linkage_mtrx, t=0.5, criterion="distance")
+    
     clusters = {i: [] for i in cluster_vector}
     {clusters[cluster_vector[i]].append(index[i]) for i in range(len(cluster_vector))}
 

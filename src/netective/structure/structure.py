@@ -31,7 +31,8 @@ from netective.utils import (
     giant_component,
     remove_self_loops,
     association,
-    common_props_dict
+    common_props_dict,
+    get_clusters,
 )
 
 import logging
@@ -965,3 +966,57 @@ def compare_structure(
         set_log_level(current_level)
     
     return fig_scalar
+
+
+def classify_networks(
+        networks: dict(str, Graph),
+        norm: str | None = None,
+        selected_props: str | list = ['Average Local Efficiency',
+            'Radius',
+            'Center',
+            'Periphery',
+            'Complex Feed-Forward Circuits',
+            'Feed-Forward Circuits',
+            'Max Degree',
+            'Gini Index',
+            'Global Efficiency',
+            'Undirected Gini Index',
+            'Entropy of Degree Distribution',
+            'Self-Loops'],
+        workers: str | int = "auto",
+) -> dict:
+    """
+    Module-level function to classify multiple networks.
+    Returns groups of networks with similar properties.
+
+    Args:
+        networks (dict): Dictionary of networks to compare.
+            {'net_id': DiGraph | Graph}
+        norm (str, optional): Normalization to apply. Defaults to None.
+            Valid values are 'network', 'biological' or None.
+        selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
+        workers (int, optional): Number of workers to use. Defaults to 'auto'.
+            Auto means number of cpu's - 1.
+
+    Raises:
+        NormalizationError: Raised if the normalization is not valid.
+        ValueError: Raised if there is not enough data to compare.
+    
+    Returns:
+        dict: Dictionary with the id of the cluster and the networks that belong to it.
+    """
+
+    scalar, _ = compare_structure(
+        networks,
+        norm= norm,
+        selected_props= selected_props,
+        workers= workers,
+        return_prop_dicts= True,
+    )
+
+    merged_df = pd.DataFrame.from_dict(scalar).T
+    merged_df.dropna(axis=1, inplace=True, how='any')
+
+    clusters = get_clusters(merged_df.T.corr(), map_ids=True)
+
+    return clusters
