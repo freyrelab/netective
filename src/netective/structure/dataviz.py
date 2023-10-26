@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from netective.logging_info import get_logger, set_log_level
+import logging
 
 dataviz_logger = get_logger(__name__)
 
@@ -36,7 +37,11 @@ def format_title(input_str):
 
 
 
-def plot_distributions(dist_values):
+def plot_distributions(dist_values, verbose: str = None):
+    if verbose != None:
+        current_level = dataviz_logger.getEffectiveLevel()
+        set_log_level(dataviz_logger, verbose)
+    dataviz_logger.info('Plotting node-level properties...')
     # Determine the grid shape based on the number of items
     num_items = len(dist_values)
     if num_items == 0:
@@ -68,14 +73,22 @@ def plot_distributions(dist_values):
                 fig.delaxes(axs[j])
             # Adjust spacing between subplots
             fig.tight_layout()
+    
+    if verbose != None:
+        set_log_level(dataviz_logger, current_level)
+
     return fig, axs
 
 
-def plot_scalars(data_dict):
+def plot_scalars(data_dict, verbose: str= None):
+    if verbose != None:
+        current_level = dataviz_logger.getEffectiveLevel()
+        set_log_level(dataviz_logger, verbose)
     # Extract keys (strings) and values (floats) from the dictionary
     labels = list(data_dict.keys())
     values = list(data_dict.values())
 
+    dataviz_logger.info('Plotting global properties...')
     with sns.axes_style("darkgrid"):
         # Create the figure and axes
         fig, axs = plt.subplots(figsize=(2, 0.3 * len(labels)))
@@ -97,11 +110,19 @@ def plot_scalars(data_dict):
         axs.set_ylabel("")
         axs.set_title("Network Level Properties", loc="left")
 
+    if verbose != None:
+        set_log_level(dataviz_logger, current_level)
+    
     return fig, axs
 
 
 # Plotting Fxns
-def create_symmetric_heatmap(dataframe, title: str, method="ward"):
+def create_symmetric_heatmap(dataframe, title: str, method="ward", verbose: str = None):
+    if verbose != None:
+        current_level = dataviz_logger.getEffectiveLevel()
+        set_log_level(dataviz_logger, verbose)
+    
+    dataviz_logger.info('Creating symmetric heatmap...')
     # Create a figure and axes
     # fig, axs = plt.subplots()
 
@@ -124,5 +145,7 @@ def create_symmetric_heatmap(dataframe, title: str, method="ward"):
     # Set the title
     g.ax_heatmap.set_title(title)
 
+    if verbose != None:
+        set_log_level(dataviz_logger, current_level)
     # Return the figure and axes
     return g.fig #, g.ax_heatmap

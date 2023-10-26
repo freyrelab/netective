@@ -78,7 +78,6 @@ def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL', process = str):
                     results["distributions"].update(dist)
                     utils_logger.info(f'Finilized: {futures[future]}')
                     pbar.update(1)
-                    print('\n')
 
                     # except Exception as exc:
                     #     print(f"Error: {exc}")
@@ -95,8 +94,10 @@ def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph):
     """Validates the network and returns a DiGraph or Graph object."""
     if not isinstance(G, (nx.Graph, nx.DiGraph)):
         utils_logger.critical("G must be a DiGraph or a Graph")
+        raise TypeError("G must be a DiGraph or a Graph")
     if G.size() == 0:
         utils_logger.critical(f"G must have at least one edge. It has {G.size()} edges.")
+        raise TypeError("G must have at least one edge. It has {G.size()} edges.")
     return G
 
 def parse_network(
@@ -193,6 +194,7 @@ def association(
                 utils_logger.critical(
                     f"Correlation function not admitted, Return Type must be {accepted_types}"
                 )
+                raise TypeError(f"Correlation function not admitted, Return Type must be {accepted_types}")
 
             if not isinstance(result, float):
                 corr_coef = result[0]

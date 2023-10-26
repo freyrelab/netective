@@ -818,10 +818,10 @@ def characterize_network(
         return scalar_values, dist_values
     
     if len(dist_values) != 0:
-        fig_dist, _ = plot_distributions(dist_values[net_id])
+        fig_dist, _ = plot_distributions(dist_values[net_id], verbose= verbose)
 
     if len(scalar_values) != 0:
-        fig_scalar, _ = plot_scalars(scalar_values[net_id])
+        fig_scalar, _ = plot_scalars(scalar_values[net_id], verbose= verbose)
     
     if verbose != None:
         set_log_level(current_level)
@@ -955,7 +955,7 @@ def compare_structure(
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
         df = association(name_scalars_array, corr_func=association_metric)
-        fig_scalar = create_symmetric_heatmap(df, title=f"Global properties")
+        fig_scalar = create_symmetric_heatmap(df, title=f"Global properties", verbose= verbose)
     
     else:
         struct_logger.critical("Not enough data to compare.")

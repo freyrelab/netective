@@ -8,7 +8,7 @@ from netective import compare_structure, characterize_network
 
 import networkx as nx
 
-from netective.logging_info import get_logger, set_log_level
+from netective.logging_info import get_logger
 
 try:
     import pretty_traceback
@@ -51,7 +51,6 @@ def main():
     # Creation of dictionary with networks
     networks = {}
     if not os.path.isdir(nets_path):
-        cli_logger.info('Starting Network Characterization...')
         networks[os.path.basename(nets_path)] = parse_network(nets_path, comments, delimiter)
         net_id = list(networks.keys())[0]
         network = list(networks.values())[0]
@@ -168,21 +167,11 @@ def main():
                     # Scalar properties
                     if len(scalars_array) > 0 and len(list(scalars_array.values())[0]) > 1:
                         df = association(scalars_array)
-                        fig_scalars = create_symmetric_heatmap(df, title=f"Global properties")
+                        fig_scalars = create_symmetric_heatmap(df, title=f"Global properties", verbose= verbose)
                         save_figs(fig_scalars, output_dir= output)
                     else:
                         cli_logger.critical("Not enough data to compare.")
                         raise ValueError("Not enough data to compare.")
 
-
-                    
-    
-    
-## read arguments
 if __name__ == "__main__":
-    main()
-
-
-# H:\\Mi unidad\\Respaldo\\Genomicas\\netective\\data\\test_comp
-# H:\\Mi unidad\\Respaldo\\Genomicas\\netective\\data\\test_charac
-# python netective_test.py --path ..\..\data\test --norm biological                                                                                                                     
+    main()                                                                                                                   
