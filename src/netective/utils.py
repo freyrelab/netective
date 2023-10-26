@@ -365,7 +365,7 @@ def save_figs(
     else:
         file_p = concat_path(output_dir, f"{net_id}_{type}_props.png")
     
-    fig.savefig(fname= file_p)
+    fig.savefig(fname= file_p, bbox_inches = "tight", dpi= 300)
 
 def common_props_dict(networks):
     new = defaultdict(lambda:defaultdict())
