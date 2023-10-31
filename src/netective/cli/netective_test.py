@@ -2,7 +2,7 @@ import os
 from pandas import DataFrame
 
 from netective.cli import _arguments
-from netective.utils import parse_network, save_prop_dicts, save_figs, common_props_dict, association
+from netective.utils import parse_network, save_prop_dicts, save_figs, common_props_dict, association, sort_files
 from netective.structure.dataviz import create_symmetric_heatmap
 from netective import compare_structure, characterize_network
 
@@ -106,72 +106,73 @@ def main():
     else:
         scalars_array = {}
         dist_array = {}
-        for root, dir, files in os.walk(nets_path):
-            if len(files) != 0:
-                completed = 0
-                # Network analysis
-                for net_id in files:
-                    net_path = os.path.join(os.getcwd(), root, net_id)
-                    networks[net_id] = parse_network(net_path, comments, delimiter)
-                    # Number of inputed nets is > to workers, batch processing
-                    if (len(networks) == workers or completed == len(files) // workers) and len(files) > workers:
-                        temp_scalars_array, temp_dist_array = compare_structure(
-                            networks= networks, 
-                            norm= norm, 
-                            workers= workers, 
-                            selected_props= selected_props,
-                            verbose= verbose,
-                            return_prop_dicts= True,
-                            erdos_renyi= erdos_renyi,
-                            process= f'analysis of INPUTED networks: {list(networks.keys())}'
-                        )
-                        scalars_array.update(temp_scalars_array)
-                        dist_array.update(temp_dist_array)
-                        networks = {}
-                        completed += 1
-                # Number of inputed nets is <= to workers
-                if len(files) <= workers:
-                    scalars_array, dist_array = compare_structure(
-                        networks= networks, 
-                        norm= norm, 
-                        workers= workers, 
-                        selected_props= selected_props,
-                        verbose= verbose,
-                        return_prop_dicts= True,
-                        erdos_renyi= erdos_renyi,
-                        process= f'analysis of INPUTED networks: {list(networks.keys())}'
-                    )
+        completed = 0
+        # Network analysis
+        sorted_files = sort_files(path= nets_path)
+        
+        for net_path in sorted_files:
+            net_id = os.path.basename(net_path)
+            networks[net_id] = parse_network(net_path, comments, delimiter)
 
-                # 
-                if return_prop_dicts:
-                    for net_id, props in scalars_array.items():
-                        save_prop_dicts(
-                            array= props,
-                            net_id= net_id,
-                            type= 'scalars',
-                            output_dir= output,
-                            delimiter= delimiter,
-                            cl= cl
-                        )
-                    for net_id, props in dist_array.items():
-                        save_prop_dicts(
-                            array= props,
-                            net_id= net_id,
-                            type= 'distributions',
-                            output_dir= output,
-                            delimiter= delimiter,
-                            cl= cl
-                        )
-                else:
-                    scalars_array = common_props_dict(scalars_array)
-                    # Scalar properties
-                    if len(scalars_array) > 0 and len(list(scalars_array.values())[0]) > 1:
-                        df = association(scalars_array)
-                        fig_scalars = create_symmetric_heatmap(df, title=f"Global properties", verbose= verbose)
-                        save_figs(fig_scalars, output_dir= output)
-                    else:
-                        cli_logger.critical("Not enough data to compare.")
-                        raise ValueError("Not enough data to compare.")
+            # Number of inputed nets is > to workers, batch processing
+            if (len(networks) == workers or completed == len(sorted_files) // workers) and len(sorted_files) > workers:
+                temp_scalars_array, temp_dist_array = compare_structure(
+                    networks= networks, 
+                    norm= norm, 
+                    workers= workers, 
+                    selected_props= selected_props,
+                    verbose= verbose,
+                    return_prop_dicts= True,
+                    erdos_renyi= erdos_renyi,
+                    process= f'analysis of INPUTED networks: {list(networks.keys())}'
+                )
+                scalars_array.update(temp_scalars_array)
+                dist_array.update(temp_dist_array)
+                networks = {}
+                completed += 1
+        # Number of inputed nets is <= to workers
+        if len(sorted_files) <= workers:
+            scalars_array, dist_array = compare_structure(
+                networks= networks, 
+                norm= norm, 
+                workers= workers, 
+                selected_props= selected_props,
+                verbose= verbose,
+                return_prop_dicts= True,
+                erdos_renyi= erdos_renyi,
+                process= f'analysis of INPUTED networks: {list(networks.keys())}'
+            )
+
+        # 
+        if return_prop_dicts:
+            for net_id, props in scalars_array.items():
+                save_prop_dicts(
+                    array= props,
+                    net_id= net_id,
+                    type= 'scalars',
+                    output_dir= output,
+                    delimiter= delimiter,
+                    cl= cl
+                )
+            for net_id, props in dist_array.items():
+                save_prop_dicts(
+                    array= props,
+                    net_id= net_id,
+                    type= 'distributions',
+                    output_dir= output,
+                    delimiter= delimiter,
+                    cl= cl
+                )
+        else:
+            scalars_array = common_props_dict(scalars_array)
+            # Scalar properties
+            if len(scalars_array) > 0 and len(list(scalars_array.values())[0]) > 1:
+                df = association(scalars_array)
+                fig_scalars = create_symmetric_heatmap(df, title=f"Global properties", verbose= verbose)
+                save_figs(fig_scalars, output_dir= output)
+            else:
+                cli_logger.critical("Not enough data to compare.")
+                raise ValueError("Not enough data to compare.")
 
 if __name__ == "__main__":
     main()                                                                                                                   

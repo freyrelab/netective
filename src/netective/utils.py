@@ -89,6 +89,24 @@ def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL', process = str):
     warnings.resetwarnings()
     return results
 
+def sort_files(path: str):
+    files_paths = []
+    for root, dir, files in os.walk(path):
+        if len(files) != 0:
+            for f in files:
+                files_paths.append(os.path.join(root,f))
+    files_paths = sorted (
+        files_paths,
+        key = lambda x: os.stat(x).st_size,
+        reverse=True
+    )
+    """
+    for name_of_file in files_paths: 
+        size_of_file  = os.stat(name_of_file).st_size  
+        print(size_of_file, ' -->', name_of_file)
+    """
+    
+    return files_paths
 
 def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph):
     """Validates the network and returns a DiGraph or Graph object."""
