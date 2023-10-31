@@ -920,9 +920,11 @@ def compare_structure(
     for net_id, prop in name_moments_arrays.items():
         for prop_name, values in prop.items():
             name_scalars_array[net_id][f'Average {prop_name}'] = values[0]
+            """
             name_scalars_array[net_id][f'Variation {prop_name}'] = values[1]
             name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
             name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
+            """
     
     if erdos_renyi:
 
