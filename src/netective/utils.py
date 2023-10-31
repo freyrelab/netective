@@ -32,6 +32,8 @@ from netective.logging_info import get_logger, set_log_level
 
 import logging
 
+import matplotlib as plt
+
 concat_path = os.path.join
 
 utils_logger = get_logger(__name__)
@@ -58,7 +60,7 @@ def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL', process = str):
         current_level = utils_logger.getEffectiveLevel()
         set_log_level(utils_logger, verbose)
     
-    utils_logger.info(f'Starting {process}...')
+    utils_logger.warning(f'Starting {process}...')
     my_iter = list(zip(*my_iter))
     len_iter = len(my_iter)
     with tqdm(total=len_iter, file=sys.stdout) as pbar:
@@ -76,7 +78,7 @@ def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL', process = str):
                     scalar, dist = future.result()
                     results["scalars"].update(scalar)
                     results["distributions"].update(dist)
-                    utils_logger.info(f'Finilized: {futures[future]}')
+                    utils_logger.warning(f'Finilized: {futures[future]}')
                     pbar.update(1)
 
                     # except Exception as exc:
@@ -357,8 +359,8 @@ def save_prop_dicts(
     df_s.to_csv(file_p, sep=delimiter, mode= 'a')
 
 def save_figs(
-    fig: matplotlib.figure.Figure,
-    type : str = None,
+    fig: plt.figure.Figure,
+    props : str = None,
     net_id: str = None,
     output_dir: str = os.getcwd(),
     compare: bool = True,
@@ -378,12 +380,13 @@ def save_figs(
     Returns:
         None.
     """
-    if compare:
-        file_p = concat_path(output_dir, f"nets_comparison.png")
-    else:
-        file_p = concat_path(output_dir, f"{net_id}_{type}_props.png")
-    
-    fig.savefig(fname= file_p, bbox_inches = "tight", dpi= 300)
+    if isinstance(fig, plt.figure.Figure):
+        if compare:
+            file_p = concat_path(output_dir, f"nets_comparison.png")
+        else:
+            file_p = concat_path(output_dir, f"{net_id}_{props}_props.png")
+        
+        fig.savefig(fname= file_p, bbox_inches = "tight", dpi= 300)
 
 def common_props_dict(networks):
     new = defaultdict(lambda:defaultdict())

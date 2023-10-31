@@ -700,8 +700,8 @@ def er_nets_per_net_analysis(
     }
     
     # Computing properties for erdos_renyi number of ER networks created
-    struct_logger.info('---------------------------------------------------------------------------------------------------------------------\n\n')
-    struct_logger.info(f'Starting analysis of {erdos_renyi} ER networks created from: {net_id}...')
+    struct_logger.warning('--------------------------------------------------------------------------------')
+    struct_logger.warning(f'Starting analysis of {erdos_renyi} ER networks created from: {net_id}...')
     name_er_scalars_array, name_er_moments_arrays = compare_structure(
                             networks= er_networks,
                             norm= norm,

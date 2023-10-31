@@ -25,7 +25,7 @@ def get_logger(logger_name):
    formatter = LeveledFormatter('??? %(message)s')
    formatter.set_formatter(DEBUG, Formatter('[%(asctime)s] [%(module)s] [%(funcName)s] [%(lineno)d] [%(message)s]', datefmt='%m/%d/%Y %I:%M:%S %p'))
    formatter.set_formatter(INFO, Formatter('[%(levelname)s] %(message)s'))
-   formatter.set_formatter(WARNING, Formatter('[%(funcName)s] [%(levelname)s] [%(message)s]'))
+   formatter.set_formatter(WARNING, Formatter('\n[%(funcName)s] [%(levelname)s] [%(message)s]'))
    formatter.set_formatter(ERROR, Formatter('[%(levelname)s] [%(message)s]'))
    formatter.set_formatter(CRITICAL, Formatter('[%(module)s] [%(funcName)s] [%(levelname)s] [%(message)s]'))
 

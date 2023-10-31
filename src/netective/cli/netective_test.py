@@ -1,5 +1,5 @@
 import os
-from pandas import DataFrame
+from multiprocessing import cpu_count
 
 from netective.cli import _arguments
 from netective.utils import parse_network, save_prop_dicts, save_figs, common_props_dict, association, sort_files
@@ -8,7 +8,7 @@ from netective import compare_structure, characterize_network
 
 import networkx as nx
 
-from netective.logging_info import get_logger
+from netective.logging_info import get_logger, set_log_level
 
 try:
     import pretty_traceback
@@ -25,28 +25,32 @@ def main():
     args = _arguments._parse_arguments()
 
     # Args for network analysis
-    nets_path = args.path
-    norm = args.norm
-    if len(args.props) != 1:
-        selected_props = args.props
-    elif args.props[0] == 'all':
+    nets_path = args.input
+    norm = args.normalization
+    verbose = args.verbose
+    if verbose != None:
+        set_log_level(cli_logger, verbose)
+    if len(args.selected_props) != 1:
+        selected_props = args.selected_props
+    elif args.selected_props[0] == 'all':
         selected_props = 'all'
     else:
-        selected_props = args.props
-    try:
-        workers = int(args.workers)
-    except ValueError:
-        workers = args.workers
-    return_prop_dicts = args.keep
-    verbose = args.verbose
-    erdos_renyi = args.er
+        selected_props = args.selected_props
+    if not args.workers:
+        workers = cpu_count() - 1
+        cli_logger.warning(f'Multiprocessing enabled in {workers} usable threads detected.')
+    else:
+        workers = cpu_count() - 1 if args.workers > cpu_count() - 1 else args.workers
+        cli_logger.warning(f'Multiprocessing enabled in {workers} threads.')
+    return_prop_dicts = args.keep_props
+    erdos_renyi = args.erdos_renyi
 
     # Technical Args
     comments = args.comments
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments} command: python {__file__} --path {nets_path} --norm {norm} --comments {comments} --delimiter {delimiter} --output {output} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose}\n"
+    cl = f"{comments} command: python {__file__} --path {nets_path} --norm {norm} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {delimiter} --output {output}\n"
     
     # Creation of dictionary with networks
     networks = {}
@@ -89,14 +93,14 @@ def main():
             )
             save_figs(
                 fig= fig_scalars,
-                type= 'scalars',
+                props= 'scalars',
                 net_id= net_id,
                 compare= False,
                 output_dir= output
             )
             save_figs(
                 fig= fig_dist,
-                type= 'distributions',
+                props= 'distributions',
                 net_id= net_id,
                 compare= False,
                 output_dir= output
