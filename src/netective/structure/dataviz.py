@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from netective.logging_info import get_logger, set_log_level
+from matplotlib.ticker import FuncFormatter
 import logging
 
 dataviz_logger = get_logger(__name__)
@@ -88,10 +89,21 @@ def plot_scalars(data_dict, verbose: str= None):
     labels = list(data_dict.keys())
     values = list(data_dict.values())
 
+    # Count the number of values below the threshold
+    threshold = 0.05 * max(values)
+    num_below_threshold = sum(value < threshold for value in values)
+    # use log scale if more than 30% of the values are below the threshold
+    use_log_scale = num_below_threshold > (len(values) / 3)
+
+
+
     dataviz_logger.info('Plotting global properties...')
     with sns.axes_style("darkgrid"):
         # Create the figure and axes
         fig, axs = plt.subplots(figsize=(2, 0.3 * len(labels)))
+
+        if use_log_scale:
+            plt.xscale("symlog", base=10)
 
         # Create a horizontal bar plot using seaborn
         sns.barplot(x=values, y=labels, ax=axs, color="#384265")
@@ -103,12 +115,17 @@ def plot_scalars(data_dict, verbose: str= None):
                     value = int(value)
                 else:
                     value = round(value, 2) if value >= 0.01 else value
-            plt.text(value, i, str(value) if value >= 0.01 else f"{value:.2E}", va="center")
+            value_srt = str(value) if value >= 0.01 or value==0 else f"{value:.2E}"
+            plt.text(float(value), i, value_srt, va="center")
 
         # Customize the plot
+        axs.set_xlim(0, max(values) * 1.1)
         axs.set_xlabel("Values")
         axs.set_ylabel("")
         axs.set_title("Network Level Properties", loc="left")
+        # axs.xaxis.set_major_formatter(FuncFormatter(lambda value,_: f'{int(value)}'))
+
+    plt.tight_layout()
 
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
