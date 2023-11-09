@@ -113,6 +113,9 @@ def main():
         completed = 0
         # Network analysis
         sorted_files = sort_files(path= nets_path)
+        if len(sorted_files) < 2:
+            cli_logger.critical('Only one network detected in inputed directory. For network characterization enter full path to network, not path to directory.')
+            exit ()
         
         for net_path in sorted_files:
             net_id = os.path.basename(net_path)

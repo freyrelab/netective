@@ -67,40 +67,40 @@ def validate_network_characteristics(self):
 
 
 # Theoretical maximums
-def _max_loops(*, n: int, r: int, tfs: int, r_tfs: int) -> int:
+def _max_loops(*, n: int, r: int, non_leafs: int, r_non_leafs: int) -> int:
     """
-    Computes the maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
+    Computes the maximum number of motifs of size r with r_non_leafs None-Leaf Nodes in a network of n nodes with non_leafs None-Leaf Nodes.
 
     Keyword Arguments:
         n = number of nodes in the network
         r = number of elements in the motif
-        tfs = number of TFs in the network
-        r_tfs = number of TFs in the motif
+        non_leafs = number of None-Leaf Nodes in the network
+        r_non_leafs = number of None-Leaf Nodes in the motif
 
     Returns:
-        int: maximum number of motifs of size r with r_tfs TFs in a network of n nodes with tfs TFs.
+        int: maximum number of motifs of size r with r_non_leafs None-Leaf Nodes in a network of n nodes with non_leafs None-Leaf Nodes.
 
     Notes:
         The putative maximum number of motifs is computed as follows:
         - The number of possible combinations of r elements out of n is given by n! / r! / (n-r)!
-        - It is normalized by the probability of founding a TF in the network, which is tfs / n for the first TF, tfs-1 / n-1 for the second, and so on.
+        - It is normalized by the probability of founding a TF in the network, which is non_leafs / n for the first TF, non_leafs-1 / n-1 for the second, and so on.
         The mathematical expression is:
         .. math::
-            \frac{n!}{r! \cdot (n-r)!} \cdot \frac{tfs}{n} \cdot \frac{tfs-1}{n-1} \cdot \ldots \cdot \frac{tfs - r_{tfs} - 1}{n - r_{tfs} - 1}
+            \frac{n!}{r! \cdot (n-r)!} \cdot \frac{non_leafs}{n} \cdot \frac{non_leafs-1}{n-1} \cdot \ldots \cdot \frac{non_leafs - r_{non_leafs} - 1}{n - r_{non_leafs} - 1}
 
     """
 
-    if r_tfs > tfs or r_tfs > r:
-        raise ValueError("r_tfs cannot be greater than r or tfs")
+    if r_non_leafs > non_leafs or r_non_leafs > r:
+        raise ValueError("r_non_leafs cannot be greater than r or non_leafs")
     
-    if r > n or tfs > n:
-        raise ValueError("r nor tfs cannot be greater than n")
+    if r > n or non_leafs > n:
+        raise ValueError("r nor non_leafs cannot be greater than n")
     
     # print(f'putative max loops: {math.factorial(n)} / {math.factorial(r)} / {math.factorial(n - r)}')
     putative = int(fac(n) / fac(r) / fac(n - r))
 
-    for i in range(r_tfs):
-        ratio = (tfs - i) / (n - i)
+    for i in range(r_non_leafs):
+        ratio = (non_leafs - i) / (n - i)
         putative *= ratio
     return putative
 
@@ -113,7 +113,7 @@ def get_entropy(elements: np.array):
     return entropy if entropy == 0 else -entropy
 
 
-def get_parent_nodes(G: nx.DiGraph):
+def get_non_leaf_nodes(G: nx.DiGraph):
     """Get the parent nodes of a graph."""
     return [i for i, k_out in G.out_degree() if k_out > 0]
 
@@ -201,7 +201,7 @@ class Density(_Property):
 
     Methods:
         compute: Compute the density of the graph.
-        norm_biol: Normalize the density of the graph to the number of parents.
+        norm_biol: Normalize the density of the graph to the number of non-leaf nodes.
         norm_network: Normalize the density of the graph to the number of nodes.
     """
 
@@ -226,18 +226,18 @@ class Density(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the density of the graph to the number of parents.
+        """Normalize the density of the graph to the number of non-leaf nodes.
 
         Returns:
-            float: Normalized density of the graph, considering the number of parents.
+            float: Normalized density of the graph, considering the number of non-leaf nodes.
 
         Raises:
             NormalizationError: If the graph has no parent nodes.
         """
-        n_parents = len(get_parent_nodes(self.G))
+        non_leafs = len(get_non_leaf_nodes(self.G))
         try:
             # return self._raw_value * (self._n_nodes / n_parents)
-            return self._n_edges / (n_parents * self._n_nodes)
+            return self._n_edges / (non_leafs * self._n_nodes)
         except ZeroDivisionError:
             raise NormalizationError(
                 "Division by zero (no parent nodes). Cannot normalize with this approach."
@@ -256,16 +256,16 @@ class Density(_Property):
 @return_scalar
 @use_direction
 @use_selfloops
-class Regulators(_Property):
-    """Number of regulators of the graph.
+class NonLeafNodes(_Property):
+    """Number of Non_leaf Nodes of the graph.
 
     Methods:
-        compute: Compute the number of regulators of the graph.
-        norm_biol: Normalize the number of regulators of the graph to the number of parents.
-        norm_network: Normalize the number of regulators of the graph to the number of nodes.
+        compute: Compute the number of non-leaf nodes of the graph.
+        norm_biol: Normalize the number of non-leaf nodes of the graph to the number of nodes.
+        norm_network: Normalize the number of non-leaf nodes of the graph to the number of nodes.
     """
 
-    CLASS_NAME = "Regulators"
+    CLASS_NAME = "Non-Leaf Nodes"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -275,37 +275,37 @@ class Regulators(_Property):
         super().__init__(G)
 
     def compute(self) -> int:
-        """Compute the number of regulators of the graph.
+        """Compute the number of non-leaf nodes of the graph.
 
         Returns:
-            int: Number of regulators of the graph.
+            int: Number of non-leaf nodes of the graph.
         """
-        self._raw_value = len(get_parent_nodes(self.G))
+        self._raw_value = len(get_non_leaf_nodes(self.G))
         return self._raw_value
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the number of regulators of the graph to the number of nodes."""
+        """Normalize the number of non-leaf nodes of the graph to the number of nodes."""
         return self._raw_value / self._n_nodes
 
     @check_raw_value
     def norm_network(self) -> float:
-        """Normalize the number of regulators of the graph to the number of nodes."""
+        """Normalize the number of non-leaf nodes of the graph to the number of nodes."""
         return self._raw_value / self._n_nodes
 
 @use_direction
 @return_scalar
 @use_selfloops
-class SelfRegulations(_Property):
-    """Number of self-loops of the directed graph. These represent self regulators in a biological context.
+class SelfLoops(_Property):
+    """Number of self-loops of the directed graph.
 
     Methods:
         compute: Compute the number of self-loops of the graph.
-        norm_biol: Normalize the number of self-loops of the graph to the number of parents.
+        norm_biol: Normalize the number of self-loops of the graph to the number of non-leaf nodes.
         norm_network: Normalize the number of self-loops of the graph to the number of nodes.
     """
 
-    CLASS_NAME = "Self Regulations"
+    CLASS_NAME = "Self-Loops"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -325,10 +325,10 @@ class SelfRegulations(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the number of self-regulations of the graph to the number of parents."""
-        n_parents = len(get_parent_nodes(self.G))
+        """Normalize the number of self-regulations of the graph to the number of non-leaf nodes."""
+        non_leafs = len(get_non_leaf_nodes(self.G))
         try:
-            return self._raw_value / n_parents
+            return self._raw_value / non_leafs
         except ZeroDivisionError:
             raise NormalizationError(
                 "Division by zero (no parent nodes). Cannot normalize with this approach."
@@ -348,7 +348,7 @@ class MaxOutDegree(_Property):
 
     Methods:
         compute: Compute the maximum out-degree of the graph.
-        norm_biol: Normalize the maximum out-degree of the graph to the number of parents.
+        norm_biol: Normalize the maximum out-degree of the graph to the number of non-leaf nodes.
         norm_network: Normalize the maximum out-degree of the graph to the number of nodes.
     """
 
@@ -385,7 +385,7 @@ class MaxInDegree(_Property):
 
     Methods:
         compute: Compute the maximum in-degree of the graph.
-        norm_biol: Normalize the maximum in-degree of the graph to the number of parents.
+        norm_biol: Normalize the maximum in-degree of the graph to the number of non-leaf nodes.
         norm_network: Normalize the maximum in-degree of the graph to the number of nodes.
     """
 
@@ -405,10 +405,10 @@ class MaxInDegree(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the maximum in-degree of the graph to the number of parents."""
-        n_parents = len(get_parent_nodes(self.G))
+        """Normalize the maximum in-degree of the graph to the number of non-leaf nodes."""
+        non_leafs = len(get_non_leaf_nodes(self.G))
         try:
-            return self._raw_value / n_parents
+            return self._raw_value / non_leafs
         except ZeroDivisionError:
             raise NormalizationError(
                 "Division by zero (no parent nodes). Cannot normalize with this approach."
@@ -430,7 +430,7 @@ class FeedbackLoops_3(_Property):
 
     Methods:
         compute: Compute the number of feedback loops of length 3.
-        norm_biol: Normalize the number of feedback loops of length 3 to the number of parents.
+        norm_biol: Normalize the number of feedback loops of length 3 to the number of non-leaf nodes.
         norm_network: Normalize the number of feedback loops of length 3 to the number of nodes.
     """
     CLASS_NAME = "3-Feedback Loops"
@@ -439,7 +439,7 @@ class FeedbackLoops_3(_Property):
         self._mc = kwargs['motifs_obj']
         super().__init__(G)
         self._motif_size = 3
-        self._tfs_required = 3
+        self._non_leafs_required = 3
 
     def compute(self) -> int:
         self._raw_value = self._mc.feedbacks
@@ -447,15 +447,15 @@ class FeedbackLoops_3(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the number of feedback loops of length 3 to the number of parents."""
-        n_parents = len(get_parent_nodes(self.G))
-        max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=n_parents, r_tfs=self._tfs_required)
+        """Normalize the number of feedback loops of length 3 to the number of non-leaf nodes."""
+        non_leafs = len(get_non_leaf_nodes(self.G))
+        max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_feedbacks3
 
     @check_raw_value
     def norm_network(self) -> float:
         """Normalize the number of feedback loops of length 3 to the number of nodes. Every node is considered a TF."""
-        max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=self._n_nodes, r_tfs=self._tfs_required)
+        max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_feedbacks3
 
 @use_motifs
@@ -466,7 +466,7 @@ class FeedForwardCircuits(_Property):
     
     Methods:
         compute: Compute the number of feed-forward circuits.
-        norm_biol: Normalize the number of feed-forward circuits to the number of parents.
+        norm_biol: Normalize the number of feed-forward circuits to the number of non-leaf nodes.
         norm_network: Normalize the number of feed-forward circuits to the number of nodes.
     """
     
@@ -476,7 +476,7 @@ class FeedForwardCircuits(_Property):
         self._mc = kwargs['motifs_obj']
         super().__init__(G)
         self._motif_size = 3
-        self._tfs_required = 2
+        self._non_leafs_required = 2
 
     def compute(self) -> int:
         self._raw_value = self._mc.feedforwards
@@ -484,15 +484,15 @@ class FeedForwardCircuits(_Property):
     
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the number of feed-forward circuits to the number of parents."""
-        n_parents = len(get_parent_nodes(self.G))
-        max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=n_parents, r_tfs=self._tfs_required)
+        """Normalize the number of feed-forward circuits to the number of non-leaf nodes."""
+        non_leafs = len(get_non_leaf_nodes(self.G))
+        max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_ff
     
     @check_raw_value
     def norm_network(self) -> float:
         """Normalize the number of feed-forward circuits to the number of nodes. Every node is considered a TF."""
-        max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=self._n_nodes, r_tfs=self._tfs_required)
+        max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_ff
 
 
@@ -504,7 +504,7 @@ class ComplexFeedForwardCircuits(_Property):
 
     Methods:
         compute: Compute the number of complex feed-forward circuits.
-        norm_biol: Normalize the number of complex feed-forward circuits to the number of parents.
+        norm_biol: Normalize the number of complex feed-forward circuits to the number of non-leaf nodes.
         norm_network: Normalize the number of complex feed-forward circuits to the number of nodes.
     """
 
@@ -514,7 +514,7 @@ class ComplexFeedForwardCircuits(_Property):
         self._mc = kwargs['motifs_obj']
         super().__init__(G)
         self._motif_size = 3
-        self._tfs_required = 2
+        self._non_leafs_required = 2
 
     def compute(self) -> int:
         self._raw_value = self._mc.complex_feedforwards
@@ -522,15 +522,15 @@ class ComplexFeedForwardCircuits(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the number of complex feed-forward circuits to the number of parents."""
-        n_parents = len(get_parent_nodes(self.G))
-        max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=n_parents, r_tfs=self._tfs_required)
+        """Normalize the number of complex feed-forward circuits to the number of non-leaf nodes."""
+        non_leafs = len(get_non_leaf_nodes(self.G))
+        max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_complex_ff
 
     @check_raw_value
     def norm_network(self) -> float:
         """Normalize the number of complex feed-forward circuits to the number of nodes. Every node is considered a TF."""
-        max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, tfs=self._n_nodes, r_tfs=self._tfs_required)
+        max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_complex_ff
 
 
@@ -541,7 +541,7 @@ class GenesintheGiantComponent(_Property):
 
     Methods:
         compute: Compute the number of genes in the giant component.
-        norm_biol: Normalize the number of genes in the giant component to the number of parents.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Normalize the number of genes in the giant component to the number of nodes.
     """
 
@@ -557,7 +557,7 @@ class GenesintheGiantComponent(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        raise NotImplementedError
+        return self._raw_value / self._n_nodes
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -574,7 +574,7 @@ class Diameter(_Property):
 
     Methods:
         compute: Compute the diameter of the graph using the giant component.
-        norm_biol: Normalize the diameter of the graph to the number of parents.
+        norm_biol: Normalize the diameter of the graph to the number of non-leaf nodes.
         norm_network: Normalize the diameter of the graph to the number of nodes.
     """
 
@@ -590,21 +590,21 @@ class Diameter(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        """Normalize the diameter of the graph to the number of parents in the giant component.
+        """Normalize the diameter of the graph to the number of non-leaf nodes in the giant component.
 
         The maximum diameter of a graph with n nodes is n-1.
-        When only considering the parents, the maximum diameter is n_parents.
-        Considering both, the maximum diameter is n_parents (every parent, then a leaf node).
+        When only considering the non-leaf nodes, the maximum diameter is non_leafs.
+        Considering both, the maximum diameter is non_leafs (every parent, then a leaf node).
 
         Note: the diameter of the giant component is not necessarily the same as the diameter of the graph.
         we are using the diameter of the giant component here given that the computation of the diameter is performed on the giant component.
         """
         # this was commented out because currently Paths only computes the diameter of undirected graphs.
         """
-        n_parents = len(get_parent_nodes(self.G))
-        return self._raw_value / n_parents
+        non_leafs = len(get_non_leaf_nodes(self.G))
+        return self._raw_value / non_leafs
         """
-        raise NotImplementedError
+        return self._raw_value / (self._n_nodes - 1)
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -623,7 +623,7 @@ class AverageShortestPathLength(_Property):
 
     Methods:
         compute: Compute the average shortest path length of the graph using the giant component.
-        norm_biol: Normalize the average shortest path length of the graph to the number of parents.
+        norm_biol: Normalize the average shortest path length of the graph to the number of non-leaf nodes.
         norm_network: Normalize the average shortest path length of the graph to the number of nodes.
     """
 
@@ -650,10 +650,10 @@ class AverageShortestPathLength(_Property):
 
     @check_raw_value
     def norm_biol(self) -> float:
-        # """Normalize the average shortest path length of the graph to the number of parents in the giant component."""
-        # n_parents = len(get_parent_nodes(self.G))
-        # return self._raw_value / n_parents
-        raise NotImplementedError
+        # """Normalize the average shortest path length of the graph to the number of non-leaf nodes in the giant component."""
+        # non_leafs = len(get_non_leaf_nodes(self.G))
+        # return self._raw_value / non_leafs
+        return self._raw_value / (self._n_nodes - 1)
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -679,8 +679,8 @@ class ClusteringCoefficient(_Property):
         return self._raw_value
 
     def norm_biol(self) -> float:
-        """Direction would be required."""
-        raise NotImplementedError
+        """Coeffients are considered already normalized."""
+        return self._raw_value
 
     def norm_network(self) -> float:
         """Coeffients are considered already normalized."""
@@ -697,7 +697,7 @@ class InDegree(_Property):
 
     Methods:
         compute: Compute the in connectivity of the graph.
-        norm_biol: Normalize the in connectivity of the graph to the number of parents.
+        norm_biol: Normalize the in connectivity of the graph to the number of non-leaf nodes.
         norm_network: Normalize the in connectivity of the graph to the number of nodes.
     """
 
@@ -721,18 +721,18 @@ class InDegree(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> float:
-        """Normalize the nparray with the in-degrees of the graph to the number of parents"""
-        n_parents = len(get_parent_nodes(self.G))
+    def norm_biol(self) -> np.array:
+        """Normalize the nparray with the in-degrees of the graph to the number of non-leaf nodes"""
+        non_leafs = len(get_non_leaf_nodes(self.G))
         try:
-            return self._raw_value * (1 / n_parents)
+            return self._raw_value * (1 / non_leafs)
         except ZeroDivisionError:
             raise NormalizationError(
                 "Division by zero (no parent nodes). Cannot normalize with this approach."
             )
 
     @check_raw_value
-    def norm_network(self) -> float:
+    def norm_network(self) -> np.array:
         """Normalize the nparray with the in-degrees of the graph to the number of nodes."""
         return self._raw_value * (1 / self._n_nodes)
 
@@ -788,8 +788,8 @@ class RichClub(_Property):
 
     Methods:
         compute: Compute the rich club coefficient of the graph.
-        norm_biol: NO IMPLEMENTATION.
-        norm_network: NO IMPLEMENTATION.
+        norm_biol: No biological normalization available, network normalization used.
+        norm_network: Computation of the rich club coefficient normalized by random network with the same distribution.
     """
 
     CLASS_NAME = "Rich Club Coefficient"
@@ -817,12 +817,16 @@ class RichClub(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self):
-        raise NormalizationError("No biological normalization implemented.")
+    def norm_biol(self) -> np.array:
+        dict_coeff = nx.rich_club_coefficient(self.G, normalized=True)
+        self._norm_value = np.fromiter(dict_coeff.values(), dtype=float)
+        return self._norm_value
 
     @check_raw_value
-    def norm_network(self):
-        raise NormalizationError("No theoretical normalization implemented.")
+    def norm_network(self) -> np.array:
+        dict_coeff = nx.rich_club_coefficient(self.G, normalized=True)
+        self._norm_value = np.fromiter(dict_coeff.values(), dtype=float)
+        return self._norm_value
 
 
 @return_distribution
@@ -835,7 +839,7 @@ class SubgraphCentrality(_Property):
 
     Methods:
         compute: Compute the subgraph centrality for every node in the graph.
-        norm_biol: NO IMPLEMENTATION.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Normalize subgraph centrality for every node to the max theoretical value.
     """
 
@@ -865,11 +869,13 @@ class SubgraphCentrality(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self):
-        raise NormalizationError("No biological normalization implemented.")
+    def norm_biol(self) -> np.array:
+        T = nx.complete_graph(self._n_nodes)
+        max = SubgraphCentrality(T)
+        return self._raw_value / max.compute()
 
     @check_raw_value
-    def norm_network(self):
+    def norm_network(self) -> np.array:
         """Normalize the subgraph centrality of the graph to the max value, obtained from a complete graph of the same size"""
 
         T = nx.complete_graph(self._n_nodes)
@@ -888,7 +894,7 @@ class LocalityIndex(_Property):
 
     Methods:
         compute: Compute the locality index for every node in the graph.
-        norm_biol: NO IMPLEMENTATION.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Normalize locality index for every node. Already normalized.
     """
 
@@ -944,14 +950,13 @@ class LocalityIndex(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self):
-        """NO IMPLEMENTATION."""
-        raise NormalizationError("No biological normalization implemented.")
+    def norm_biol(self) -> np.array:
+        return self._raw_value
 
     @check_raw_value
-    def norm_network(self):
+    def norm_network(self) -> np.array:
         """Already normalized."""
-        return self._raw_value  # Already normalized [0,1]
+        return self._raw_value
 
 
 @return_distribution
@@ -968,7 +973,7 @@ class AverageOutDegreeNearestNeighbors(_Property):
         norm_network: Normalize the average out-degree of nearest neighbors to all nodes in the graph.
     """
 
-    CLASS_NAME = "Average Degree for Nearest Neighbors (Out-Out)"
+    CLASS_NAME = "Average Out-Degree for Nearest Neighbors"
 
     def __init__(self, G: nx.DiGraph):
         """
@@ -993,8 +998,8 @@ class AverageOutDegreeNearestNeighbors(_Property):
         """Normalize the average degree of nearest neighbors for every node in the graph to the number of nodes and exclude
         0s from nodes that do not have a out-degree higher than 0. Relation between order of values and order of nodes is lost.
         """
-        parents_value = np.array([self._dict_av_degree[node] for node in get_parent_nodes(self.G)])
-        return parents_value * (1 / (self._n_nodes - 1))
+        non_leafs_value = np.array([self._dict_av_degree[node] for node in get_non_leaf_nodes(self.G)])
+        return non_leafs_value * (1 / (self._n_nodes - 1))
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -1011,11 +1016,11 @@ class AverageDegreeNearestNeighbors(_Property):
 
     Methods:
         compute: Compute the average degree of nearest neighbors.
-        norm_biol: NO IMPLEMENTATION.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Normalize the average degree of nearest neighbors to all nodes in the graph.
     """
 
-    CLASS_NAME = "Average Degree for Nearest Neighbors (Undirected)"
+    CLASS_NAME = "Average Degree for Nearest Neighbors"
 
     def __init__(self, G: nx.Graph):
         """
@@ -1035,9 +1040,9 @@ class AverageDegreeNearestNeighbors(_Property):
 
         return self._raw_value
 
-    @check_raw_value  # Decorator to check if raw value is None. If it is, raise an error.
+    @check_raw_value
     def norm_biol(self):
-        raise NormalizationError("No biological normalization implemented.")
+        return self._raw_value * (1 / (self._n_nodes - 1))
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -1076,7 +1081,7 @@ class EntropyPKout(_Property):
             float: entropy of the out-degree distribution.
         """
 
-        self._n_parents = len(get_parent_nodes(self.G))
+        self._non_leafs = len(get_non_leaf_nodes(self.G))
         degrees = np.array([x for a, x in self.G.out_degree()])
         uniques, counts = np.unique(degrees, return_counts=True)
 
@@ -1092,7 +1097,7 @@ class EntropyPKout(_Property):
     @check_raw_value
     def norm_biol(self) -> float:
         """Normalize the entropy of the out-degree distribution to the max theoretical entropy."""
-        biol_h_max = math.log2(self._n_parents)
+        biol_h_max = math.log2(self._non_leafs)
         return self._raw_value / biol_h_max
     
     @check_raw_value
@@ -1158,14 +1163,14 @@ class GiniIndex(_Property):
     def norm_biol(self) -> float:
         """Normalization is a recalculation only between nodes with an out-degree higher than 0.
         Resources (connections) should not be distributed equally between all nodes in network, only between regulators"""
-        n_parents = len(get_parent_nodes(self.G))
+        non_leafs = len(get_non_leaf_nodes(self.G))
         b = [j for x, j in self.G.out_degree() if j != 0]
         b.sort()
         area = 0
 
-        for i in range(n_parents):
+        for i in range(non_leafs):
             x = b[i] / self.t
-            y = (n_parents - (i + 1) + 0.5) / n_parents
+            y = (non_leafs - (i + 1) + 0.5) / non_leafs
             area += x * y
 
         self._norm_biol = 1 - (2 * area)
@@ -1211,9 +1216,14 @@ class BetweennessCentrality(_Property):
 
     @check_raw_value
     def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Betweenness centrality cannot be normalized by biological properties."
-        )
+        try:
+            scale_factor = 2 / ((self._n_nodes - 1) * (self._n_nodes - 2))
+            return self._raw_value * scale_factor
+        except ZeroDivisionError:
+            print(f'BCerror. Number of nodes: {self._n_nodes}, Number of edges: {self.G.number_of_edges()}')
+            raise NormalizationError(
+                "Division by zero (no nodes). Cannot normalize with this approach."
+            )
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -1264,8 +1274,8 @@ class GlobalEfficiency(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError("global efficiency cannot be normalized by biological properties.")
+    def norm_biol(self) -> float:
+        return self._raw_value
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -1306,8 +1316,8 @@ class Eccentricity(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError("Eccentricity cannot be normalized by biological properties.")
+    def norm_biol(self) -> np.array:
+        return self._raw_value / (self._n_nodes - 1)
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -1347,8 +1357,8 @@ class Radius(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError("Radius cannot be normalized by biological properties.")
+    def norm_biol(self) -> float:
+        return self._raw_value / (self._n_nodes - 1)
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -1389,8 +1399,8 @@ class Center(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError("Center cannot be normalized by biological properties.")
+    def norm_biol(self) -> np.array:
+        return self._raw_value / self._n_nodes
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -1431,8 +1441,8 @@ class Periphery(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError("Periphery cannot be normalized by biological properties.")
+    def norm_biol(self) -> int:
+        return self._raw_value / self._n_nodes
 
     @check_raw_value
     def norm_network(self) -> int:
@@ -1475,9 +1485,9 @@ class AverageLocalEfficiency(_Property):
 
     @check_raw_value
     def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Average Local Efficiency cannot be normalized by biological properties."
-        )
+        """Average Local Efficiency is already normalized between 0 and 1."""
+        # Already normalized
+        return self._raw_value
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -1495,7 +1505,7 @@ class EntropyPK(_Property):
 
     Methods:
         compute: Compute the entropy of the degree distribution for a graph.
-        norm_biol: Not implemented.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Normalize the entropy of the degree of distribution to the max theoretical value.
     """
 
@@ -1527,10 +1537,8 @@ class EntropyPK(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Entropy for degree distribution cannot be normalized by biological properties."
-        )
+    def norm_biol(self) -> float:
+        return self._raw_value / self.h_max
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -1552,7 +1560,7 @@ class UndirGiniIndex(_Property):
 
     Methods:
         compute: Compute the gini index for the graph.
-        norm_biol: Not implemented.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Already normalized.
     """
 
@@ -1590,15 +1598,13 @@ class UndirGiniIndex(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Undirected Gini Index cannot be normalized by biological properties."
-        )
+    def norm_biol(self) -> float:
+        return self._raw_value
 
     @check_raw_value
     def norm_network(self) -> float:
         """Already normalized."""
-        return self._raw_value  # Already normalized [0,1]
+        return self._raw_value
     
 
 @return_distribution
@@ -1610,7 +1616,7 @@ class Degree(_Property):
 
     Methods:
         compute: Compute the connectivity of the graph.
-        norm_biol: Not implemented.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Normalize the connectivity of the graph to the number of nodes.
     """
 
@@ -1633,10 +1639,8 @@ class Degree(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Degree cannot be normalized by biological properties."
-        )
+    def norm_biol(self) -> np.array:
+        return self._raw_value * (1 / self._n_nodes)
 
     @check_raw_value
     def norm_network(self) -> np.array:
@@ -1650,7 +1654,7 @@ class MaxDegree(_Property):
 
     Methods:
         compute: Compute the maximum degree of the graph.
-        norm_biol: Not implemented.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Normalize the maximum degree of the graph to the number of nodes.
     """
 
@@ -1669,10 +1673,8 @@ class MaxDegree(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Degree cannot be normalized by biological properties."
-        )
+    def norm_biol(self) -> float:
+        return self._raw_value / self._n_nodes
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -1718,16 +1720,16 @@ class NumberNodes(_Property):
     
 @return_scalar
 @use_selfloops
-class SelfLoops(_Property):
+class UndirSelfLoops(_Property):
     """Number of self-loops of the undirected graph.
 
     Methods:
         compute: Compute the number of self-loops of the graph.
-        norm_biol: Not implemented.
+        norm_biol: No biological normalization available, network normalization used.
         norm_network: Normalize the number of self-loops of the graph to the number of nodes.
     """
 
-    CLASS_NAME = "Self-Loops"
+    CLASS_NAME = "Undirected Self-Loops"
 
     def __init__(self, G: nx.Graph):
         """
@@ -1746,10 +1748,8 @@ class SelfLoops(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Self-Loops cannot be normalized by biological properties."
-        )
+    def norm_biol(self) -> float:
+        return self._raw_value / self._n_nodes
 
     @check_raw_value
     def norm_network(self) -> float:
@@ -1765,7 +1765,7 @@ class NumberArcs(_Property):
 
     Methods:
         compute: Compute the number of arcs in the graph.
-        norm_biol: Normalize the number of arcs of the graph to the number of parents.
+        norm_biol: Normalize the number of arcs of the graph to the number of non-leaf nodes.
         norm_network: Normalize the number of arcs of the graph to the number of nodes.
     """
 
@@ -1847,7 +1847,7 @@ class UndirDensity(_Property):
 
     Methods:
         compute: Compute the density of the graph.
-        norm_biol: Normalize the density of the graph to the number of parents.
+        norm_biol: Normalize the density of the graph to the number of non-leaf nodes.
         norm_network: Normalize the density of the graph to the number of nodes.
     """
 
@@ -1871,16 +1871,10 @@ class UndirDensity(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> None:
-        raise NormalizationError(
-            "Undirected Density cannot be normalized by biological properties."
-        )
+    def norm_biol(self) -> float:
+        return self._raw_value  # density is already normalized to [0,1]
 
     @check_raw_value
     def norm_network(self) -> float:
-        """Normalize the density of the graph to the number of nodes. (Already normalized)
-
-        Returns:
-            float: Normalized density of the graph, considering the number of nodes.
-        """
+        """Already normalized"""
         return self._raw_value  # density is already normalized to [0,1]
