@@ -27,7 +27,7 @@ def _parse_arguments():
         '-p', '--selected_props',
         type= list_of_strings,
         default= ['all'],
-        help= 'list of selected properties used for analysis, defaults to all properties implemented. Format accepted: "Gini Index, Density, Average Out-Degree of Nearest Neighbors, etc..."',
+        help= 'list of selected properties used for analysis, defaults to all properties implemented. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
         required= False
     )
         # Workers
