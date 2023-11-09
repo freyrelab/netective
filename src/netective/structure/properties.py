@@ -134,7 +134,8 @@ class _Property(ABC):
         self._raw_value = None
         self._n_nodes = self.G.number_of_nodes()
         if self._n_nodes == 0:
-            raise NullGraphError("A null graph has no self-regulations.")
+            raise NullGraphError("A null graph has no self-regulations.") # TODO: include edges in this error
+        # TODO: aqui no está emptygrapherror bc density for example would be zero
 
     @abstractmethod
     def compute(self):
@@ -219,8 +220,8 @@ class Density(_Property):
         Returns:
             float: Density of the graph.
         """
-        n_edges = self.G.number_of_edges()
-        self._raw_value = n_edges / self._n_nodes**2
+        self._n_edges = self.G.number_of_edges()
+        self._raw_value = self._n_edges / self._n_nodes**2
         return self._raw_value
 
     @check_raw_value
@@ -235,7 +236,8 @@ class Density(_Property):
         """
         non_leafs = len(get_non_leaf_nodes(self.G))
         try:
-            return self._raw_value * (self._n_nodes / non_leafs)
+            # return self._raw_value * (self._n_nodes / n_parents)
+            return self._n_edges / (non_leafs * self._n_nodes)
         except ZeroDivisionError:
             raise NormalizationError(
                 "Division by zero (no parent nodes). Cannot normalize with this approach."

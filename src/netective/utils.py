@@ -501,12 +501,12 @@ class ShortestPaths:
         self.__id2name = {i.index: i["name"] for i in self.__G.vs}
         self.__name2id = {v: self.__G.vs.find(name=v).index for v in G.nodes()}
 
-    def shortest_paths(self, v, u=None):
-        """Summary."""
-        if u is not None:
-            u = [self.__name2id[i] for i in u] if is_iterable(u) else self.__name2id[u]
-        paths = self.__G.get_all_shortest_paths(self.__name2id[v], to=u, weights=None, mode="out")
-        return tuple((tuple((self.__id2name[v] for v in p)) for p in paths if len(p) > 1))
+    # def shortest_paths(self, v, u=None):
+    #     """Summary."""
+    #     if u is not None:
+    #         u = [self.__name2id[i] for i in u] if is_iterable(u) else self.__name2id[u]
+    #     paths = self.__G.get_all_shortest_paths(self.__name2id[v], to=u, weights=None, mode="out")
+    #     return tuple((tuple((self.__id2name[v] for v in p)) for p in paths if len(p) > 1))
 
     def betweenness(self, vertices=None, cutoff=None, sources=None, targets=None):
         """Summary."""
