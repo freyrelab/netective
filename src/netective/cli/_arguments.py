@@ -6,7 +6,8 @@ import argparse
 def _parse_arguments():
 
     def list_of_strings(arg):
-        return arg.replace('_',' ').split(',')
+        return [x.strip() for x in arg.split(',')]
+    
     
     parser = argparse.ArgumentParser(
         description="Assess the topology of a network. If more than one network is given (directory with multiple networks), a comparison between them based on their topology is done."
