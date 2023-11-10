@@ -618,7 +618,7 @@ class NetworkInferenceStats:
         self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
         return max(self.__f1_score_dist, key=self.__f1_score_dist.get)
     
-    def optimal_cutoff_plot(self, ax=None, **kwargs):
+    def optimal_cutoff_plot(self, ax=None, x_log=False):
         """Plots the precision and the recall values for every score in the inference, showing the optimal cutoff.
 
         Args:
@@ -642,5 +642,7 @@ class NetworkInferenceStats:
         ax.set_xlabel("Score", size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_ylabel("Precision and recall", size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.legend(loc=0)
+        if x_log:
+            ax.set_xscale("log")
         # print(self.__f1_score_dist.values(), precision_dist[1:-1], sensitivity_dist[1:-1])
         return ax
