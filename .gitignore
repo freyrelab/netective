@@ -1,5 +1,7 @@
 /data/
+/test/
 /slides/
+/netective_old_code/
 *.pyc
 *.ini
 *.pkl
