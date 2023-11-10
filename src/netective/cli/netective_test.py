@@ -150,7 +150,6 @@ def main():
                 process= f'analysis of INPUTED networks: {list(networks.keys())}'
             )
 
-        # 
         if return_prop_dicts:
             for net_id, props in scalars_array.items():
                 save_prop_dicts(
