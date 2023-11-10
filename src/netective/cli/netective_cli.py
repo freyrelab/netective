@@ -3,7 +3,7 @@ from multiprocessing import cpu_count
 
 from netective.cli._arrguments import _parse_arguments
 from netective.utils import parse_network, save_prop_dicts, save_figs, common_props_dict, association, sort_files, get_clusters
-from netective.structure.dataviz import create_symmetric_heatmap
+from netective.structure.dataviz import create_symmetric_heatmap, plot_distributions, plot_scalars
 from netective import compare_structure, characterize_network
 
 import networkx as nx
@@ -19,9 +19,121 @@ except ImportError:
     pass
 
 cli_logger = get_logger(__name__)
+RUNMODES = {
+    1 : 'Characterize',
+    2 : 'Compare',
+    3 : 'Assess',
+    4 : 'Classify'
+}
 
 def runmode1(args):
-    pass
+    # Args for network analysis
+    nets_path = args.input
+    norm = args.normalization
+    verbose = args.verbose
+    if verbose != None:
+        set_log_level(cli_logger, verbose)
+    if len(args.selected_props) != 1:
+        selected_props = args.selected_props
+    elif args.selected_props[0] == 'all':
+        selected_props = 'all'
+    else:
+        selected_props = args.selected_props
+    if not args.workers:
+        workers = cpu_count() - 1
+        cli_logger.warning(f'Multiprocessing enabled in {workers} usable threads detected.')
+    else:
+        workers = cpu_count() - 1 if args.workers > cpu_count() - 1 else args.workers
+        cli_logger.warning(f'Multiprocessing enabled in {workers} threads.')
+    return_prop_dicts = args.keep_props
+    
+    # Technical Args
+    comments = args.comments
+    delimiter = args.delimiter
+    output = args.output
+
+    cl = f"{comments} command: python {__file__} RunMode {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {str(delimiter)} --output {output}\n"
+    scalars_array = {}
+    dist_array = {}
+    networks = {}
+    # Network analysis
+    sorted_files = sort_files(path= nets_path)
+    complete_batches = len(sorted_files) // workers
+    last_batch = len(sorted_files) % workers
+    completed = 0
+    # Properties computation, batch processing
+    for net_path in sorted_files:
+        net_id = os.path.basename(net_path)
+        networks[net_id] = parse_network(net_path, comments, delimiter)
+
+        # Number of inputed nets is > to workers, batch processing
+        if len(sorted_files) > workers and (len(networks) == workers or (len(networks) == last_batch and completed == complete_batches)):
+            temp_scalars_array, temp_dist_array = compare_structure(
+                networks= networks, 
+                norm= norm, 
+                workers= workers, 
+                selected_props= selected_props,
+                verbose= verbose,
+                return_prop_dicts= True,
+                process= f'analysis of INPUTED networks: {list(networks.keys())}'
+            )
+            scalars_array.update(temp_scalars_array)
+            dist_array.update(temp_dist_array)
+            networks = {}
+            completed += 1
+    # Number of inputed nets is <= to workers
+    if len(sorted_files) <= workers:
+        scalars_array, dist_array = compare_structure(
+            networks= networks, 
+            norm= norm, 
+            workers= workers, 
+            selected_props= selected_props,
+            verbose= verbose,
+            return_prop_dicts= True,
+            process= f'analysis of INPUTED networks: {list(networks.keys())}'
+        )
+    if return_prop_dicts:
+        for net_id, props in scalars_array.items():
+            save_prop_dicts(
+                array= props,
+                net_id= net_id,
+                type= 'scalars',
+                output_dir= output,
+                delimiter= delimiter,
+                cl= cl
+            )
+        for net_id, props in dist_array.items():
+            save_prop_dicts(
+                array= props,
+                net_id= net_id,
+                type= 'distributions',
+                output_dir= output,
+                delimiter= delimiter,
+                cl= cl
+            )
+    else:
+        for net_id, props in scalars_array.items():
+            fig_scalar, _ = plot_scalars(props, verbose= verbose)
+            save_figs(
+                fig= fig_scalar,
+                props= 'scalars',
+                net_id= net_id,
+                compare= False,
+                output_dir= output
+            )
+        for net_id, props in dist_array.items():
+            fig_dist, _ = plot_distributions(props, verbose= verbose)
+            save_figs(
+                fig= fig_dist,
+                props= 'distributions',
+                net_id= net_id,
+                compare= False,
+                output_dir= output
+            )
+
+    
+
+
 
 def runmode2(args):
     # Args for network analysis
@@ -50,7 +162,7 @@ def runmode2(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments} command: python {__file__} --path {nets_path} --norm {norm} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {delimiter} --output {output}\n"
+    cl = f"{comments} command: python {__file__} RunMode {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {delimiter} --output {output}\n"
 
     scalars_array = {}
     dist_array = {}
@@ -62,7 +174,7 @@ def runmode2(args):
     completed = 0
     
     if len(sorted_files) < 2:
-        cli_logger.critical('Only one network detected in inputed directory. For network characterization enter full path to network, not path to directory.')
+        cli_logger.critical('Only one network detected in inputed directory. For network characterization enter Characterization Runmode.')
         exit ()
     for net_path in sorted_files:
         net_id = os.path.basename(net_path)
@@ -143,7 +255,7 @@ def main():
     ## parse arguments
     args = _parse_arguments()
     if args.runmode == 1:
-        pass
+        runmode1(args)
     elif args.runmode == 2:
         runmode2(args)
     elif args.runmode == 3:
