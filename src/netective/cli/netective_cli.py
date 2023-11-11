@@ -52,46 +52,17 @@ def runmode1(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments} command: python {__file__} RunMode {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {str(delimiter)} --output {output}\n"
-    scalars_array = {}
-    dist_array = {}
-    networks = {}
-    # Network analysis
-    sorted_files = sort_files(path= nets_path)
-    complete_batches = len(sorted_files) // workers
-    last_batch = len(sorted_files) % workers
-    completed = 0
-    # Properties computation, batch processing
-    for net_path in sorted_files:
-        net_id = os.path.basename(net_path)
-        networks[net_id] = parse_network(net_path, comments, delimiter)
-
-        # Number of inputed nets is > to workers, batch processing
-        if len(sorted_files) > workers and (len(networks) == workers or (len(networks) == last_batch and completed == complete_batches)):
-            temp_scalars_array, temp_dist_array = compare_structure(
-                networks= networks, 
+    cl = f"{comments} command: python {__file__} {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {str(delimiter)} --output {output}\n"
+    
+    scalars_array, dist_array = compare_structure(
+                networks= nets_path, 
                 norm= norm, 
                 workers= workers, 
                 selected_props= selected_props,
                 verbose= verbose,
-                return_prop_dicts= True,
-                process= f'analysis of INPUTED networks: {list(networks.keys())}'
-            )
-            scalars_array.update(temp_scalars_array)
-            dist_array.update(temp_dist_array)
-            networks = {}
-            completed += 1
-    # Number of inputed nets is <= to workers
-    if len(sorted_files) <= workers:
-        scalars_array, dist_array = compare_structure(
-            networks= networks, 
-            norm= norm, 
-            workers= workers, 
-            selected_props= selected_props,
-            verbose= verbose,
-            return_prop_dicts= True,
-            process= f'analysis of INPUTED networks: {list(networks.keys())}'
-        )
+                return_prop_dicts= True
+    )
+    
     if return_prop_dicts:
         for net_id, props in scalars_array.items():
             save_prop_dicts(
@@ -162,52 +133,18 @@ def runmode2(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments} command: python {__file__} RunMode {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {delimiter} --output {output}\n"
+    cl = f"{comments} command: python {__file__} {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {delimiter} --output {output}\n"
 
-    scalars_array = {}
-    dist_array = {}
-    networks = {}
-    # Network analysis
-    sorted_files = sort_files(path= nets_path)
-    complete_batches = len(sorted_files) // workers
-    last_batch = len(sorted_files) % workers
-    completed = 0
-    
-    if len(sorted_files) < 2:
-        cli_logger.critical('Only one network detected in inputed directory. For network characterization enter Characterization Runmode.')
-        exit ()
-    for net_path in sorted_files:
-        net_id = os.path.basename(net_path)
-        networks[net_id] = parse_network(net_path, comments, delimiter)
+    scalars_array, dist_array = compare_structure(
+        networks= nets_path, 
+        norm= norm, 
+        workers= workers, 
+        selected_props= selected_props,
+        verbose= verbose,
+        return_prop_dicts= True,
+        erdos_renyi= erdos_renyi,
+    )
 
-        # Number of inputed nets is > to workers, batch processing
-        if len(sorted_files) > workers and (len(networks) == workers or (len(networks) == last_batch and completed == complete_batches)):
-            temp_scalars_array, temp_dist_array = compare_structure(
-                networks= networks, 
-                norm= norm, 
-                workers= workers, 
-                selected_props= selected_props,
-                verbose= verbose,
-                return_prop_dicts= True,
-                erdos_renyi= erdos_renyi,
-                process= f'analysis of INPUTED networks: {list(networks.keys())}'
-            )
-            scalars_array.update(temp_scalars_array)
-            dist_array.update(temp_dist_array)
-            networks = {}
-            completed += 1
-    # Number of inputed nets is <= to workers
-    if len(sorted_files) <= workers:
-        scalars_array, dist_array = compare_structure(
-            networks= networks, 
-            norm= norm, 
-            workers= workers, 
-            selected_props= selected_props,
-            verbose= verbose,
-            return_prop_dicts= True,
-            erdos_renyi= erdos_renyi,
-            process= f'analysis of INPUTED networks: {list(networks.keys())}'
-        )
     if return_prop_dicts:
         if args.runmode == 4:
             return scalars_array
@@ -245,11 +182,15 @@ def runmode3(args):
     pass
 
 def runmode4(args):
+    cl = f"\n{args.comments} command: python {__file__} {RUNMODES[args.runmode]} --path {args.input} --norm {args.normalization} --workers {args.workers} --verbose {args.verbose} --comments {args.comments} --delimiter {str(args.delimiter)} --output {args.output}"
     scalars = runmode2(args)
+    cli_logger.warning('Starting classification of networks into clusters...')
     merged_df = pd.DataFrame.from_dict(scalars).T
     merged_df.dropna(axis=1, inplace=True, how='any')
     clusters = get_clusters(merged_df.T.corr(), map_ids= True)
-    print(clusters)
+    print(cl)
+    for clust, nets in clusters.items():
+        print(f'Cluster {clust}: {nets}')
 
 def main():
     ## parse arguments
