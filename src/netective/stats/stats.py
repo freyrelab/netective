@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gc
 import matplotlib.pyplot as plt
+import seaborn as sns
 from collections import defaultdict
 from itertools import combinations, combinations_with_replacement, permutations, product
 from typing import Tuple
@@ -19,15 +20,317 @@ FONT_COLOR = "#060307"
 MAIN_PLOT_COLOR = "#031926"
 MINOR_FONT_COLOR = "#504B51"
 
+def _build_ax(ax=None, ylim=(0, 1), xlim=(0, 1), figsize=(2, 2)):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
 
-class NetworkInferenceStats:
+    # Graph
+    ax.set_facecolor(FACE_COLOR)
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    if xlim is not None:
+        ax.set_xlim(xlim)
+    return ax
+
+def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool) -> set[tuple[str, str]]:
+    """Returns the universe of potential edges between genes in the gold standard.
+
+    The universe in compute following the rules:
+    - If the inference is directed and self-loops are allowed, the universe is the cartesian product of the gold standard geneset.
+    - If the inference is directed and self-loops are not allowed, the universe is the permutations of the gold standard geneset.
+    - If the inference is undirected and self-loops are allowed, the universe is the combinations with replacement of the gold standard geneset.
+    - If the inference is undirected and self-loops are not allowed, the universe is the combinations without replacement of the gold standard geneset.
+    """
+    if directed and allow_self_loops:
+        return set(product(gold_standard_geneset, repeat=2))
+    elif directed and not allow_self_loops:
+        return set(permutations(gold_standard_geneset, 2))
+    elif not directed and allow_self_loops:
+        return set(combinations_with_replacement(gold_standard_geneset, 2))
+    else:  # if not directed and not allow_self_loops:
+        return set(combinations(gold_standard_geneset, 2))
+
+
+def _anonymize_inference_edges(inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed):
+        inference_edges = defaultdict(list)
+        for u, v, data in inference.edges(data=True):
+            # self-loops are already handled in __init__
+            if u not in gold_standard_geneset or v not in gold_standard_geneset:
+                continue    # we cannot assess what we don't know with this approach
+            inference_edges[data["score"]].append((u, v))
+
+        if not directed:
+            inference_edges = {
+                    score: {frozenset(edge) for edge in edges}
+                    for score, edges in inference_edges.items()
+                }
+        
+        # TODO: UX: The user may want to know the fraction of the inference used for the evaluation
+        inference_edges = sorted(
+            [
+                [score, {edge_to_id[edge] for edge in edges}]
+                for score, edges in inference_edges.items()
+            ],
+            reverse=greater_score_is_better,
+        )
+        return inference_edges
+
+def _anonymize_edges(
+    gold_standard: Graph | DiGraph,
+    inference: Graph | DiGraph | list[Graph | DiGraph],
+    greater_score_is_better: bool = True,
+    allow_self_loops: bool = False,
+    ) -> Tuple[set, list, int]:
+    """Use the universe to anonymize the gold standard and the inference.
+    The anonymization is done by mapping the edges to integers.
+
+    Args:
+    gold_standard (Graph | DiGraph): Gold standard network.
+    inference (Graph | DiGraph | list[Graph | DiGraph]): Inference network. The edges can have a score as an attribute 'score'.
+        If a list of networks is provided, a list of inference_edges is returned.
+        The graphs must be of the same type (Graph or DiGraph) as the gold standard.
+    greater_score_is_better (bool): Whether the inference score is better when it is higher or lower.
+        If True, the higher the score, the better the inference.
+        If False, the lower the score, the better the inference.
+    allow_self_loops (bool): Whether self-loops are allowed or not.
+
+    Returns:
+    -------
+    gold_standard_edges: set
+        Set of edges in the gold standard.
+    inference_edges: list
+        List of lists containing the score and the set of edges for each score.
+        The list is sorted by score following the greater_is_better rule.
+        This is a list of lists when inference is a list of networks.
+    size_universe: int
+        Size of the universe of potential edges.
+    """
+    directed = gold_standard.is_directed()
+    gold_standard_edges = set(gold_standard.edges(data=False))
+    gold_standard_geneset = set(gold_standard.nodes(data=False))
+    universe = _universe(gold_standard_geneset, directed, allow_self_loops)
+    size_universe = len(universe)
+
+    
+
+    if not directed:
+        # If the inference is not directed, we use frozensets to ignore gene order in the edges
+        gold_standard_edges = {frozenset(edge) for edge in gold_standard_edges}
+        universe = {frozenset(edge) for edge in universe}
+        # The size of the universe should not change, repetition are considered in __universe
+
+    # Universe is used as reference
+    edge_to_id = {edge: i for i, edge in enumerate(universe)}
+    gold_standard_edges = {edge_to_id[edge] for edge in gold_standard_edges}
+
+    if isinstance(inference, list):
+        inference_edges = [_anonymize_inference_edges(
+            inf, gold_standard_geneset, greater_score_is_better, edge_to_id, directed
+            ) for inf in inference]
+    else: # inference is a single network
+        inference_edges = _anonymize_inference_edges(
+            inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed
+            )
+
+    # erase universe, mapping and gold standard geneset
+    del universe
+    del edge_to_id  # TODO: UX: user may want to keep this mapping
+    del gold_standard_geneset
+    # call garbage collector
+    gc.collect()
+
+    return gold_standard_edges, inference_edges, size_universe
+
+
+
+class Benchmark:
     def __init__(
         self,
         gold_standard: Graph | DiGraph,
-        inference: Graph | DiGraph,
+        inferences: dict[str, Graph | DiGraph],
         greater_score_is_better: bool = True,
         allow_self_loops: bool = False,
         cutoff: float | False = False,
+    ):
+        """
+        """
+        self.__repr_str = f"Benchmark({gold_standard}, {inferences}, greater_is_better={greater_score_is_better}, allow_self_loops={allow_self_loops}, cutoff={cutoff})"
+
+        gold_standard_edges, inference_edges, size_universe = _anonymize_edges(
+            gold_standard,
+            list(inferences.values()),
+            greater_score_is_better,
+            allow_self_loops,
+        )
+
+
+        self.__nis_instances = {
+            net_id: LinkEval(
+                cutoff=cutoff,
+                gold_standard_edges=gold_standard_edges,
+                inference_edges=inf,
+                size_universe=size_universe,
+            )
+            for net_id, inf in zip(inferences.keys(), inference_edges)
+        }
+
+    @property
+    def nis_instances(self) -> dict[str, LinkEval]:
+        return self.__nis_instances
+    
+    def __getitem__(self, key: str) -> LinkEval:
+        return self.__nis_instances[key]
+    
+    def __repr__(self) -> str:
+        return self.__repr_str
+    
+    def __str__(self) -> str:
+        return f"Benchmark({len(self.nis_instances)} instances)"
+    
+    def __eq__(self, other: Benchmark) -> bool:
+        raise NotImplementedError
+    
+    def plot_roc_curves(self, ax=None, **kwargs):
+        """Plots the ROC curves for every inference in the benchmark.
+
+        Args:
+        ax (matplotlib.axes.Axes): Axes object to plot the curve.
+            If None, a new figure and axes are created.
+        **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
+
+        Returns:
+        -------
+        ax: matplotlib.axes.Axes
+            Axes object containing the plot.
+        """
+        ax = _build_ax(ax, figsize=(3,3))
+        best_name, _ = self.best_auroc()
+        for net_id, nis in self.nis_instances.items():
+            nis.plot_roc_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else 'k', alpha=0, title=False, **kwargs)
+        ax.legend(loc=3)
+        return ax
+    
+    def plot_precision_recall_curves(self, ax=None, **kwargs):
+        """Plots the precision-recall curves for every inference in the benchmark.
+
+        Args:
+        ax (matplotlib.axes.Axes): Axes object to plot the curve.
+            If None, a new figure and axes are created.
+        **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
+
+        Returns:
+        -------
+        ax: matplotlib.axes.Axes
+            Axes object containing the plot.
+        """
+        ax = _build_ax(ax, figsize=(3,3))
+        best_name, _ = self.best_aupr()
+        for net_id, nis in self.nis_instances.items():
+            nis.plot_precision_recall_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else 'k', alpha=0, title=False, **kwargs)
+        ax.legend(loc=3)
+        return ax
+    
+    def optimal_cutoffs(self) -> dict[str, float]:
+        """Computes the optimal cutoff for every inference in the benchmark.
+
+        Returns:
+        -------
+        optimal_cutoff: dict[str, float]
+            Dictionary containing the optimal cutoff for every inference in the benchmark.
+        """
+        return {net_id: nis.optimal_cutoff() for net_id, nis in self.nis_instances.items()}
+    
+    def plot_optimal_cutoffs(self, ax=None, **kwargs):
+        """Plots the optimal cutoff values for every inference in the benchmark."""
+        ax = _build_ax(ax, xlim=None, ylim=None)
+        optimal_cutoffs = self.optimal_cutoffs()
+        ax.barh(list(optimal_cutoffs.keys()), list(optimal_cutoffs.values()), color=MAIN_PLOT_COLOR, **kwargs)
+        ax.set_title("Optimal cutoff", loc="right", size=FONT_SIZE, color=FONT_COLOR)
+        ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.set_xlabel("Cutoff", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
+        return ax
+    
+    def plot_aupr(self, ax=None, **kwargs):
+        """Plots the AUPR values for every inference in the benchmark."""
+        ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
+        ax.barh(list(self.nis_instances.keys()), [nis.area_under_precision_recall_curve() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
+        ax.set_title("AUPR", loc="right", size=FONT_SIZE, color=FONT_COLOR)
+        ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.set_xlabel("AUPR", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
+        return ax
+    
+    def plot_auroc(self, ax=None, **kwargs):
+        """Plots the AUROC values for every inference in the benchmark."""
+        ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
+        ax.barh(list(self.nis_instances.keys()), [nis.area_under_roc_curve() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
+        ax.set_title("AUROC", loc="right", size=FONT_SIZE, color=FONT_COLOR)
+        ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.set_xlabel("AUROC", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
+        return ax
+    
+    def plot_f1_score(self, ax=None, **kwargs):
+        """Plots the F1 score values for every inference in the benchmark."""
+        ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
+        ax.barh(list(self.nis_instances.keys()), [nis.f1_score() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
+        ax.set_title("F1 score", loc="right", size=FONT_SIZE, color=FONT_COLOR)
+        ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.set_xlabel("F1 score", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
+        return ax
+    
+    def plot_mcc(self, ax=None, **kwargs):
+        """Plots the MCC values for every inference in the benchmark."""
+        ax = _build_ax(ax, xlim=[-1.01,1.01], ylim=None)
+        ax.barh(list(self.nis_instances.keys()), [nis.mcc() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
+        ax.set_title("MCC", loc="right", size=FONT_SIZE, color=FONT_COLOR)
+        ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.set_xlabel("MCC", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
+        return ax
+    
+    def best_aupr(self) -> tuple(str, float):
+        """Returns the inference with the best AUPR and its value."""
+        return max([(net_id, nis.area_under_precision_recall_curve()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
+    
+    def best_auroc(self) -> tuple(str, float):
+        """Returns the inference with the best AUROC and its value."""
+        return max([(net_id, nis.area_under_roc_curve()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
+
+    def best_f1_score(self) -> tuple(str, float):
+        """Returns the inference with the best F1 score and its value."""
+        return max([(net_id, nis.f1_score()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
+    
+    def best_accuracy(self) -> tuple(str, float):
+        """Returns the inference with the best accuracy and its value."""
+        return max([(net_id, nis.accuracy()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
+    
+    def best_recall(self) -> tuple(str, float):
+        """Returns the inference with the best recall and its value."""
+        return max([(net_id, nis.recall()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
+    
+    def best_precision(self) -> tuple(str, float):
+        """Returns the inference with the best precision and its value."""
+        return max([(net_id, nis.precision()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
+    
+    def best_mcc(self) -> tuple(str, float):
+        """Returns the inference with the best MCC and its value."""
+        return max([(net_id, nis.mcc()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
+
+
+class LinkEval:
+    def __init__(
+        self,
+        gold_standard: Graph | DiGraph = None,
+        inference: Graph | DiGraph = None,
+        greater_score_is_better: bool = None,
+        allow_self_loops: bool = None,
+        cutoff: float | False = False,
+        gold_standard_edges: set = None,
+        inference_edges: list = None,
+        size_universe: int = None,
     ):
         """
         Class for evaluating binary classification results.
@@ -42,6 +345,15 @@ class NetworkInferenceStats:
         allow_self_loops (bool): Whether self-loops are allowed or not.
         cutoff (float): Cutoff to use to compute the evaluation metrics.
             If False, the evaluation metrics are computed for every score in the inference.
+        gold_standard_edges (set): Set of edges in the gold standard.
+            If None, the gold standard edges are computed from the gold standard network.
+            Use only if the gold standard edges are already known.
+        inference_edges (list): List of lists containing the score and the set of edges for each score.
+            The list is sorted by score following the greater_is_better rule.
+            Use only if the inference edges are already known.
+        size_universe (int): Size of the universe of potential edges.
+            If None, the size of the universe is computed from the gold standard network.
+            Use only if the size of the universe is already known.
 
         Notes:
         Networks types must be the same (Graph or DiGraph).
@@ -54,24 +366,40 @@ class NetworkInferenceStats:
         self.__greater_is_better = greater_score_is_better
         self.__allow_self_loops = allow_self_loops
 
-        # Validate the networks
-        for name, network in [("Gold standard", self.gold_standard), ("Inference", self.inference)]:
-            if not isinstance(network, (Graph, DiGraph)):
-                raise TypeError(f"{name} must be a networkx.Graph or networkx.DiGraph.")
+        if all([x is not None for x in [gold_standard_edges, inference_edges, size_universe]]):
+            self.__gold_standard_edges = gold_standard_edges
+            self.__inference_edges = inference_edges
+            self.__size_universe = size_universe
+            self.__repr = f"LinkEval(gold_standard_edges={len(self.gold_standard_edges)}, inference_edges={len(self.inference_edges)}, size_universe={self.size_universe})"
 
-        if self.gold_standard.is_directed() != self.inference.is_directed():
-            raise ValueError("Gold standard and inference must be both directed or undirected.")
+        else:
+            self.__directed = self.gold_standard.is_directed()
+            
+            if gold_standard is None or inference is None:
+                raise ValueError("Gold standard and inference must be provided if gold_standard_edges, inference_edges and size_universe are not provided.")
 
-        if not all("score" in data for _, _, data in self.inference.edges(data=True)):
-            raise ValueError("Inference edges must have a score attribute.")
+            self.__validate_networks()
 
-        if any("score" in data for _, _, data in self.gold_standard.edges(data=True)):
-            warn("The gold standard edges have a score attribute. It might be a prediction.")
+            if not self.allow_self_loops:
+                self.__gold_standard = remove_self_loops(self.gold_standard)
+                self.__inference = remove_self_loops(self.inference)
+                
+            self.__gold_standard_edges, self.__inference_edges, self.__size_universe = _anonymize_edges(
+                self.gold_standard,
+                self.inference,
+                self.greater_is_better,
+                self.allow_self_loops,
+            )
 
-        self.__directed = self.gold_standard.is_directed()
-        if not self.allow_self_loops:
-            self.__gold_standard = remove_self_loops(self.gold_standard)
-            self.__inference = remove_self_loops(self.inference)
+            self.__repr = f"LinkEval(gold_standard={self.__gold_standard}, inference={self.__inference}, greater_is_better={self.__greater_is_better}, directed={self.__directed})"
+
+        
+        self.__size_gold_standard = len(self.__gold_standard_edges)
+        self.__size_negatives = self.__size_universe - self.__size_gold_standard
+        # At the last step, every edge is considered as a positive by inference
+        self.__precision_baseline = (self.size_gold_standard / self.size_universe)  # (GS/(GS + (Universe-GS)))
+        if not cutoff:
+            self.__cutoff = min([score for score, _ in self.inference_edges]) if self.greater_is_better else max([score for score, _ in self.inference_edges])
 
         # Define evaluation
         # Used as flags to know if the curves data points have been computed
@@ -80,30 +408,13 @@ class NetworkInferenceStats:
         self.__sensitivity_dist = None
         self.__f1_score_dist = None
 
-        (
-            self.__gold_standard_edges,
-            self.__inference_edges,
-            self.__size_universe,
-        ) = self.__anonymize_edges()
-        self.__size_gold_standard = len(self.__gold_standard_edges)
-        self.__size_negatives = self.__size_universe - self.__size_gold_standard
-        # At the last step, every edge is considered as a positive by inference
-        self.__precision_baseline = (self.size_gold_standard / self.size_universe)  # (GS/(GS + (Universe-GS)))
-        if not cutoff:
-            self.__cutoff = min([score for score, _ in self.inference_edges]) if self.greater_is_better else max([score for score, _ in self.inference_edges])
-
     def __repr__(self) -> str:
-        return f"BinClassEval(gold_standard={self.gold_standard}, inference={self.inference}, greater_is_better={self.greater_is_better}, directed={self.directed})"
+        return self.__repr
 
     def __str__(self) -> str:
-        if self.__num_columns == 3:
-            return f'NetworkInferenceStats to evaluate the inference {self.inference} against {self.gold_standard} {"" if self.directed else "not "}\
-                considering direction and {"higher" if self.greater_is_better else "lower"} scores are better.'
-        else:  # self._num_columns == 2
-            return f'NetworkInferenceStats to evaluate the inference {self.inference} against {self.gold_standard} {"" if self.directed else "not "}\
-                considering direction.'
+        return self.__repr
 
-    def __eq__(self, other: NetworkInferenceStats) -> bool:
+    def __eq__(self, other: LinkEval) -> bool:
         raise NotImplementedError
 
     @property
@@ -175,82 +486,21 @@ class NetworkInferenceStats:
     @property
     def allow_self_loops(self) -> bool:
         return self.__allow_self_loops
+    
+    def __validate_networks(self):
+        for name, network in [("Gold standard", self.gold_standard), ("Inference", self.inference)]:
+            if not isinstance(network, (Graph, DiGraph)):
+                raise TypeError(f"{name} must be a networkx.Graph or networkx.DiGraph.")
 
-    def __universe(self, gold_standard_geneset: set) -> set[tuple[str, str]]:
-        """Returns the universe of potential edges between genes in the gold standard.
+        if self.gold_standard.is_directed() != self.inference.is_directed():
+            raise ValueError("Gold standard and inference must be both directed or undirected.")
 
-        The universe in compute following the rules:
-        - If the inference is directed and self-loops are allowed, the universe is the cartesian product of the gold standard geneset.
-        - If the inference is directed and self-loops are not allowed, the universe is the permutations of the gold standard geneset.
-        - If the inference is undirected and self-loops are allowed, the universe is the combinations with replacement of the gold standard geneset.
-        - If the inference is undirected and self-loops are not allowed, the universe is the combinations without replacement of the gold standard geneset.
-        """
-        if self.directed and self.allow_self_loops:
-            return set(product(gold_standard_geneset, repeat=2))
-        elif self.directed and not self.allow_self_loops:
-            return set(permutations(gold_standard_geneset, 2))
-        elif not self.directed and self.allow_self_loops:
-            return set(combinations_with_replacement(gold_standard_geneset, 2))
-        else:  # if not self.directed and not self.allow_self_loops:
-            return set(combinations(gold_standard_geneset, 2))
+        if not all("score" in data for _, _, data in self.inference.edges(data=True)):
+            raise ValueError("Inference edges must have a score attribute.")
 
-    def __anonymize_edges(self) -> Tuple[set, list, int]:
-        """Use the universe to anonymize the gold standard and the inference.
-        The anonymization is done by mapping the edges to integers.
+        if any("score" in data for _, _, data in self.gold_standard.edges(data=True)):
+            warn("The gold standard edges have a score attribute. It might be a prediction.")
 
-        Returns:
-        -------
-        gold_standard_edges: set
-            Set of edges in the gold standard.
-        inference_edges: list
-            List of lists containing the score and the set of edges for each score.
-            The list is sorted by score following the greater_is_better rule.
-        size_universe: int
-            Size of the universe of potential edges.
-        """
-        gold_standard_edges = set(self.gold_standard.edges(data=False))
-        gold_standard_geneset = set(self.gold_standard.nodes(data=False))
-        inference_edges = defaultdict(list)
-        for u, v, data in self.inference.edges(data=True):
-            # self-loops are already handled in __init__
-            if u not in gold_standard_geneset or v not in gold_standard_geneset:
-                continue
-            inference_edges[data["score"]].append((u, v))
-
-        universe = self.__universe(gold_standard_geneset)
-        size_universe = len(universe)
-
-        if not self.directed:
-            # If the inference is not directed, we use frozensets to ignore gene order in the edges
-            gold_standard_edges = {frozenset(edge) for edge in gold_standard_edges}
-            inference_edges = {
-                score: {frozenset(edge) for edge in edges}
-                for score, edges in inference_edges.items()
-            }
-            universe = {frozenset(edge) for edge in universe}
-            # The size of the universe should not change, repetition are considered in __universe
-
-        # Universe is used as reference
-        edge_to_id = {edge: i for i, edge in enumerate(universe)}
-        gold_standard_edges = {edge_to_id[edge] for edge in gold_standard_edges}
-        # The get method is used to only keep edges between genes in the gold standard geneset
-        # TODO: UX: The user may want to know the fraction of the inference used for the evaluation
-        inference_edges = sorted(
-            [
-                [score, {edge_to_id.get(edge) for edge in edges}]
-                for score, edges in inference_edges.items()
-            ],
-            reverse=self.greater_is_better,
-        )
-
-        # erase universe, mapping and gold standard geneset
-        del universe
-        del edge_to_id  # TODO: UX: user may want to keep this mapping
-        del gold_standard_geneset
-        # call garbage collector
-        gc.collect()
-
-        return gold_standard_edges, inference_edges, size_universe
 
     def __compute_roc_pr_datapoints(self, cutoff=None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Computes the false positive rate, sensitivity and precision for a given cutoff.
@@ -372,22 +622,12 @@ class NetworkInferenceStats:
         """
         _, sensitivity, fpr = self.__compute_roc_pr_datapoints(cutoff=cutoff)
         return self.__compute_auc(x=fpr, y=sensitivity)
-    
-    def __build_ax(self, ax=None, ylim=(0, 1), xlim=(0, 1), figsize=(2, 2)):
-        if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
 
-        # Graph
-        ax.set_facecolor(FACE_COLOR)
-        ax.set_ylim(ylim)
-        ax.set_xlim(xlim)
-        return ax
 
-    def __plot_curve(self, x, y, xlabel, ylabel, title="AUC", ax=None, **kwargs):
-        
-        ax = self.__build_ax(ax)
-        ax.fill_between(x, y, color=MAIN_PLOT_COLOR, alpha=0.5)
-        ax.plot(x, y, color=MAIN_PLOT_COLOR, alpha=1)
+    def __plot_curve(self, x, y, xlabel, ylabel, title="AUC", ax=None, color=MAIN_PLOT_COLOR, alpha = 0.8, **kwargs):
+        ax = _build_ax(ax, xlim=(0, 1.02), ylim=(0, 1.02))
+        ax.fill_between(x, y, color=color, alpha=alpha)
+        ax.plot(x, y, color=color, alpha=1, **kwargs)
         # Add titles
         ax.set_title(title, loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_xlabel(xlabel, size=FONT_SIZE, color=MINOR_FONT_COLOR)
@@ -412,7 +652,7 @@ class NetworkInferenceStats:
                 )
         return cutoff
 
-    def plot_precision_recall_curve(self, cutoff=None, ax=None, **kwargs):
+    def plot_precision_recall_curve(self, cutoff=None, ax=None, title=True, **kwargs):
         """Plots the precision-recall curve.
 
         Args:
@@ -434,12 +674,13 @@ class NetworkInferenceStats:
             precision,
             xlabel="Recall",
             ylabel="Precision",
-            title=f"AUC-PR = {self.__compute_auc(x=sensitivity, y=precision):.3f}",
+            title=f"AUC-PR = {self.__compute_auc(x=sensitivity, y=precision):.3f}" if title else None,
             ax=ax,
+            **kwargs,
         )
         return ax
 
-    def plot_roc_curve(self, cutoff=None, ax=None, **kwargs):
+    def plot_roc_curve(self, cutoff=None, ax=None, title=True, **kwargs):
         """Plots the ROC curve.
 
         Args:
@@ -461,8 +702,9 @@ class NetworkInferenceStats:
             self.sensitivity_dist,
             xlabel="False positive rate",
             ylabel="True positive rate",
-            title=f"AUC-ROC = {self.__compute_auc(x=fpr, y=sensitivity):.3f}",
+            title=f"AUC-ROC = {self.__compute_auc(x=fpr, y=sensitivity):.3f}" if title else None,
             ax=ax,
+            **kwargs,
         )
         return ax
 
@@ -471,7 +713,7 @@ class NetworkInferenceStats:
 
         Args:
         cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None, the cutoff provided in the initialization is used.
+            If None, raises an error.
             The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization.
 
         Returns:
@@ -479,6 +721,8 @@ class NetworkInferenceStats:
         predicted_edges: set
             Set of edges predicted by the inference for the given cutoff.
         """
+        if cutoff is None:
+            raise ValueError("A cutoff must be provided.")
         if self.greater_is_better:
             return set().union(*[edges for score, edges in self.inference_edges if score >= cutoff])
         else:
@@ -595,6 +839,29 @@ class NetworkInferenceStats:
         recall = self.recall(cutoff=cutoff)
         return 2 * (precision * recall) / (precision + recall)
     
+    def mcc(self, cutoff:None|float=None) -> float:
+        """Computes the Matthews correlation coefficient for a given cutoff.
+
+        The mcc ranges from -1 to 1, where 1 is a perfect prediction, 0 is a random prediction and -1 is a perfectly wrong prediction.
+
+        Args:
+        cutoff (float): Cutoff to use to compute the evaluation metrics.
+            If None, the cutoff provided in the initialization is used.
+            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
+
+        Returns:
+        mcc: float
+            Matthews correlation coefficient for the given cutoff.
+        """
+        cutoff = self.__validate_cutoff(cutoff)
+        predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
+        true_positives = len(self.gold_standard_edges & predicted_edges)
+        false_positives = len(predicted_edges - self.gold_standard_edges)
+        false_negatives = self.size_gold_standard - true_positives
+        true_negatives = self.size_negatives - false_positives
+
+        return (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives))
+    
     def __compute_f1_score_dist(self) -> np.ndarray:
         """Computes the F1 score for every score in the inference.
 
@@ -634,7 +901,7 @@ class NetworkInferenceStats:
         self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
         optimal_cutoff = self.optimal_cutoff()
         precision_dist, sensitivity_dist, _ = self.__compute_roc_pr_datapoints() # use the default cutoff to get the cached values
-        ax = self.__build_ax(ax, xlim=(min(self.__f1_score_dist), max(self.__f1_score_dist)), figsize=(4, 2))
+        ax = _build_ax(ax, xlim=(min(self.__f1_score_dist), max(self.__f1_score_dist)), figsize=(4, 2))
         ax.plot(self.__f1_score_dist.keys(), precision_dist[1:-1], label="Precision", color="#DC3220")
         ax.plot(self.__f1_score_dist.keys(), sensitivity_dist[1:-1], label="Recall", color="#005AB5")
         ax.vlines(optimal_cutoff, ymin=0, ymax=1, color="k", linestyles='dashed', label="Optimal cutoff")
