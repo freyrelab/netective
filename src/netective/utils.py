@@ -38,7 +38,7 @@ concat_path = os.path.join
 
 utils_logger = get_logger(__name__)
 
-def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL', process = str):
+def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL'):
 
     """
     Start the parallel processes.
@@ -59,8 +59,6 @@ def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL', process = str):
     if verbose != None:
         current_level = utils_logger.getEffectiveLevel()
         set_log_level(utils_logger, verbose)
-    
-    utils_logger.warning(f'Starting {process}...')
     my_iter = list(zip(*my_iter))
     len_iter = len(my_iter)
     with tqdm(total=len_iter, file=sys.stdout) as pbar:
