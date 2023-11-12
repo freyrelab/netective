@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import gc
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -11,7 +12,7 @@ import numpy as np
 from warnings import warn
 from networkx import Graph, DiGraph
 
-from netective.utils import remove_self_loops
+from netective.utils import remove_self_loops, parse_network
 
 # TODO: SENT TO GLOBALS.PY
 FONT_SIZE = 11
@@ -142,6 +143,97 @@ def _anonymize_edges(
     return gold_standard_edges, inference_edges, size_universe
 
 
+def benchmarking(
+    networks: dict | str,
+    gold_standard: Graph | DiGraph | str,
+    directed: bool = True,
+    greater_score_is_better: bool = True,
+    allow_self_loops: bool = False,
+    cutoff: float | False = False,
+    return_auc_dicts: bool = False,
+    comments : str = '#',
+    delimiter : str = '\t',
+    score : bool = True,
+    verbose: str = None,
+) -> None:
+    """Perform a statistical analysis of the inference networks.
+    
+    Args:
+        networks (dict | str): Dictionary containing the inference networks or path to the directory containing the inference networks.
+            If a dictionary is provided, the keys are the network names and the values are the networks.
+            If a path is provided, the networks are loaded from the directory.
+        gold_standard (Graph | DiGraph | str): Networkx object or name or path to the gold standard network.
+            If gold_standard is part of the networks, it is removed from the networks.
+            If networks is a path to a directory, gold_standard must be a path to a file.
+        directed (bool): Whether the gold standard and the inference networks are directed or not.
+        greater_score_is_better (bool): Whether the inference score is better when it is higher or lower.
+            If True, the higher the score, the better the inference.
+            If False, the lower the score, the better the inference.
+        allow_self_loops (bool): Whether self-loops are allowed or not.
+        cutoff (float): Cutoff to use to compute the evaluation metrics.
+            If False, the evaluation metrics are computed for every score in the inference.
+        return_auc_dicts (bool): Whether to return the AUC values for every inference in the benchmark.
+            If False, the figure axis are returned.
+        comments (str): Character used to indicate comments in the network files.
+        delimiter (str): Character used to separate the columns in the network files.
+        score (bool): Whether the inference networks have a score attribute or not.
+            If score is False, the ranking of the edges is used as score (e.g., the first edge has a score of 0, the second a score of 1, etc.).
+        verbose (str): Level of verbosity.
+            If None, the verbosity level is set to WARNING. Options are: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+
+        
+    Returns:
+        If return_auc_dicts is True, a tuple containing the AUPR and AUROC dicts with values for every inference in the benchmark.
+        If return_auc_dicts is False, a tuple containing the figure axis for the AUPR and AUROC plots.
+    """
+
+    if isinstance(networks, str):
+
+        # valid networks dir and gold standard path
+        if not os.path.isdir(networks):
+            raise ValueError("networks must be a dictionary or a path to a directory.")
+        if not os.path.isfile(gold_standard):
+            raise ValueError("gold_standard must be a path to a file when networks is a path to a directory.")
+
+        # load networks using the filename as key
+        networks = {
+            os.path.splitext(network)[0]: parse_network(os.path.join(networks, network), comments=comments, delimiter=delimiter, directed=directed, score=score, use_position_as_score=True if not score else False)
+            for network in os.listdir(networks) if network != gold_standard
+            }
+        
+        gold_standard = parse_network(gold_standard, comments=comments, delimiter=delimiter, directed=directed, score=False, use_position_as_score=False)
+    
+    elif isinstance(networks, dict):
+        if gold_standard in networks:
+            gold_standard = networks.pop(gold_standard)
+        else:
+            if not isinstance(gold_standard, (Graph, DiGraph)):
+                raise TypeError("gold_standard must be a networkx.Graph or networkx.DiGraph.")
+            gold_standard = gold_standard.copy()
+
+    else:
+        raise TypeError("networks must be a dictionary or a path to a directory.")
+    
+    benchmark = Benchmark(
+        gold_standard=gold_standard,
+        inferences=networks,
+        greater_score_is_better=greater_score_is_better,
+        allow_self_loops=allow_self_loops,
+        cutoff=cutoff,
+    )
+
+
+    if return_auc_dicts:
+        return benchmark.aupr(), benchmark.auroc()
+    
+    else:
+        fig_aupr = benchmark.plot_aupr()
+        fig_pr_curves = benchmark.plot_precision_recall_curves()
+        fig_auroc = benchmark.plot_auroc()
+        fig_roc_curves = benchmark.plot_roc_curves()
+        return fig_aupr, fig_pr_curves, fig_auroc, fig_roc_curves
+
+
 
 class Benchmark:
     def __init__(
@@ -206,7 +298,7 @@ class Benchmark:
         ax = _build_ax(ax, figsize=(3,3))
         best_name, _ = self.best_auroc()
         for net_id, nis in self.nis_instances.items():
-            nis.plot_roc_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else 'k', alpha=0, title=False, **kwargs)
+            nis.plot_roc_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else MAIN_PLOT_COLOR, alpha=0, title=False, **kwargs)
         ax.legend(loc=3)
         return ax
     
@@ -226,7 +318,7 @@ class Benchmark:
         ax = _build_ax(ax, figsize=(3,3))
         best_name, _ = self.best_aupr()
         for net_id, nis in self.nis_instances.items():
-            nis.plot_precision_recall_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else 'k', alpha=0, title=False, **kwargs)
+            nis.plot_precision_recall_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else MAIN_PLOT_COLOR, alpha=0, title=False, **kwargs)
         ax.legend(loc=3)
         return ax
     
@@ -318,6 +410,14 @@ class Benchmark:
     def best_mcc(self) -> tuple(str, float):
         """Returns the inference with the best MCC and its value."""
         return max([(net_id, nis.mcc()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
+    
+    def aupr(self) -> dict[str, float]:
+        """Returns the AUPR values for every inference in the benchmark."""
+        return {net_id: nis.area_under_precision_recall_curve() for net_id, nis in self.nis_instances.items()}
+    
+    def auroc(self) -> dict[str, float]:
+        """Returns the AUROC values for every inference in the benchmark."""
+        return {net_id: nis.area_under_roc_curve() for net_id, nis in self.nis_instances.items()}
 
 
 class LinkEval:

@@ -8,4 +8,6 @@ from .structure.structure import classify_networks
 
 from .stats.stats import Benchmark
 from .stats.stats import LinkEval
+from .stats.stats import benchmarking
+
 

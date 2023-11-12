@@ -136,6 +136,20 @@ def parse_network(
         utils_logger.critical("score and use_position_as_score cannot be True at the same time.")
 
     if not use_position_as_score:
+
+        if score:
+            # check if first line has 3 columns
+            with open(file_path, "r") as f:
+                first_line = f.readline()
+                cols = first_line.strip().split(delimiter)
+                if len(cols) < 3:
+                    utils_logger.critical(
+                        f"File {file_path} does not have a score column. Set score=False."
+                    )
+                    raise ValueError(
+                        f"File {file_path} does not have a score column. Set score=False."
+                    )
+
         G = nx.read_edgelist(
             file_path,
             comments=comments,
