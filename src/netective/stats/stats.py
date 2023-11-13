@@ -14,6 +14,10 @@ from networkx import Graph, DiGraph
 
 from netective.utils import remove_self_loops, parse_network
 
+import logging
+from netective.logging_info import get_logger, set_log_level
+stats_logger = get_logger(__name__)
+
 # TODO: SENT TO GLOBALS.PY
 FONT_SIZE = 11
 FACE_COLOR = "#F2F0F2"
@@ -187,6 +191,10 @@ def benchmarking(
         If return_auc_dicts is False, a tuple containing the figure axis for the AUPR and AUROC plots.
     """
 
+    if verbose is not None:
+        current_level = stats_logger.getEffectiveLevel()
+        set_log_level(stats_logger, verbose)
+
     if isinstance(networks, str):
 
         # valid networks dir and gold standard path
@@ -224,15 +232,19 @@ def benchmarking(
 
 
     if return_auc_dicts:
-        return benchmark.aupr(), benchmark.auroc()
+        return_set = benchmark.aupr(), benchmark.auroc()
     
     else:
         fig_aupr = benchmark.plot_aupr()
         fig_pr_curves = benchmark.plot_precision_recall_curves()
         fig_auroc = benchmark.plot_auroc()
         fig_roc_curves = benchmark.plot_roc_curves()
-        return fig_aupr, fig_pr_curves, fig_auroc, fig_roc_curves
+        return_set = fig_aupr, fig_pr_curves, fig_auroc, fig_roc_curves
 
+    if verbose is not None:
+        set_log_level(stats_logger, current_level)
+
+    return return_set
 
 
 class Benchmark:
@@ -634,7 +646,7 @@ class LinkEval:
             and self.sensitivity_dist is not None
             and self.fpr_dist is not None
         ):
-            # print("The evaluation metrics have already been computed for this cutoff. Returning cached values.")
+            stats_logger.warning("The evaluation metrics have already been computed for this cutoff. Returning cached values.")
             return self.precision_dist, self.sensitivity_dist, self.fpr_dist
 
         if cutoff == self.cutoff:
@@ -704,7 +716,7 @@ class LinkEval:
             Area under the precision-recall curve.
         """
         precision, sensitivity, _ = self.__compute_roc_pr_datapoints(cutoff=cutoff)
-        # print(precision, sensitivity)
+        stats_logger.debug(f'precision: {precision}, sensitivity: {sensitivity}')
         return self.__compute_auc(x=sensitivity, y=precision)
 
     def area_under_roc_curve(self, cutoff=None) -> float:
@@ -1011,5 +1023,5 @@ class LinkEval:
         ax.legend(loc=0)
         if x_log:
             ax.set_xscale("log")
-        # print(self.__f1_score_dist.values(), precision_dist[1:-1], sensitivity_dist[1:-1])
+        stats_logger.debug(self.__f1_score_dist.values(), precision_dist[1:-1], sensitivity_dist[1:-1])
         return ax
