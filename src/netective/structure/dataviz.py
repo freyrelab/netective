@@ -64,7 +64,14 @@ def plot_distributions(dist_values, verbose: str = None):
     # Iterate over the dictionary items and create the subplots
     for i, (title, data) in enumerate(dist_values.items()):
         ax = axs[i] if num_items > 1 else axs  # Use a single axis if there's only one item
-        sns.kdeplot(data, ax=ax, fill=True, color="#384265")
+
+
+        unique, counts = np.unique(data, return_counts=True)
+        prob = counts/sum(counts)
+        print(data)
+        ax.scatter(unique, prob, color="#384265", s=10)
+
+        # sns.kdeplot(data, ax=ax, fill=True, color="#384265")
         ax.set_title(format_title(title))
 
     # Remove any extra empty subplots, only if there is more than one distribution to plot
@@ -82,6 +89,7 @@ def plot_distributions(dist_values, verbose: str = None):
 
 
 def plot_scalars(data_dict, verbose: str= None):
+    num_ticks = 4
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
@@ -123,6 +131,11 @@ def plot_scalars(data_dict, verbose: str= None):
         axs.set_xlabel("Values")
         axs.set_ylabel("")
         axs.set_title("Network Level Properties", loc="left")
+        if use_log_scale:
+            tick_locations = np.logspace(0, round(np.log10(max(values)))+1, num_ticks)
+        else:
+            tick_locations = np.linspace(0, max(values), num_ticks)
+        axs.set_xticks(tick_locations)
         # axs.xaxis.set_major_formatter(FuncFormatter(lambda value,_: f'{int(value)}'))
 
     plt.tight_layout()
