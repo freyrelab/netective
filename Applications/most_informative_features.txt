@@ -1,6 +1,0 @@
-synth	undirected_raw	'Average Local Efficiency', 'Radius', 'Skewness Degree'	0.62
-synth	directed_netnorm	'Average Local Efficiency', 'Average Shortest Path Length', 'Max In-Dregree'	0.3
-synth	directed_raw	'Average Local Efficiency', 'Radius', 'Skewness In-Degree'	0.53
-abasy	directed_netnorm	'Center',  'Periphery', 'Complex Feed-Forward Circuits', 'Feed-Forward Circuits', 'Max Degree', 'Radius', 'Gini Index'	0.71
-abasy	directed_netnorm	'Center', 'Global Efficiency', 'Periphery', 'Complex Feed-Forward Circuits', 'Feed-Forward Circuits', '3-Feedback Loops', 'Undirected Gini Index', 'Average Local Efficiency', 'Radius', 'Density', 'Entropy of Degree Distribution', 'Max Degree', 'Self-Loops', 'Gini Index'	0.99
-abasy	undirected_netnorm	'Center', 'Global Efficiency', 'Periphery', 'Entropy of Degree Distribution', 'Self-Loops', 'Undirected Gini Index', 'Undirected Density', 'Average Local Efficiency', 'Radius'	0.7

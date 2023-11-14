@@ -9,6 +9,14 @@ Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3.7
 Description-Content-Type: text/markdown
+Requires-Dist: igraph==0.10.4
+Requires-Dist: networkx>=2.8.4
+Requires-Dist: numpy>=1.24.3
+Requires-Dist: pandas>=1.5.3
+Requires-Dist: scipy>=1.10.1
+Requires-Dist: seaborn>=0.12.2
+Requires-Dist: tqdm==4.65.0
+Requires-Dist: mpmath>=1.2.1
 Provides-Extra: test
 Requires-Dist: pytest; extra == "test"
 Provides-Extra: lint

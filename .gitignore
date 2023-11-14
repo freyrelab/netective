@@ -1,6 +1,7 @@
 /data/
 /test/
 /slides/
+/Applications/
 /netective_old_code/
 *.pyc
 *.ini
@@ -8,3 +9,4 @@
 *[Dd]ata/
 *.pred
 src/netective/stats/GS.txt
+requirements-dev.txt
