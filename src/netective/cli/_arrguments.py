@@ -212,10 +212,73 @@ def _parse_arguments():
         choices= ['network', 'biological'],
         required= False
     )
+        # Mutually exclusive arguments
+    mut_exclusive = parser_d.add_mutually_exclusive_group(required=False)
+        # Clusters
+    mut_exclusive.add_argument(
+        '-cl','--clusters',
+        default= None,
+        type= int,
+        help= "max number of clusters to classify networks into. IMPORTANT: if number of clusters is given, then no t distance can be given.",
+        required= False
+    )
+        # Threshold distance
+    mut_exclusive.add_argument(
+        '-t','--threshold',
+        default= 0.7,
+        type= float,
+        help= "t distance for clustering, threshold to apply when forming flat clusters. IMPORTANT: if a threshold is given, no max number of clusters can apply.",
+        required= False
+    )
+        # Clustering metric
+    parser_d.add_argument(
+        '-m','--method',
+        default= 'ward',
+        type= str,
+        help= "method for calculating the distance between the newly formed cluster v and each cluster u. Defaults to ward. See scipy.clusters.hierarchy.linkage for more info.",
+        choices= ['single', 
+                  'complete', 
+                  'average', 
+                  'weighted', 
+                  'centroid', 
+                  'median', 
+                  'ward'],
+        required= False
+    )
+        # Clustering method
+    parser_d.add_argument(
+        '-mtr','--metric',
+        default= 'euclidean',
+        type= str,
+        help= 'distance metric to use. Defaults to euclidean.',
+        choices= ['braycurtis', 
+                  'canberra', 
+                  'chebyshev', 
+                  'cityblock', 
+                  'correlation', 
+                  'cosine', 
+                  'dice', 
+                  'euclidean', 
+                  'hamming', 
+                  'jaccard', 
+                  'jensenshannon', 
+                  'kulczynski1', 
+                  'mahalanobis', 
+                  'matching', 
+                  'minkowski', 
+                  'rogerstanimoto', 
+                  'russellrao', 
+                  'seuclidean', 
+                  'sokalmichener', 
+                  'sokalsneath', 
+                  'sqeuclidean',
+                  'yule'],
+        required= False
+    )
         # Selected props
     parser_d.add_argument(
         '-p', '--selected_props',
-        type= list,
+        type= list_of_strings,
         default= ['Average Local Efficiency',
             'Radius',
             'Center',
@@ -228,7 +291,8 @@ def _parse_arguments():
             'Undirected Gini Index',
             'Entropy of Degree Distribution',
             'Self-Loops'],
-        help= argparse.SUPPRESS
+        required= False,
+        help= 'list of selected properties used for analysis, defaults to selected properties for best classification. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
     )
         # Workers
     parser_d.add_argument(
@@ -258,8 +322,7 @@ def _parse_arguments():
         '-er','--erdos_renyi',
         type= int,
         default= 0,
-        help= "number of Erdos-Renyi networks to generate for each inputed network, default is 0",
-        required= False
+        help= argparse.SUPPRESS
     )
         # Comments character in networks files
     parser_d.add_argument(
@@ -281,8 +344,8 @@ def _parse_arguments():
     parser_d.add_argument(
         '-o','--output',
         type= str,
-        default= os.getcwd(),
-        help= "path to output directory, default is current directory",
+        default= None,
+        help= "path to output directory, default is results printed to std.out",
         required= False
     )
     requiredNamed = parser_d.add_argument_group("required named arguments")
@@ -294,12 +357,14 @@ def _parse_arguments():
     )
     
     args = parser.parse_args()
+    args.og_delimiter = repr(args.delimiter)
     args.delimiter = args.delimiter.encode("utf-8").decode("unicode_escape")
     # valid output path
-    if not os.path.isdir(args.output):
-        raise NotADirectoryError(
-            f"Output path {args.output} is not a valid directory."
-        )
-    args.output = os.path.abspath(args.output)
+    if args.output is not None:
+        if not os.path.isdir(args.output):
+            raise NotADirectoryError(
+                f"Output path {args.output} is not a valid directory."
+            )
+        args.output = os.path.abspath(args.output)
 
     return args

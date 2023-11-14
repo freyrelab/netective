@@ -52,7 +52,7 @@ def runmode1(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments} command: python {__file__} {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {str(delimiter)} --output {output}\n"
+    cl = f"{comments} command: python {__file__} {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
     
     scalars_array, dist_array = compare_structure(
                 networks= nets_path, 
@@ -102,10 +102,6 @@ def runmode1(args):
                 output_dir= output
             )
 
-    
-
-
-
 def runmode2(args):
     # Args for network analysis
     nets_path = args.input
@@ -133,7 +129,7 @@ def runmode2(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments} command: python {__file__} {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {delimiter} --output {output}\n"
+    cl = f"{comments} command: python {__file__} {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
 
     scalars_array, dist_array = compare_structure(
         networks= nets_path, 
@@ -182,13 +178,25 @@ def runmode3(args):
     pass
 
 def runmode4(args):
-    cl = f"\n{args.comments} command: python {__file__} {RUNMODES[args.runmode]} --path {args.input} --norm {args.normalization} --workers {args.workers} --verbose {args.verbose} --comments {args.comments} --delimiter {str(args.delimiter)} --output {args.output}"
+    # Structural comparison
     scalars = runmode2(args)
     cli_logger.warning('Starting classification of networks into clusters...')
     merged_df = pd.DataFrame.from_dict(scalars).T
     merged_df.dropna(axis=1, inplace=True, how='any')
-    clusters = get_clusters(merged_df.T.corr(), map_ids= True)
-    print(cl)
+    method = args.method
+    metric = args.metric
+    clusters_num = args.clusters
+    threshold = args.threshold if clusters_num is None else None
+    cl = f"\n{args.comments} command: python {__file__} {RUNMODES[args.runmode]} --path {args.input} --norm {args.normalization} --clusters {clusters_num} --threshold {threshold} --method {method} --metric {metric} --workers {args.workers} --verbose {args.verbose} --comments {args.comments} --delimiter {repr(args.delimiter)} --output {args.output}"
+    clusters = get_clusters(
+        merged_df.T.corr(),
+        map_ids= True,
+        ch_method= method,
+        ch_metric= metric,
+        clust_num= clusters_num,
+        threshold= threshold
+    )
+
     for clust, nets in clusters.items():
         print(f'Cluster {clust}: {nets}')
 
@@ -200,10 +208,9 @@ def main():
     elif args.runmode == 2:
         runmode2(args)
     elif args.runmode == 3:
-        pass
+        runmode3(args)
     elif args.runmode == 4:
         runmode4(args)
 
 if __name__ == "__main__":
-    
     main()
