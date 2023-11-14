@@ -18,7 +18,16 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = []
+
+dependencies = [
+  "igraph==0.10.4",
+  "networkx>=2.8.4",
+  "numpy>=1.24.3",
+  "pandas>=1.5.3",
+  "scipy>=1.10.1",
+  "seaborn>=0.12.2",
+  "tqdm==4.65.0"
+]
 
 [project.optional-dependencies]
 test = ["pytest"]
