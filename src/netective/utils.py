@@ -38,7 +38,7 @@ concat_path = os.path.join
 
 utils_logger = get_logger(__name__)
 
-def run_parallel(f, my_iter, workers, verbose: str = 'CRITICAL'):
+def run_parallel(f, my_iter, workers, verbose: str = None):
 
     """
     Start the parallel processes.

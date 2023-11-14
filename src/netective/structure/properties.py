@@ -817,20 +817,12 @@ class RichClub(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> np.array:
-        """
-        dict_coeff = nx.rich_club_coefficient(self.G, normalized=True)
-        self._norm_value = np.fromiter(dict_coeff.values(), dtype=float)
-        """
-        return self._raw_value
+    def norm_biol(self) -> None:
+        raise NotImplementedError
 
     @check_raw_value
-    def norm_network(self) -> np.array:
-        """
-        dict_coeff = nx.rich_club_coefficient(self.G, normalized=True)
-        self._norm_value = np.fromiter(dict_coeff.values(), dtype=float)
-        """
-        return self._raw_value
+    def norm_network(self) -> None:
+        raise NotImplementedError
 
 
 @return_distribution

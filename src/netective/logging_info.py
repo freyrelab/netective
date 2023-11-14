@@ -33,13 +33,13 @@ def get_logger(logger_name):
    handler.setFormatter(formatter)
 
    logger = getLogger(logger_name)
-   logger.setLevel(CRITICAL)
+   logger.setLevel(WARNING)
    logger.addHandler(handler)
    logger.propagate = False
 
    return logger
 
-def set_log_level(logger= logging.Logger, verbose: str = 'CRITICAL'):
+def set_log_level(logger= logging.Logger, verbose: str = 'WARNING'):
     if isinstance(verbose, str):
         numeric_level = getattr(logging, verbose.upper(), None)
     else:
