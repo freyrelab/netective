@@ -10,3 +10,6 @@
 *.pred
 src/netective/stats/GS.txt
 requirements-dev.txt
+*.png
+*.tsv
+*.csv

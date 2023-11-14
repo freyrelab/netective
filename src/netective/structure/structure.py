@@ -639,10 +639,12 @@ class Structure:
                 # props
                 scalar_values, dist_values = self._compute_props(child_classes)
                 self._scalar_arrays[self.net_id] = scalar_values
+                # Quitar esto !!!!!
                 self._dist_moments_arrays[self.net_id] = {
                     prop_name: compute_moments(array) for prop_name, array in dist_values.items()
                 }
 
+                # Regresar dist values !!!!!!!!
                 return self._scalar_arrays, self._dist_moments_arrays
 
             # This is a general exception handler to catch any error that may occur in the parallelized code
@@ -812,6 +814,7 @@ def characterize_network(
     else:
         scalar_values, dist_values = struc.get_props(selected_props=selected_props, include_env=include_env)
 
+
     if len(dist_values) == 0 and len(scalar_values) == 0:
         struct_logger.critical("Not enough data, try with more properties or another normalization")
         raise ValueError("Not enough data, try with more properties or another normalization")
@@ -847,6 +850,62 @@ def __remove_network_data(G: Graph) -> Graph:
         G.edges[u, v].clear()
     return G
 
+def __batch_processing(
+        networks: dict,
+        norm: str,
+        selected_props: list,
+        child_classes: list,
+        verbose: str,
+        workers: int,
+        keep_averages: bool,
+        erdos_renyi: int,
+        include_env: dict
+    ) -> Tuple[dict, dict]:
+    networks = {net_id: __remove_network_data(G) for net_id, G in networks.items()} # to avoid serialization error py3.8 with nx's data structures
+    data = [
+        list(networks.values()),
+        list(networks.keys()),
+        [norm] * len(networks),
+        [selected_props] * len(networks),
+        [child_classes] * len(networks),
+        [verbose] * len(networks),  # verbose
+        [True] * len(networks),  # keep_names
+    ]
+
+    # run parallel
+    results = run_parallel(characterize_network, data, workers, verbose= verbose)
+    name_scalars_array = results["scalars"]
+    name_moments_arrays = results["distributions"]
+    
+    # Meter compute_moments aqui !!!!
+    
+    if keep_averages:
+        for net_id, prop in name_moments_arrays.items():
+            for prop_name, values in prop.items():
+                name_scalars_array[net_id][f'Average {prop_name}'] = values[0]
+                # name_scalars_array[net_id][f'Variation {prop_name}'] = values[1]
+                # name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
+                # name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
+    
+    if erdos_renyi:
+        if erdos_renyi < 0:
+            struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
+            raise ValueError("erdos_renyi must be 0 or greater")
+        for net_id, net in networks.items():
+            er_scalars_array, er_moments_arrays = er_nets_per_net_analysis(
+                                                                G= net, 
+                                                                net_id= net_id, 
+                                                                norm= norm, 
+                                                                erdos_renyi= erdos_renyi, 
+                                                                selected_props= selected_props,
+                                                                workers= workers,
+                                                                include_env= include_env,
+                                                            )
+            name_scalars_array.update(er_scalars_array)
+            name_moments_arrays.update(er_moments_arrays)
+    
+    return name_scalars_array, name_moments_arrays
+
 # Comparison of multiple networks
 def compare_structure(
     networks: dict | str,
@@ -859,7 +918,8 @@ def compare_structure(
     verbose: str = None,
     erdos_renyi : int = 0,
     comments : str = '#',
-    delimiter : str = '\t'
+    delimiter : str = '\t',
+    keep_averages: bool = True,
 ) -> Tuple[dict, dict] | plt.Figure:
     """
     Module-level function to compare multiple networks.
@@ -908,50 +968,17 @@ def compare_structure(
     # networks is a dict
     if isinstance(networks, dict):
         struct_logger.warning(f'Starting topological characterization of networks: {list(networks.keys())}...')
-        # prepare data
-        networks = {net_id: __remove_network_data(G) for net_id, G in networks.items()} # to avoid serialization error py3.8 with nx's data structures
-        data = [
-            list(networks.values()),
-            list(networks.keys()),
-            [norm] * len(networks),
-            [selected_props] * len(networks),
-            [child_classes] * len(networks),
-            [verbose] * len(networks),  # verbose
-            [True] * len(networks),  # keep_names
-        ]
-
-        # run parallel
-        results = run_parallel(characterize_network, data, workers, verbose= verbose)
-        name_scalars_array = results["scalars"]
-        name_moments_arrays = results["distributions"]
-        
-        for net_id, prop in name_moments_arrays.items():
-            for prop_name, values in prop.items():
-                name_scalars_array[net_id][f'Average {prop_name}'] = values[0]
-                """
-                name_scalars_array[net_id][f'Variation {prop_name}'] = values[1]
-                name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
-                name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
-                """
-        
-        if erdos_renyi:
-
-            if erdos_renyi < 0:
-                struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
-                raise ValueError("erdos_renyi must be 0 or greater")
-        
-            for net_id, net in networks.items():
-                er_scalars_array, er_moments_arrays = er_nets_per_net_analysis(
-                                                                    G= net, 
-                                                                    net_id= net_id, 
-                                                                    norm= norm, 
-                                                                    erdos_renyi= erdos_renyi, 
-                                                                    selected_props= selected_props,
-                                                                    workers= workers,
-                                                                    include_env= include_env,
-                                                                )
-                name_scalars_array.update(er_scalars_array)
-                name_moments_arrays.update(er_moments_arrays)
+        name_scalars_array, name_moments_arrays = __batch_processing(
+            networks= networks,
+            norm= norm,
+            selected_props= selected_props,
+            child_classes= child_classes,
+            verbose= verbose,
+            workers= workers,
+            keep_averages= keep_averages,
+            erdos_renyi= erdos_renyi,
+            include_env= include_env,
+        )
     
     # networks is a directory path    
     else:
@@ -969,97 +996,40 @@ def compare_structure(
             # Number of inputed nets is > workers, batch processing
             if len(sorted_files) > workers and (len(nets) == workers or (len(nets) == last_batch and completed == complete_batches)):
                 struct_logger.warning(f'Starting topological characterization of networks: {list(nets.keys())}...')
-                # prepare data
-                nets = {net_id: __remove_network_data(G) for net_id, G in nets.items()} # to avoid serialization error py3.8 with nx's data structures
-                data = [
-                    list(nets.values()),
-                    list(nets.keys()),
-                    [norm] * len(nets),
-                    [selected_props] * len(nets),
-                    [child_classes] * len(nets),
-                    [verbose] * len(nets),  # verbose
-                    [True] * len(nets),  # keep_names
-                ]
-                # run parallel
-                results = run_parallel(characterize_network, data, workers, verbose= verbose)
-                name_scalars_array.update(results["scalars"])
-                name_moments_arrays.update(results["distributions"])
-                for net_id, prop in name_moments_arrays.items():
-                    for prop_name, values in prop.items():
-                        name_scalars_array[net_id][f'Average {prop_name}'] = values[0]
-                        """
-                        name_scalars_array[net_id][f'Variation {prop_name}'] = values[1]
-                        name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
-                        name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
-                        """
-                if erdos_renyi:
-                    if erdos_renyi < 0:
-                        struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
-                        raise ValueError("erdos_renyi must be 0 or greater")
-                
-                    for net_id, net in nets.items():
-                        er_scalars_array, er_moments_arrays = er_nets_per_net_analysis(
-                                                                            G= net, 
-                                                                            net_id= net_id, 
-                                                                            norm= norm, 
-                                                                            erdos_renyi= erdos_renyi, 
-                                                                            selected_props= selected_props,
-                                                                            workers= workers,
-                                                                            include_env= include_env,
-                                                                        )
-                        name_scalars_array.update(er_scalars_array)
-                        name_moments_arrays.update(er_moments_arrays)
-                
+                temp_name_scalars_array, temp_name_moments_arrays = __batch_processing(
+                    networks= nets,
+                    norm= norm,
+                    selected_props= selected_props,
+                    child_classes= child_classes,
+                    verbose= verbose,
+                    workers= workers,
+                    keep_averages= keep_averages,
+                    erdos_renyi= erdos_renyi,
+                    include_env= include_env,
+                )
+                name_scalars_array.update(temp_name_scalars_array)
+                name_moments_arrays.update(temp_name_moments_arrays)
                 nets = {}
                 completed += 1
-        
         # Number of inputed nets is <= workers
         if len(sorted_files) <= workers:
             struct_logger.warning(f'Starting topological characterization of networks: {list(nets.keys())}...')
-            # prepare data
-            nets = {net_id: __remove_network_data(G) for net_id, G in nets.items()} # to avoid serialization error py3.8 with nx's data structures
-            data = [
-                list(nets.values()),
-                list(nets.keys()),
-                [norm] * len(nets),
-                [selected_props] * len(nets),
-                [child_classes] * len(nets),
-                [verbose] * len(nets),  # verbose
-                [True] * len(nets),  # keep_names
-            ]
-            # run parallel
-            results = run_parallel(characterize_network, data, workers, verbose= verbose)
-            name_scalars_array = results['scalars']
-            name_moments_arrays = results['distributions']
-            for net_id, prop in name_moments_arrays.items():
-                    for prop_name, values in prop.items():
-                        name_scalars_array[net_id][f'Average {prop_name}'] = values[0]
-                        """
-                        name_scalars_array[net_id][f'Variation {prop_name}'] = values[1]
-                        name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
-                        name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
-                        """
-            if erdos_renyi:
-                    if erdos_renyi < 0:
-                        struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
-                        raise ValueError("erdos_renyi must be 0 or greater")
-                
-                    for net_id, net in nets.items():
-                        er_scalars_array, er_moments_arrays = er_nets_per_net_analysis(
-                                                                            G= net, 
-                                                                            net_id= net_id, 
-                                                                            norm= norm, 
-                                                                            erdos_renyi= erdos_renyi, 
-                                                                            selected_props= selected_props,
-                                                                            workers= workers,
-                                                                            include_env= include_env,
-                                                                        )
-                        name_scalars_array.update(er_scalars_array)
-                        name_moments_arrays.update(er_moments_arrays)
-
+            name_scalars_array, name_moments_arrays = __batch_processing(
+                networks= nets,
+                norm= norm,
+                selected_props= selected_props,
+                child_classes= child_classes,
+                verbose= verbose,
+                workers= workers,
+                keep_averages= keep_averages,
+                erdos_renyi= erdos_renyi,
+                include_env= include_env,
+            )
+ 
     if return_prop_dicts:
         if verbose != None:
             set_log_level(current_level)
+        # No se regresen momentos, sino distribuciones !!!!!!
         return name_scalars_array, name_moments_arrays
     
     # TODO: Optimization:  only compute the common properties
@@ -1080,7 +1050,6 @@ def compare_structure(
         set_log_level(current_level)
     
     return fig_scalar
-
 
 def classify_networks(
         networks: dict(str, Graph),
