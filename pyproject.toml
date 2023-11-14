@@ -7,7 +7,7 @@ name = "netective"
 version = "0.9.0"
 authors = [
   { name="Juan M. Escorcia-Rodríguez", email="juanesscorcia@gmail.com" },
-  { name="Jose Antonio Sanchez-Villicaña", email="josesv@lcg.unam.mx" },
+  { name="José Antonio Sánchez-Villicaña", email="josesv@lcg.unam.mx" },
   { name="Julio A. Freyre-González", email="jfreyreg@gmail.com" },
 ]
 description = "Use structural and standard performance metrics to assess network inference"
@@ -15,7 +15,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: GPL-3.0-only,
+    "License :: GPL-3.0-only",
     "Operating System :: OS Independent",
 ]
 
