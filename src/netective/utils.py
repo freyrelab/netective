@@ -273,7 +273,7 @@ def flatten_list_of_iterables(lst):
 
 
 def get_clusters(
-    corr_df, clust_num=None, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True, fcluster_kwargs: dict = None
+    corr_df, clust_num: int = None, threshold: float = 0.7, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True, fcluster_kwargs: dict = None
 ):
     """Get clusters from a correlation matrix.
 
@@ -306,11 +306,11 @@ def get_clusters(
     linkage_mtrx = linkage(square_matrix, method=ch_method, metric=ch_metric)
     index = list(corr_df.index)
     if clust_num is not None:
-        cluster_vector = fcluster(linkage_mtrx, t=clust_num, criterion="maxclust")
-    elif fcluster_kwargs is not None:
-        cluster_vector = fcluster(linkage_mtrx, **fcluster_kwargs)
+        cluster_vector = fcluster(linkage_mtrx, t= clust_num, criterion= "maxclust")
+    elif threshold is not None:
+        cluster_vector = fcluster(linkage_mtrx, t= threshold, criterion= "distance")
     else:
-        cluster_vector = fcluster(linkage_mtrx, t=0.5, criterion="distance")
+        cluster_vector = fcluster(linkage_mtrx, **fcluster_kwargs)
     
     clusters = {i: [] for i in cluster_vector}
     {clusters[cluster_vector[i]].append(index[i]) for i in range(len(cluster_vector))}
