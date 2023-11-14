@@ -14,7 +14,7 @@ src/netective.egg-info/top_level.txt
 src/netective/cli/__init__.py
 src/netective/cli/_arguments.py
 src/netective/cli/_arrguments.py
-src/netective/cli/netective_cli.py
+src/netective/cli/netective.py
 src/netective/cli/netective_test.py
 src/netective/stats/stats.py
 src/netective/structure/__init__.py

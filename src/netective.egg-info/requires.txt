@@ -5,6 +5,7 @@ pandas>=1.5.3
 scipy>=1.10.1
 seaborn>=0.12.2
 tqdm==4.65.0
+mpmath>=1.2.1
 
 [cov]
 pytest<5.0.0
