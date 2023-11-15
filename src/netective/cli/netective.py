@@ -4,9 +4,10 @@ from multiprocessing import cpu_count
 from netective.cli._arrguments import _parse_arguments
 from netective.utils import save_prop_dicts, save_figs, common_props_dict, association, get_clusters, parse_network
 from netective.structure.dataviz import create_symmetric_heatmap, plot_distributions, plot_scalars
-from netective import compare_structure, characterize_network
+from netective import compare_structure, characterize_network, benchmarking
 
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from netective.logging_info import get_logger, set_log_level
 
@@ -59,7 +60,7 @@ def runmode1(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
+    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --workers {workers} --selected_props {selected_props} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
     
     if os.path.isdir(nets_path):
         scalars_array, dist_array = compare_structure(
@@ -157,7 +158,7 @@ def runmode2(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
+    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --selected_props {selected_props} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
 
     scalars_array, dist_array = compare_structure(
         networks= nets_path, 
@@ -202,7 +203,87 @@ def runmode2(args):
             raise ValueError("Not enough data to compare.")
 
 def runmode3(args):
-    pass
+    gs = args.gold_standard
+    inferences = args.inferences
+    directed = args.directed
+    greater_is_better = args.greater_is_better
+    keep_auc_dicts = args.keep_auc_dicts
+    cutoff = args.cutoff
+    score = args.score
+    self_loops = args.self_loops
+    verbose = args.verbose
+    output = args.output
+    comments = args.comments
+    delimiter = args.delimiter
+    cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_dicts {keep_auc_dicts} --cutoff {cutoff} --score {score} --self_loops {self_loops} --verbose {verbose} --output {output} --delimiter {repr(delimiter)} --comments {comments}'
+    if keep_auc_dicts: # Keeping dictionaries with aupr and auroc values
+        aupr_scores, auroc_scores = benchmarking(
+            networks= inferences,
+            gold_standard= gs,
+            directed= directed,
+            greater_score_is_better= greater_is_better,
+            allow_self_loops= self_loops,
+            cutoff= cutoff,
+            return_auc_dicts= True,
+            comments= comments,
+            delimiter= delimiter,
+            score= score,
+            verbose= verbose
+        )
+        if output is not None:
+            if not os.path.isdir(output):
+                cli_logger.warning(f'Invalid output {output}, setting current directory instead')
+                output = os.getcwd()
+            exts = {",": "csv", "\t": "tsv"}
+            ext = exts.get(args.delimiter, "txt")
+            aupr_output_file = concat_path(output, f"aupr_scores.{ext}")
+            auroc_output_file = concat_path(output, f"auroc_scores.{ext}")
+            aupr_f = open(aupr_output_file, 'w')
+            auroc_f = open(auroc_output_file, 'w')
+            aupr_f.write(f'{cl}\n{comments}AUPR Scores\n{comments}Network{delimiter}Score')
+            auroc_f.write(f'{cl}\n{comments}AUROC Scores\n{comments}Network{delimiter}Score')
+        else:
+            print(f'\t\tAUPR Scores\nNetwork{args.delimiter}Score')
+        
+        for net, value in aupr_scores.items():
+            if output is not None:
+                aupr_f.write(f'\n{net}{delimiter}{value}')
+            else:
+                print(f'{net}{delimiter}{value}')
+        for i,(net, value) in enumerate(auroc_scores.items()):
+            if output is not None:
+                auroc_f.write(f'\n{net}{delimiter}{value}')
+            else:
+                if i == 0:
+                    print(f'\n\t\tAUROC Scores\nNetwork{delimiter}Score')
+                print(f'{net}{delimiter}{value}')
+        try:
+            aupr_f.close()
+            auroc_f.close()
+        except UnboundLocalError:
+            pass
+      
+    else:
+        fig_aupr, fig_pr_curves, fig_auroc, fig_roc_curves = benchmarking(
+            networks= inferences,
+            gold_standard= gs,
+            directed= directed,
+            greater_score_is_better= greater_is_better,
+            allow_self_loops= self_loops,
+            cutoff= cutoff,
+            return_auc_dicts= False,
+            comments= comments,
+            delimiter= delimiter,
+            score= score,
+            verbose= verbose
+        )
+        if not os.path.isdir(output):
+            cli_logger.warning(f'No output directory stated, setting current directory as output directory.')
+            output = os.getcwd()
+        fig_aupr.get_figure().savefig(fname= concat_path(output, f'aupr.png'), bbox_inches= 'tight', dpi= 300)
+        fig_pr_curves.get_figure().savefig(fname= concat_path(output, f'pr_curves.png'), bbox_inches= 'tight', dpi= 300)
+        fig_auroc.get_figure().savefig(fname= concat_path(output, f'auroc.png'), bbox_inches= 'tight', dpi= 300)
+        fig_roc_curves.get_figure().savefig(fname= concat_path(output, f'roc_curves.png'), bbox_inches= 'tight', dpi= 300)
 
 def runmode4(args):
     method = args.method
@@ -210,7 +291,7 @@ def runmode4(args):
     clusters_num = args.clusters
     output = args.output
     threshold = args.threshold if clusters_num is None else None
-    cl = f"{args.comments}command: netective {RUNMODES[args.runmode]} --path {args.input} --norm {args.normalization} --clusters {clusters_num} --threshold {threshold} --method {method} --metric {metric} --workers {args.workers} --verbose {args.verbose} --comments {args.comments} --delimiter {repr(args.delimiter)} --output {output}"
+    cl = f"{args.comments}command: netective {RUNMODES[args.runmode]} --path {args.input} --norm {args.normalization} --selected_props {args.selected_props} --clusters {clusters_num} --threshold {threshold} --method {method} --metric {metric} --workers {args.workers} --verbose {args.verbose} --comments {args.comments} --delimiter {repr(args.delimiter)} --output {output}"
     # Structural comparison
     scalars = runmode2(args)
     cli_logger.info('Starting classification of networks into clusters...')
