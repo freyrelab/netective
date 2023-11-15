@@ -259,6 +259,12 @@ class Benchmark:
         """
         """
         self.__repr_str = f"Benchmark({gold_standard}, {inferences}, greater_is_better={greater_score_is_better}, allow_self_loops={allow_self_loops}, cutoff={cutoff})"
+        
+
+        # remove self-loops if allow_self_loops is False
+        if not allow_self_loops:
+            gold_standard = remove_self_loops(gold_standard)
+            inferences = {net_id: remove_self_loops(inf) for net_id, inf in inferences.items()}
 
         gold_standard_edges, inference_edges, size_universe = _anonymize_edges(
             gold_standard,

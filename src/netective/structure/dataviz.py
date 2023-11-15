@@ -5,6 +5,10 @@ import seaborn as sns
 from netective.logging_info import get_logger, set_log_level
 from matplotlib.ticker import FuncFormatter
 import logging
+import math
+
+def ceil_to_next_power_of_10(number):
+    return 10 ** math.ceil(math.log10(number))
 
 dataviz_logger = get_logger(__name__)
 
@@ -54,7 +58,7 @@ def plot_distributions(dist_values, verbose: str = None):
 
     # Create the figure and subplots
     fig, axs = plt.subplots(
-        nrows=grid_shape[0], ncols=grid_shape[1], figsize=(3 * grid_shape[0], 1.5 * grid_shape[1])
+        nrows=grid_shape[0], ncols=grid_shape[1], figsize=(3 * grid_shape[0], 1.5 * grid_shape[1]),
     )
 
     # Flatten the axes array if it's more than 1D
@@ -68,11 +72,12 @@ def plot_distributions(dist_values, verbose: str = None):
 
         unique, counts = np.unique(data, return_counts=True)
         prob = counts/sum(counts)
-        print(data)
-        ax.scatter(unique, prob, color="#384265", s=10)
+        ax.scatter(unique, prob, color="#384265", s=30, alpha=0.3)
 
         # sns.kdeplot(data, ax=ax, fill=True, color="#384265")
         ax.set_title(format_title(title))
+        
+        ax.set_ylabel("Probability")
 
     # Remove any extra empty subplots, only if there is more than one distribution to plot
     if num_items > 1:
@@ -80,7 +85,8 @@ def plot_distributions(dist_values, verbose: str = None):
             for j in range(num_items, axs.size):
                 fig.delaxes(axs[j])
             # Adjust spacing between subplots
-            fig.tight_layout()
+    fig.tight_layout()
+    fig.suptitle('Node-level Properties', y=1.02, fontsize=16)
     
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
@@ -130,16 +136,16 @@ def plot_scalars(data_dict, verbose: str= None):
         axs.set_xlim(0, max(values) * 1.1)
         axs.set_xlabel("Values")
         axs.set_ylabel("")
-        axs.set_title("Network Level Properties", loc="left")
+        axs.set_title("Network-level Properties", loc="center", fontsize=16)
         if use_log_scale:
-            tick_locations = np.logspace(0, round(np.log10(max(values)))+1, num_ticks)
+            max_log = int(math.log10(ceil_to_next_power_of_10(max(values))))
+            tick_locations = np.logspace(0, max_log, max_log-1)
         else:
             tick_locations = np.linspace(0, max(values), num_ticks)
         axs.set_xticks(tick_locations)
         # axs.xaxis.set_major_formatter(FuncFormatter(lambda value,_: f'{int(value)}'))
 
-    plt.tight_layout()
-
+    # plt.tight_layout()
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
     

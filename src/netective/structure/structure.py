@@ -631,7 +631,7 @@ class Structure:
             )  # to make sure the network is valid and use the actual modified network
             try:
                 self._scalar_arrays = {}
-                self._dist_moments_arrays = {}
+                self._dist_arrays = {}
 
                 if child_classes is None:
                     child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
@@ -639,13 +639,9 @@ class Structure:
                 # props
                 scalar_values, dist_values = self._compute_props(child_classes)
                 self._scalar_arrays[self.net_id] = scalar_values
-                # Quitar esto !!!!!
-                self._dist_moments_arrays[self.net_id] = {
-                    prop_name: compute_moments(array) for prop_name, array in dist_values.items()
-                }
+                self._dist_arrays[self.net_id] = dist_values
 
-                # Regresar dist values !!!!!!!!
-                return self._scalar_arrays, self._dist_moments_arrays
+                return self._scalar_arrays, self._dist_arrays
 
             # This is a general exception handler to catch any error that may occur in the parallelized code
             except Exception as e:
@@ -660,7 +656,7 @@ class Structure:
         if self.verbose != None:
             set_log_level(current_level)
         
-        return self._scalar_arrays, self._dist_moments_arrays
+        return self._scalar_arrays, self._dist_arrays
 
 def er_nets_per_net_analysis(
     G: DiGraph | Graph,
@@ -875,10 +871,13 @@ def __batch_processing(
     # run parallel
     results = run_parallel(characterize_network, data, workers, verbose= verbose)
     name_scalars_array = results["scalars"]
-    name_moments_arrays = results["distributions"]
-    
-    # Meter compute_moments aqui !!!!
-    
+    name_dist_arrays = results["distributions"]
+
+    name_moments_arrays = {
+        net_id: { prop_name: compute_moments(array) for prop_name, array in prop.items() }
+        for net_id, prop in name_dist_arrays.items()
+    }
+
     if keep_averages:
         for net_id, prop in name_moments_arrays.items():
             for prop_name, values in prop.items():
@@ -892,7 +891,7 @@ def __batch_processing(
             struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
             raise ValueError("erdos_renyi must be 0 or greater")
         for net_id, net in networks.items():
-            er_scalars_array, er_moments_arrays = er_nets_per_net_analysis(
+            er_scalars_array, er_name_dist_arrays = er_nets_per_net_analysis(
                                                                 G= net, 
                                                                 net_id= net_id, 
                                                                 norm= norm, 
@@ -902,9 +901,9 @@ def __batch_processing(
                                                                 include_env= include_env,
                                                             )
             name_scalars_array.update(er_scalars_array)
-            name_moments_arrays.update(er_moments_arrays)
+            name_dist_arrays.update(er_name_dist_arrays)
     
-    return name_scalars_array, name_moments_arrays
+    return name_scalars_array, name_dist_arrays
 
 # Comparison of multiple networks
 def compare_structure(
@@ -968,7 +967,7 @@ def compare_structure(
     # networks is a dict
     if isinstance(networks, dict):
         struct_logger.warning(f'Starting topological characterization of networks: {list(networks.keys())}...')
-        name_scalars_array, name_moments_arrays = __batch_processing(
+        name_scalars_array, name_dist_arrays = __batch_processing(
             networks= networks,
             norm= norm,
             selected_props= selected_props,
@@ -984,7 +983,7 @@ def compare_structure(
     else:
         sorted_files = sort_files(networks)
         name_scalars_array = {}
-        name_moments_arrays = {}
+        name_dist_arrays = {}
         nets = {}
         complete_batches = len(sorted_files) // workers
         last_batch = len(sorted_files) % workers
@@ -1008,13 +1007,13 @@ def compare_structure(
                     include_env= include_env,
                 )
                 name_scalars_array.update(temp_name_scalars_array)
-                name_moments_arrays.update(temp_name_moments_arrays)
+                name_dist_arrays.update(temp_name_moments_arrays)
                 nets = {}
                 completed += 1
         # Number of inputed nets is <= workers
         if len(sorted_files) <= workers:
             struct_logger.warning(f'Starting topological characterization of networks: {list(nets.keys())}...')
-            name_scalars_array, name_moments_arrays = __batch_processing(
+            name_scalars_array, name_dist_arrays = __batch_processing(
                 networks= nets,
                 norm= norm,
                 selected_props= selected_props,
@@ -1030,7 +1029,7 @@ def compare_structure(
         if verbose != None:
             set_log_level(current_level)
         # No se regresen momentos, sino distribuciones !!!!!!
-        return name_scalars_array, name_moments_arrays
+        return name_scalars_array, name_dist_arrays
     
     # TODO: Optimization:  only compute the common properties
     name_scalars_array = common_props_dict(name_scalars_array)
