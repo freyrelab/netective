@@ -107,7 +107,8 @@ def plot_scalars(data_dict, verbose: str= None):
     threshold = 0.05 * max(values)
     num_below_threshold = sum(value < threshold for value in values)
     # use log scale if more than 30% of the values are below the threshold
-    use_log_scale = num_below_threshold > (len(values) / 3)
+    use_log_scale = num_below_threshold > (len(values) / 3) and max(values) > 1
+    
 
 
 
@@ -137,7 +138,7 @@ def plot_scalars(data_dict, verbose: str= None):
         axs.set_xlabel("Values")
         axs.set_ylabel("")
         axs.set_title("Network-level Properties", loc="center", fontsize=16)
-        if use_log_scale and max(values) > 1:
+        if use_log_scale:
             max_log = int(math.log10(ceil_to_next_power_of_10(max(values))))
             tick_locations = np.logspace(0, max_log, max_log-1)
         else:
