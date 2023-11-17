@@ -919,6 +919,7 @@ def compare_structure(
     comments : str = '#',
     delimiter : str = '\t',
     keep_averages: bool = True,
+    directed: bool = True
 ) -> Tuple[dict, dict] | plt.Figure:
     """
     Module-level function to compare multiple networks.
@@ -990,7 +991,13 @@ def compare_structure(
         completed = 0
         for net_path in sorted_files:
             net_id = os.path.basename(net_path)
-            nets[net_id] = parse_network(net_path, comments, delimiter)
+            nets[net_id] = parse_network(
+                file_path= net_path,
+                comments= comments,
+                delimiter= delimiter,
+                directed= directed,
+                use_position_as_score= False
+            )
 
             # Number of inputed nets is > workers, batch processing
             if len(sorted_files) > workers and (len(nets) == workers or (len(nets) == last_batch and completed == complete_batches)):
