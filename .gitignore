@@ -13,3 +13,4 @@ requirements-dev.txt
 *.png
 *.tsv
 *.csv
+*.R

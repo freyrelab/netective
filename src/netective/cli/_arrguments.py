@@ -1,6 +1,7 @@
 __all__ = ['_parse_arguments']
 import os
 import argparse
+from multiprocessing import cpu_count
 
 def _parse_arguments():
 
@@ -16,9 +17,28 @@ def _parse_arguments():
             raise argparse.ArgumentTypeError("%r not in range [0.0, 1.0]"%(x,))
         return x
     
+    def valid_path(x):
+        if x is not None:
+            if os.path.isdir(x) or os.path.isfile(x):
+                return os.path.abspath(x)
+            else:
+                raise argparse.ArgumentTypeError(f'Output path {x} is not a valid directory')
     
+    def valid_workers(x):
+        usable_threads = cpu_count() - 1
+        if x == 'auto':
+            x = usable_threads
+        else:
+            try:
+                x = int(x)
+                x = usable_threads if x > usable_threads or x < 0 else x
+            except:
+                x = usable_threads
+        return x
+
     parser = argparse.ArgumentParser(
-        description="Assess the topology of a network. If more than one network is given (directory with multiple networks), a comparison between them based on their topology is done."
+        description="Assess the topology of a network. If more than one network is given (directory with multiple networks), a comparison between them based on their topology is done.",
+        formatter_class= argparse.ArgumentDefaultsHelpFormatter
     )
     # Sub-Arguments
     subparsers = parser.add_subparsers(
@@ -28,7 +48,7 @@ def _parse_arguments():
     )
     
     # create the parser for the "characterize" command
-    parser_a = subparsers.add_parser('characterize', help='characterization of inputed network through structural properties.')
+    parser_a = subparsers.add_parser('characterize', help='characterization of inputed network through structural properties.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_a.add_argument(
         '--runmode',
         type= int,
@@ -39,8 +59,14 @@ def _parse_arguments():
     parser_a.add_argument(
         '-n','--normalization',
         default= None,
-        help= "normalization method for structural properties, default is no normalization.",
+        help= "normalization method for structural properties.",
         choices= ['network', 'biological'],
+        required= False
+    )
+    parser_a.add_argument(
+        '-dir', '--directed',
+        action= 'store_true',
+        help= 'whether the gold standard and inferences are directed or not.',
         required= False
     )
         # Selected props
@@ -48,22 +74,22 @@ def _parse_arguments():
         '-p', '--selected_props',
         type= list_of_strings,
         default= ['all'],
-        help= 'list of selected properties used for analysis, defaults to all properties implemented. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
+        help= 'list of selected properties used for analysis. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
         required= False
     )
         # Workers
     parser_a.add_argument(
         '-w','--workers',
-        type= str,
+        type= valid_workers,
         default= '2',
-        help= "number of workers to use for parallelization of properties characterization, default is 2 for minimal parallelization. IMPORTANT: it is also the max number of networks loaded simultaneously into memory at the same time at any given moment. IMPORTANT: auto for automatical detection of usable threads. Only applies if directory has more than one readable network.",
+        help= "number of workers to use for parallelization of properties characterization, default is minimal parallelization. IMPORTANT: it is also the max number of networks loaded simultaneously into memory at the same time at any given moment. IMPORTANT: auto for automatical detection of usable threads. Only applies if directory has more than one readable network.",
         required= False
     )
         # Return props dict
     parser_a.add_argument(
         '-k', '--keep_props',
         action= 'store_true',
-        help= "whether to save dataframes of the properties values for each network analyzed",
+        help= "whether to save dataframes of the properties values for each network analyzed.",
         required= False
     )
         # Verbose
@@ -71,7 +97,7 @@ def _parse_arguments():
         '-v','--verbose',
         type= str,
         default= 'WARNING',
-        help= "level of verbose to handle progress of process. Check logging levels for more information. Defaults to WARNING",
+        help= "level of verbose to handle progress of process. Check logging levels for more information.",
         choices= ['DEBUG', 'INFO','WARNING', 'ERROR', 'CRITICAL'],
         required= False
     )
@@ -80,7 +106,7 @@ def _parse_arguments():
         '-c','--comments',
         type= str,
         default= "#",
-        help= "character used to indicate comments in the network file(s)",
+        help= "character used to indicate comments in the network file(s).",
         required= False
     )
         # Delimiter to parse networks
@@ -88,27 +114,27 @@ def _parse_arguments():
         '-d','--delimiter',
         type= str,
         default= '\t',
-        help= "character used to separate columns in the network file(s)",
+        help= "character used to separate columns in the network file(s).",
         required= False
     )
         # Path to dump outputs
     parser_a.add_argument(
         '-o','--output',
-        type= str,
+        type= valid_path,
         default= os.getcwd(),
-        help= "path to output directory, default is current directory",
+        help= "path to output directory.",
         required= False
     )
     requiredNamed = parser_a.add_argument_group("required named arguments")
     requiredNamed.add_argument(
         '-i','--input',
-        type= str,
+        type= valid_path,
         help= "path to folder containing network file(s).",
         required= True,
     )
 
     # create the parser for the "compare" command
-    parser_b = subparsers.add_parser('compare', help='comparison between multiple networks based on their topologies.')
+    parser_b = subparsers.add_parser('compare', help='comparison between multiple networks based on their topologies.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_b.add_argument(
         '--runmode',
         type= int,
@@ -119,8 +145,14 @@ def _parse_arguments():
     parser_b.add_argument(
         '-n','--normalization',
         default= None,
-        help= "normalization method for structural properties, default is no normalization.",
+        help= "normalization method for structural properties.",
         choices= ['network', 'biological'],
+        required= False
+    )
+    parser_b.add_argument(
+        '-dir', '--directed',
+        action= 'store_true',
+        help= 'whether the gold standard and inferences are directed or not.',
         required= False
     )
         # Selected props
@@ -128,22 +160,22 @@ def _parse_arguments():
         '-p', '--selected_props',
         type= list_of_strings,
         default= ['all'],
-        help= 'list of selected properties used for analysis, defaults to all properties implemented. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
+        help= 'list of selected properties used for analysis. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
         required= False
     )
         # Workers
     parser_b.add_argument(
         '-w','--workers',
-        type= str,
+        type= valid_workers,
         default= '2',
-        help= "number of workers to use for parallelization of properties characterization, default is 2 for minimal parallelization. IMPORTANT: it is also the max number of networks loaded simultaneously into memory at the same time at any given moment. IMPORTANT: auto for automatical detection of usable threads. Only applies if directory has more than one readable network.",
+        help= "number of workers to use for parallelization of properties characterization, default is minimal parallelization. IMPORTANT: it is also the max number of networks loaded simultaneously into memory at the same time at any given moment. IMPORTANT: auto for automatical detection of usable threads. Only applies if directory has more than one readable network.",
         required= False
     )
         # Return props dict
     parser_b.add_argument(
         '-k', '--keep_props',
         action= 'store_true',
-        help= "whether to save dataframes of the properties values for each network analyzed",
+        help= "whether to save dataframes of the properties values for each network analyzed.",
         required= False
     )
         # Verbose
@@ -151,7 +183,7 @@ def _parse_arguments():
         '-v','--verbose',
         type= str,
         default= 'WARNING',
-        help= "level of verbose to handle progress of process. Check logging levels for more information. Defaults to WARNING.",
+        help= "level of verbose to handle progress of process. Check logging levels for more information.",
         choices= ['DEBUG', 'INFO','WARNING', 'ERROR', 'CRITICAL'],
         required= False
     )
@@ -160,7 +192,7 @@ def _parse_arguments():
         '-er','--erdos_renyi',
         type= int,
         default= 0,
-        help= "number of Erdos-Renyi networks to generate for each inputed network, default is 0",
+        help= "number of Erdos-Renyi networks to generate for each inputed network.",
         required= False
     )
         # Comments character in networks files
@@ -168,7 +200,7 @@ def _parse_arguments():
         '-c','--comments',
         type= str,
         default= "#",
-        help= "character used to indicate comments in the network files",
+        help= "character used to indicate comments in the network files.",
         required= False
     )
         # Delimiter to parse networks
@@ -176,27 +208,27 @@ def _parse_arguments():
         '-d','--delimiter',
         type= str,
         default= '\t',
-        help= "character used to separate columns in the network files",
+        help= "character used to separate columns in the network files.",
         required= False
     )
         # Path to dump outputs
     parser_b.add_argument(
         '-o','--output',
-        type= str,
+        type= valid_path,
         default= os.getcwd(),
-        help= "path to output directory, default is current directory",
+        help= "path to output directory.",
         required= False
     )
     requiredNamed = parser_b.add_argument_group("required named arguments")
     requiredNamed.add_argument(
         '-i','--input',
-        type= str,
-        help= "path to folder containing network files.",
+        type= valid_path,
+        help= "path to directory containing network files.",
         required= True,
     )
 
     # create the parser for the "assess" command
-    parser_c = subparsers.add_parser('assess', help='statistical evaluation of inferences based on a Gold Standard.')
+    parser_c = subparsers.add_parser('assess', help='statistical evaluation of inferences based on a Gold Standard.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_c.add_argument(
         '--runmode',
         type= int,
@@ -206,13 +238,13 @@ def _parse_arguments():
     requiredNamed = parser_c.add_argument_group("required named arguments")
     requiredNamed.add_argument(
         '-gs','--gold_standard',
-        type= str,
+        type= valid_path,
         help= "path to gold standard network.",
         required= True,
     )
     requiredNamed.add_argument(
         '-inf','--inferences',
-        type= str,
+        type= valid_path,
         help= "path to directory containing inferenced networks.",
         required= True,
     )
@@ -232,7 +264,7 @@ def _parse_arguments():
         '-coff','--cutoff',
         default= False,
         type= restricted_float,
-        help= "t distance for clustering, threshold to apply when forming flat clusters. IMPORTANT: if a threshold is given, no max number of clusters can apply.",
+        help= "Cutoff to use to compute the evaluation metrics. If False, the evaluation metrics are computed for every score in the inference.",
         required= False
     )
     parser_c.add_argument(
@@ -244,7 +276,7 @@ def _parse_arguments():
     parser_c.add_argument(
         '-k', '--keep_auc_dicts',
         action= 'store_true',
-        help= 'whether to return the AUC values for every inference in the benchmark.',
+        help= 'whether to return both AUPR and AUROC values for every inference in the benchmark.',
         required= False
     )
     parser_c.add_argument(
@@ -257,7 +289,7 @@ def _parse_arguments():
         '-v','--verbose',
         type= str,
         default= 'WARNING',
-        help= "level of verbose to handle progress of process. Check logging levels for more information. Defaults to WARNING.",
+        help= "level of verbose to handle progress of process. Check logging levels for more information.",
         choices= ['DEBUG', 'INFO','WARNING', 'ERROR', 'CRITICAL'],
         required= False
     )
@@ -265,26 +297,26 @@ def _parse_arguments():
         '-c','--comments',
         type= str,
         default= "#",
-        help= "character used to indicate comments in the network files",
+        help= "character used to indicate comments in the network files.",
         required= False
     )
     parser_c.add_argument(
         '-d','--delimiter',
         type= str,
         default= '\t',
-        help= "character used to separate columns in the network files",
+        help= "character used to separate columns in the network files.",
         required= False
     )
     parser_c.add_argument(
         '-o','--output',
-        type= str,
+        type= valid_path,
         default= None,
-        help= "path to output directory, default for results printed to std.out",
+        help= "path to output directory, default for results printed to std.out.",
         required= False
     )
 
     # create the parser for the "classify" command
-    parser_d = subparsers.add_parser('classify', help='classification of networks into clusters and evaluation of said classification.')
+    parser_d = subparsers.add_parser('classify', help='classification of networks into clusters and evaluation of said classification.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_d.add_argument(
         '--runmode',
         type= int,
@@ -295,8 +327,14 @@ def _parse_arguments():
     parser_d.add_argument(
         '-n','--normalization',
         default= None,
-        help= "normalization method for structural properties, default is no normalization.",
+        help= "normalization method for structural properties.",
         choices= ['network', 'biological'],
+        required= False
+    )
+    parser_d.add_argument(
+        '-dir', '--directed',
+        action= 'store_true',
+        help= 'whether the gold standard and inferences are directed or not.',
         required= False
     )
         # Mutually exclusive arguments
@@ -306,7 +344,7 @@ def _parse_arguments():
         '-cl','--clusters',
         default= None,
         type= int,
-        help= "max number of clusters to classify networks into. IMPORTANT: if number of clusters is given, then no t distance can be given.",
+        help= "max number of clusters to classify networks into. IMPORTANT: if number of clusters is given, then no threshold for distance can apply.",
         required= False
     )
         # Threshold distance
@@ -322,7 +360,8 @@ def _parse_arguments():
         '-m','--method',
         default= 'ward',
         type= str,
-        help= "method for calculating the distance between the newly formed cluster v and each cluster u. Defaults to ward. See scipy.clusters.hierarchy.linkage for more info.",
+        metavar= 'https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html',
+        help= "method for calculating the distance between the newly formed cluster v and each cluster u. See scipy.clusters.hierarchy.linkage for more info.",
         choices= ['single', 
                   'complete', 
                   'average', 
@@ -336,8 +375,9 @@ def _parse_arguments():
     parser_d.add_argument(
         '-mtr','--metric',
         default= 'euclidean',
+        metavar= 'https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html#scipy.spatial.distance.pdist',
         type= str,
-        help= 'distance metric to use. Defaults to euclidean.',
+        help= 'distance metric to use. See scipy.spatial.distance.pdist for more info.',
         choices= ['braycurtis', 
                   'canberra', 
                   'chebyshev', 
@@ -384,9 +424,9 @@ def _parse_arguments():
         # Workers
     parser_d.add_argument(
         '-w','--workers',
-        type= str,
+        type= valid_workers,
         default= '2',
-        help= "number of workers to use for parallelization of properties characterization, default is 2 for minimal parallelization. IMPORTANT: it is also the max number of networks loaded simultaneously into memory at the same time at any given moment. IMPORTANT: auto for automatical detection of usable threads. Only applies if directory has more than one readable network.",
+        help= "number of workers to use for parallelization of properties characterization, default is minimal parallelization. IMPORTANT: it is also the max number of networks loaded simultaneously into memory at the same time at any given moment. IMPORTANT: auto for automatical detection of usable threads. Only applies if directory has more than one readable network.",
         required= False
     )
         # Return props dict
@@ -400,7 +440,7 @@ def _parse_arguments():
         '-v','--verbose',
         type= str,
         default= 'WARNING',
-        help= "level of verbose to handle progress of process. Check logging levels for more information. Defaults to WARNING",
+        help= "level of verbose to handle progress of process. Check logging levels for more information.",
         choices= ['DEBUG', 'INFO','WARNING', 'ERROR', 'CRITICAL'],
         required= False
     )
@@ -416,7 +456,7 @@ def _parse_arguments():
         '-c','--comments',
         type= str,
         default= "#",
-        help= "character used to indicate comments in the network files",
+        help= "character used to indicate comments in the network files.",
         required= False
     )
         # Delimiter to parse networks
@@ -424,33 +464,26 @@ def _parse_arguments():
         '-d','--delimiter',
         type= str,
         default= '\t',
-        help= "character used to separate columns in the network files",
+        help= "character used to separate columns in the network files.",
         required= False
     )
         # Path to dump outputs
     parser_d.add_argument(
         '-o','--output',
-        type= str,
+        type= valid_path,
         default= None,
-        help= "path to output directory, default for results printed to std.out",
+        help= "path to output directory, default for results printed to std.out.",
         required= False
     )
     requiredNamed = parser_d.add_argument_group("required named arguments")
     requiredNamed.add_argument(
         '-i','--input',
-        type= str,
+        type= valid_path,
         help= "path to folder containing network files.",
         required= True,
     )
     
     args = parser.parse_args()
     args.delimiter = args.delimiter.encode("utf-8").decode("unicode_escape")
-    # valid output path
-    if args.output is not None:
-        if not os.path.isdir(args.output):
-            raise NotADirectoryError(
-                f"Output path {args.output} is not a valid directory."
-            )
-        args.output = os.path.abspath(args.output)
 
     return args

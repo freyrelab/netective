@@ -31,6 +31,7 @@ def runmode1(args):
     # Args for network analysis
     nets_path = args.input
     norm = args.normalization
+    dir = args.directed
     
     verbose = args.verbose
     if verbose is not None:
@@ -44,15 +45,7 @@ def runmode1(args):
         selected_props = args.selected_props
     
     usable_threads = cpu_count() - 1
-    if args.workers == 'auto':
-        workers = usable_threads
-    else:
-        try:
-            workers = int(args.workers)
-            workers = usable_threads if workers > usable_threads else workers
-        except:
-            workers = usable_threads
-    cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
+    workers = args.workers
     
     return_prop_dicts = args.keep_props
     # Technical Args
@@ -60,9 +53,10 @@ def runmode1(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --workers {workers} --selected_props {selected_props} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
+    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --dir {dir} --workers {workers} --selected_props {selected_props} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
     
     if os.path.isdir(nets_path):
+        cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
         scalars_array, dist_array = compare_structure(
                     networks= nets_path, 
                     norm= norm, 
@@ -70,12 +64,20 @@ def runmode1(args):
                     selected_props= selected_props,
                     verbose= verbose,
                     return_prop_dicts= True,
-                    keep_averages= False
+                    keep_averages= False,
+                    directed= dir,
+                    delimiter= delimiter,
+                    comments= comments
         )
     else:
         net_id = os.path.basename(nets_path)
-        net = parse_network(nets_path, comments, delimiter)
-        cli_logger.warning('No parallelization required, only one network inputed')
+        net = parse_network(
+                file_path= nets_path,
+                comments= comments,
+                delimiter= delimiter,
+                directed= dir,
+                use_position_as_score= False
+        )
         scalars_array, dist_array = characterize_network(
             G= net,
             net_id= net_id,
@@ -128,7 +130,9 @@ def runmode2(args):
     # Args for network analysis
     nets_path = args.input
     norm = args.normalization
+    dir = args.directed
     verbose = args.verbose
+    
     if verbose is not None:
         set_log_level(cli_logger, verbose)
     
@@ -140,14 +144,8 @@ def runmode2(args):
         selected_props = args.selected_props
     
     usable_threads = cpu_count() - 1
-    if args.workers == 'auto':
-        workers = usable_threads
-    else:
-        try:
-            workers = int(args.workers)
-            workers = usable_threads if workers > usable_threads else workers
-        except:
-            workers = usable_threads
+    workers = args.workers
+
     cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
     
     return_prop_dicts = args.keep_props
@@ -158,7 +156,7 @@ def runmode2(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --selected_props {selected_props} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
+    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
 
     scalars_array, dist_array = compare_structure(
         networks= nets_path, 
@@ -168,6 +166,9 @@ def runmode2(args):
         verbose= verbose,
         return_prop_dicts= True,
         erdos_renyi= erdos_renyi,
+        directed= dir,
+        delimiter= delimiter,
+        comments= comments
     )
 
     if return_prop_dicts:
@@ -199,7 +200,7 @@ def runmode2(args):
             fig_scalars = create_symmetric_heatmap(df, title=f"Global properties", verbose= verbose)
             save_figs(fig_scalars, output_dir= output)
         else:
-            cli_logger.critical("Not enough data to compare.")
+            cli_logger.critical("Not enough data to compare. Probably input directory has only one network file.")
             raise ValueError("Not enough data to compare.")
 
 def runmode3(args):
@@ -286,12 +287,13 @@ def runmode3(args):
         fig_roc_curves.get_figure().savefig(fname= concat_path(output, f'roc_curves.png'), bbox_inches= 'tight', dpi= 300)
 
 def runmode4(args):
+    dir = args.directed
     method = args.method
     metric = args.metric
     clusters_num = args.clusters
     output = args.output
     threshold = args.threshold if clusters_num is None else None
-    cl = f"{args.comments}command: netective {RUNMODES[args.runmode]} --path {args.input} --norm {args.normalization} --selected_props {args.selected_props} --clusters {clusters_num} --threshold {threshold} --method {method} --metric {metric} --workers {args.workers} --verbose {args.verbose} --comments {args.comments} --delimiter {repr(args.delimiter)} --output {output}"
+    cl = f"{args.comments}command: netective {RUNMODES[args.runmode]} --path {args.input} --norm {args.normalization} --directed {dir} --selected_props {args.selected_props} --clusters {clusters_num} --threshold {threshold} --method {method} --metric {metric} --workers {args.workers} --verbose {args.verbose} --comments {args.comments} --delimiter {repr(args.delimiter)} --output {output}"
     # Structural comparison
     scalars = runmode2(args)
     cli_logger.info('Starting classification of networks into clusters...')

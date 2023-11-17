@@ -32,7 +32,7 @@ from netective.logging_info import get_logger, set_log_level
 
 import logging
 
-import matplotlib as plt
+import matplotlib
 
 concat_path = os.path.join
 
@@ -373,7 +373,7 @@ def save_prop_dicts(
     df_s.to_csv(file_p, sep=delimiter, mode= 'a')
 
 def save_figs(
-    fig: plt.figure.Figure,
+    fig: matplotlib.figure.Figure,
     props : str = None,
     net_id: str = None,
     output_dir: str = os.getcwd(),
@@ -394,13 +394,14 @@ def save_figs(
     Returns:
         None.
     """
-    if isinstance(fig, plt.figure.Figure):
+    if isinstance(fig, matplotlib.figure.Figure):
         if compare:
             file_p = concat_path(output_dir, f"nets_comparison.png")
         else:
             file_p = concat_path(output_dir, f"{net_id}_{props}_props.png")
         
         fig.savefig(fname= file_p, bbox_inches = "tight", dpi= 300)
+        matplotlib.pyplot.close('all')
 
 def common_props_dict(networks):
     new = defaultdict(lambda:defaultdict())
