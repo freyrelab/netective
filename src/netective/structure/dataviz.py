@@ -137,7 +137,7 @@ def plot_scalars(data_dict, verbose: str= None):
         axs.set_xlabel("Values")
         axs.set_ylabel("")
         axs.set_title("Network-level Properties", loc="center", fontsize=16)
-        if use_log_scale:
+        if use_log_scale and max(values) > 1:
             max_log = int(math.log10(ceil_to_next_power_of_10(max(values))))
             tick_locations = np.logspace(0, max_log, max_log-1)
         else:
