@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import os
 import sys
+import tracemalloc
+import psutil
 import warnings
 import numpy as np
 import pandas as pd
@@ -59,6 +61,7 @@ def run_parallel(f, my_iter, workers, verbose: str = None):
     if verbose != None:
         current_level = utils_logger.getEffectiveLevel()
         set_log_level(utils_logger, verbose)
+    
     my_iter = list(zip(*my_iter))
     len_iter = len(my_iter)
     with tqdm(total=len_iter, file=sys.stdout) as pbar:
@@ -88,6 +91,16 @@ def run_parallel(f, my_iter, workers, verbose: str = None):
 
     warnings.resetwarnings()
     return results
+
+def get_allocated_memory(snapshot, key_type='lineno', filtered: bool = True):
+    if filtered:
+        snapshot = snapshot.filter_traces((
+            tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+            tracemalloc.Filter(False, "<unknown>"),
+            tracemalloc.Filter(True, '*networkx*')
+        ))
+    top_stats = snapshot.statistics(key_type)
+    return ((sum(stat.size for stat in top_stats)) / 1024) * 0.001024
 
 def sort_files(path: str):
     files_paths = []
@@ -134,6 +147,7 @@ def parse_network(
     """
     if score and use_position_as_score:
         utils_logger.critical("score and use_position_as_score cannot be True at the same time.")
+        raise ValueError("score and use_position_as_score cannot be True at the same time.")
 
     if not use_position_as_score:
 

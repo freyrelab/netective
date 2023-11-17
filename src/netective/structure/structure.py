@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import tracemalloc
+import psutil
 import gc
 import uuid
 import inspect
@@ -8,6 +10,7 @@ import hashlib
 import traceback
 import numpy as np
 import pandas as pd
+import matplotlib
 from typing import Tuple
 from warnings import warn
 from networkx import Graph
@@ -33,7 +36,9 @@ from netective.utils import (
     association,
     common_props_dict,
     get_clusters,
-    sort_files,parse_network
+    sort_files,parse_network,
+    save_figs,
+    get_allocated_memory
 )
 
 import logging
@@ -58,7 +63,7 @@ PATHS = 1
 struct_logger = get_logger(__name__)
 
 # Auxiliar Fxns
-def set_log_level(verbose: str = 'CRITICAL'):
+def set_log_level(verbose: str = 'WARNING'):
     if isinstance(verbose, str):
         numeric_level = getattr(logging, verbose.upper(), None)
     else:
@@ -357,7 +362,7 @@ class Structure:
         self.norm_observer = NormObserver(
             norm
         )  # object to observe changes in the normalization strategy
-        self.verbose = verbose   
+        self.verbose = verbose
         self.net_id = net_id if net_id is not None else str(uuid.uuid4())[:8]
 
     @property
@@ -846,6 +851,48 @@ def __remove_network_data(G: Graph) -> Graph:
         G.edges[u, v].clear()
     return G
 
+def __get_optimal_workers(nets : str | dict, workers: int, directed: bool, comments: str, delimiter: str):
+    workers = cpu_count() - 1
+    mem = psutil.virtual_memory()
+    available_mem = mem.available / 1000000
+    eighty_percent_available_mem = (available_mem * 80) / 100
+    tracemalloc.start()
+    if isinstance(nets, dict):
+        max_edges = 0
+        for net_id, net in nets.items():
+            if net.number_of_edges() > max_edges:
+                max_edges = net.number_of_edges()
+                max_net = net_id
+        net_id = max_net
+        net = nets[net_id]
+    
+    elif os.path.isdir(nets):
+        sorted_files = sort_files(path= nets)
+        net_id = os.path.basename(sorted_files[0])
+        net = parse_network(
+            file_path= sorted_files[0],
+            comments= comments,
+            delimiter= delimiter,
+            directed= directed
+        )
+    foo, spam = characterize_network(
+        G= net,
+        net_id= net_id,
+        verbose='critical',
+        return_prop_dicts= True
+    )
+    for net_id, props in foo.items():
+        fig_scalar, _ = plot_scalars(data_dict= props, verbose= 'critical')
+    for net_id, props in spam.items():
+        fig_dist, _ = plot_distributions(props, verbose= 'critical')
+    snapshot = tracemalloc.take_snapshot()
+    matplotlib.pyplot.close('all')
+    mem_peak = get_allocated_memory(snapshot, filtered= False)
+    for i in range(workers, 0, -1):
+        if (mem_peak * i) < eighty_percent_available_mem:
+            return i
+    return 1
+
 def __batch_processing(
         networks: dict,
         norm: str,
@@ -864,8 +911,9 @@ def __batch_processing(
         [norm] * len(networks),
         [selected_props] * len(networks),
         [child_classes] * len(networks),
-        [verbose] * len(networks),  # verbose
+        [include_env] * len(networks),
         [True] * len(networks),  # keep_names
+        [verbose] * len(networks),  # verbose
     ]
 
     # run parallel
@@ -951,23 +999,28 @@ def compare_structure(
         struct_logger.critical("Normalization not valid")
         raise properties.NormalizationError("Normalization not valid")
 
-    # handle workers
-    usable_workers = cpu_count() - 1
-    if workers == "auto":
-        workers = usable_workers
-    elif workers > usable_workers:
-        struct_logger.warning(
-            f"{workers} workers requested, but only {usable_workers} are available. Using {usable_workers} workers instead."
-        )
-        workers = usable_workers
-
     # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
     # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
     child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
 
     # networks is a dict
     if isinstance(networks, dict):
+        
+        # handle workers
+        usable_workers = cpu_count() - 1
+        if workers == "auto" or workers > usable_workers:
+            struct_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
+            workers = __get_optimal_workers(
+                nets= networks,
+                workers= workers,
+                directed= directed,
+                comments= comments,
+                delimiter= delimiter
+            )
+        
+        struct_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_workers} usable threads detected')
         struct_logger.warning(f'Starting topological characterization of networks: {list(networks.keys())}...')
+
         name_scalars_array, name_dist_arrays = __batch_processing(
             networks= networks,
             norm= norm,
@@ -982,6 +1035,19 @@ def compare_structure(
     
     # networks is a directory path    
     else:
+
+        # handle workers
+        usable_workers = cpu_count() - 1
+        if workers == "auto" or workers > usable_workers:
+            struct_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
+            workers = __get_optimal_workers(
+                nets= networks,
+                workers= workers,
+                directed= directed,
+                comments= comments,
+                delimiter= delimiter
+            )
+        
         sorted_files = sort_files(networks)
         name_scalars_array = {}
         name_dist_arrays = {}

@@ -23,17 +23,16 @@ def _parse_arguments():
                 return os.path.abspath(x)
             else:
                 raise argparse.ArgumentTypeError(f'Output path {x} is not a valid directory')
+        else: 
+            return None
     
     def valid_workers(x):
         usable_threads = cpu_count() - 1
-        if x == 'auto':
-            x = usable_threads
-        else:
-            try:
-                x = int(x)
-                x = usable_threads if x > usable_threads or x < 0 else x
-            except:
-                x = usable_threads
+        try:
+            x = int(x)
+            x = usable_threads if x > usable_threads or x < 0 else x
+        except:
+            x = 'auto'
         return x
 
     parser = argparse.ArgumentParser(

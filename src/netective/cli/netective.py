@@ -5,6 +5,7 @@ from netective.cli._arrguments import _parse_arguments
 from netective.utils import save_prop_dicts, save_figs, common_props_dict, association, get_clusters, parse_network
 from netective.structure.dataviz import create_symmetric_heatmap, plot_distributions, plot_scalars
 from netective import compare_structure, characterize_network, benchmarking
+from netective.structure.structure import __get_optimal_workers
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -54,8 +55,17 @@ def runmode1(args):
     output = args.output
 
     cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --dir {dir} --workers {workers} --selected_props {selected_props} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
-    
+
     if os.path.isdir(nets_path):
+        if workers == 'auto':
+            cli_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
+            workers = __get_optimal_workers(
+                nets = nets_path,
+                workers = workers,
+                directed= dir,
+                comments= comments,
+                delimiter= delimiter
+            )
         cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
         scalars_array, dist_array = compare_structure(
                     networks= nets_path, 
@@ -143,10 +153,7 @@ def runmode2(args):
     else:
         selected_props = args.selected_props
     
-    usable_threads = cpu_count() - 1
     workers = args.workers
-
-    cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
     
     return_prop_dicts = args.keep_props
     erdos_renyi = args.erdos_renyi
@@ -158,6 +165,17 @@ def runmode2(args):
 
     cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
 
+    if workers == 'auto':
+        cli_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
+        workers = __get_optimal_workers(
+            nets = nets_path,
+            workers = workers,
+            directed= dir,
+            comments= comments,
+            delimiter= delimiter
+        )
+    usable_threads = cpu_count() - 1
+    cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
     scalars_array, dist_array = compare_structure(
         networks= nets_path, 
         norm= norm, 
@@ -278,7 +296,8 @@ def runmode3(args):
             score= score,
             verbose= verbose
         )
-        if not os.path.isdir(output):
+
+        if output is None:
             cli_logger.warning(f'No output directory stated, setting current directory as output directory.')
             output = os.getcwd()
         fig_aupr.get_figure().savefig(fname= concat_path(output, f'aupr.png'), bbox_inches= 'tight', dpi= 300)
