@@ -134,6 +134,8 @@ def parse_network(
     """
     if score and use_position_as_score:
         utils_logger.critical("score and use_position_as_score cannot be True at the same time.")
+        print('sdfa,msdkhfdh')
+        raise ValueError("score and use_position_as_score cannot be True at the same time.")
 
     if not use_position_as_score:
 
