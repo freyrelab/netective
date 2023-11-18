@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 import tracemalloc
 import psutil
 import gc
@@ -19,7 +20,6 @@ from networkx import DiGraph
 from scipy.stats import pearsonr
 from collections import defaultdict
 from multiprocessing import cpu_count
-from networkx import connected_components
 from networkx import fast_gnp_random_graph
 
 from netective.structure import properties
@@ -27,7 +27,6 @@ from netective.utils import (
     compute_moments,
     run_parallel,
     validate_network,
-    concat_path,
     ShortestDistances,
     ShortestPaths,
     count_3motifs,
@@ -37,7 +36,6 @@ from netective.utils import (
     common_props_dict,
     get_clusters,
     sort_files,parse_network,
-    save_figs,
     get_allocated_memory
 )
 
@@ -1017,22 +1015,52 @@ def compare_structure(
                 comments= comments,
                 delimiter= delimiter
             )
+        warnings.resetwarnings()
         
         struct_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_workers} usable threads detected')
-        struct_logger.warning(f'Starting topological characterization of networks: {list(networks.keys())}...')
+        # TODO hay un error que puede intentar tomar más cores de los que puede debido al tamaño del diccionario
+        # TODO se tiene que agregar que se cree un pequeño subset del diccionario que dependa del número de workers
+        # TODO Se tiene que hacer algo similar a lo que se hace con los directorios 
+        if len(networks) <= workers:
+            struct_logger.warning(f'Starting topological characterization of networks: {list(networks.keys())}...')
+            name_scalars_array, name_dist_arrays = __batch_processing(
+                networks= networks,
+                norm= norm,
+                selected_props= selected_props,
+                child_classes= child_classes,
+                verbose= verbose,
+                workers= workers,
+                keep_averages= keep_averages,
+                erdos_renyi= erdos_renyi,
+                include_env= include_env,
+            )
+        else:
+            name_scalars_array = {}
+            name_dist_arrays = {}
+            sub_dict = {}
+            complete_batches = len(networks) // workers
+            last_batch = len(networks) % workers
+            completed = 0
+            for net_id, net in networks.items():
+                sub_dict [net_id] = net
+                if len(networks) > workers and (len(sub_dict) == workers or (len(sub_dict) == last_batch and completed == complete_batches)):
+                        struct_logger.warning(f'Starting topological characterization of networks: {list(sub_dict.keys())}...')
+                        temp_name_scalars_array, temp_name_dist_arrays = __batch_processing(
+                        networks= sub_dict,
+                        norm= norm,
+                        selected_props= selected_props,
+                        child_classes= child_classes,
+                        verbose= verbose,
+                        workers= workers,
+                        keep_averages= keep_averages,
+                        erdos_renyi= erdos_renyi,
+                        include_env= include_env,
+                    )
+                        name_scalars_array.update(temp_name_scalars_array)
+                        name_dist_arrays.update(temp_name_dist_arrays)
+                        sub_dict = {}
+                        completed += 1
 
-        name_scalars_array, name_dist_arrays = __batch_processing(
-            networks= networks,
-            norm= norm,
-            selected_props= selected_props,
-            child_classes= child_classes,
-            verbose= verbose,
-            workers= workers,
-            keep_averages= keep_averages,
-            erdos_renyi= erdos_renyi,
-            include_env= include_env,
-        )
-    
     # networks is a directory path    
     else:
 
