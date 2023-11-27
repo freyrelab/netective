@@ -1,0 +1,28 @@
+Metadata-Version: 2.1
+Name: netective
+Version: 0.9.0
+Summary: Use structural and standard performance metrics to assess network inference
+Author-email: "Juan M. Escorcia-Rodríguez" <juanesscorcia@gmail.com>, José Antonio Sánchez-Villicaña <josesv@lcg.unam.mx>, "Julio A. Freyre-González" <jfreyreg@gmail.com>
+Project-URL: Homepage, https://github.com/JuanEscorcia/netective.git
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: GPL-3.0-only
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: igraph ==0.10.4
+Requires-Dist: networkx >=2.8.4
+Requires-Dist: numpy >=1.24.3
+Requires-Dist: pandas >=1.5.3
+Requires-Dist: scipy >=1.10.1
+Requires-Dist: seaborn >=0.12.2
+Requires-Dist: tqdm ==4.65.0
+Requires-Dist: mpmath >=1.2.1
+Provides-Extra: cov
+Requires-Dist: pytest <5.0.0 ; extra == 'cov'
+Requires-Dist: pytest-cov[all] ; extra == 'cov'
+Provides-Extra: lint
+Requires-Dist: black ; extra == 'lint'
+Provides-Extra: test
+Requires-Dist: pytest ; extra == 'test'
+
