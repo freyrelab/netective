@@ -865,18 +865,14 @@ class SubgraphCentrality(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> np.array:
-        T = nx.complete_graph(self._n_nodes)
-        max = SubgraphCentrality(T)
-        return self._raw_value / max.compute()
+    def norm_biol(self) -> None:
+        raise NotImplementedError
 
     @check_raw_value
-    def norm_network(self) -> np.array:
+    def norm_network(self) -> None:
         """Normalize the subgraph centrality of the graph to the max value, obtained from a complete graph of the same size"""
 
-        T = nx.complete_graph(self._n_nodes)
-        max = SubgraphCentrality(T)
-        return self._raw_value / max.compute()
+        raise NotImplementedError
 
 
 @return_distribution

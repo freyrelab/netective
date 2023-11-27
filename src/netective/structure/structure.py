@@ -853,7 +853,7 @@ def __get_optimal_workers(nets : str | dict, workers: int, directed: bool, comme
     workers = cpu_count() - 1
     mem = psutil.virtual_memory()
     available_mem = mem.available / 1000000
-    eighty_percent_available_mem = (available_mem * 80) / 100
+    eighty_percent_available_mem = (available_mem * 50) / 100
     tracemalloc.start()
     if isinstance(nets, dict):
         max_edges = 0
