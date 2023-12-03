@@ -544,7 +544,7 @@ class GenesintheGiantComponent(_Property):
         norm_network: Normalize the number of genes in the giant component to the number of nodes.
     """
 
-    CLASS_NAME = "Gene % in the Giant Component"
+    CLASS_NAME = "Giant Component Size"
 
     def __init__(self, G: nx.Graph):
         super().__init__(G)
