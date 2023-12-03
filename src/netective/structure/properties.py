@@ -535,7 +535,6 @@ class ComplexFeedForwardCircuits(_Property):
 
 
 @return_scalar
-@use_giant_component
 class GenesintheGiantComponent(_Property):
     """Number of genes in the giant component.
 

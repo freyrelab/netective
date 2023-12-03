@@ -128,7 +128,7 @@ def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph):
         raise TypeError("G must be a DiGraph or a Graph")
     if G.size() == 0:
         utils_logger.critical(f"G must have at least one edge. It has {G.size()} edges.")
-        raise TypeError("G must have at least one edge. It has {G.size()} edges.")
+        raise TypeError(f"G must have at least one edge. It has {G.size()} edges.")
     return G
 
 def parse_network(
