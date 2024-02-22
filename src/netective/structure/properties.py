@@ -91,10 +91,12 @@ def _max_loops(*, n: int, r: int, non_leafs: int, r_non_leafs: int) -> int:
     """
 
     if r_non_leafs > non_leafs or r_non_leafs > r:
-        raise ValueError("r_non_leafs cannot be greater than r or non_leafs")
+        raise NotImplementedError
+        # raise ValueError("r_non_leafs cannot be greater than r or non_leafs")
     
     if r > n or non_leafs > n:
-        raise ValueError("r nor non_leafs cannot be greater than n")
+        raise NotImplementedError
+        # raise ValueError("r nor non_leafs cannot be greater than n")
     
     # print(f'putative max loops: {math.factorial(n)} / {math.factorial(r)} / {math.factorial(n - r)}')
     putative = int(fac(n) / fac(r) / fac(n - r))
@@ -449,7 +451,10 @@ class FeedbackLoops_3(_Property):
     def norm_biol(self) -> float:
         """Normalize the number of feedback loops of length 3 to the number of non-leaf nodes."""
         non_leafs = len(get_non_leaf_nodes(self.G))
-        max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        if non_leafs >= self._non_leafs_required:
+            max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        else:
+            max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_feedbacks3
 
     @check_raw_value
@@ -486,7 +491,10 @@ class FeedForwardCircuits(_Property):
     def norm_biol(self) -> float:
         """Normalize the number of feed-forward circuits to the number of non-leaf nodes."""
         non_leafs = len(get_non_leaf_nodes(self.G))
-        max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        if non_leafs >= self._non_leafs_required:
+            max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        else:
+            max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_ff
     
     @check_raw_value
@@ -524,7 +532,10 @@ class ComplexFeedForwardCircuits(_Property):
     def norm_biol(self) -> float:
         """Normalize the number of complex feed-forward circuits to the number of non-leaf nodes."""
         non_leafs = len(get_non_leaf_nodes(self.G))
-        max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        if non_leafs >= self._non_leafs_required:
+            max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        else:
+            max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_complex_ff
 
     @check_raw_value
@@ -1088,8 +1099,11 @@ class EntropyPKout(_Property):
     @check_raw_value
     def norm_biol(self) -> float:
         """Normalize the entropy of the out-degree distribution to the max theoretical entropy."""
-        biol_h_max = math.log2(self._non_leafs)
-        return self._raw_value / biol_h_max
+        if self._non_leafs > 1:
+            biol_h_max = math.log2(self._non_leafs)
+            return self._raw_value / biol_h_max
+        else:
+            return self._raw_value / self.h_max
     
     @check_raw_value
     def norm_network(self) -> float:
