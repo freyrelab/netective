@@ -31,6 +31,7 @@ from scipy.cluster.hierarchy import linkage, fcluster
 from typing import Union, Callable, Iterable
 
 from netective.logging_info import get_logger, set_log_level
+from netective.structure.dataviz import create_symmetric_heatmap
 
 import logging
 
@@ -434,6 +435,76 @@ def common_props_dict(networks):
     }
 
     return new
+
+def process_netective_properties_files(results_dir: str, title: str, method= 'ward'):
+    scalars_array = {}
+    dist_array = {}
+    delimiters = {
+        '.tsv' : '\t',
+        '.csv' : ',',
+    }
+
+    # Retrieve properties values
+    for dir, _, files in os.walk(results_dir):
+        if len(files) % 2 != 0:
+            raise TypeError('No')
+        for f in files:
+            temp_dict = {}
+            
+            # We take advantage of the file extension Netective gives to output files
+            file_extension = f.split('_props')[1]
+            if f.find('scalars') != -1:
+                net_name = f.split('_props')[0].split('_scalars')[0].split('.')[0]
+                props_type = 'scalars'
+            else:
+                net_name = f.split('_props')[0].split('_distributions')[0].split('.')[0]
+                props_type = 'distributions'
+            
+            # Read Netective props file
+            temp_dict[net_name] = pd.read_csv(
+                os.path.join(dir, f),
+                sep= delimiters[file_extension],
+                comment= '#',
+                header = 0,
+                index_col= 0
+            ).to_dict(orient= 'list')
+            
+            # Update scalars and distributions arrays
+            if props_type == 'scalars':
+                scalars_array.update(temp_dict)
+            else:
+                dist_array.update(temp_dict)
+    
+    # Flatten scalars array
+    for net_id, prop in scalars_array.items():
+        for prop_id, value in prop.items():
+            scalars_array[net_id][prop_id] = float(value[0])
+    
+    # Compute moments for node-level properties
+    dist_moments_array = {}
+    for net_id, prop in dist_array.items():
+        temp_dict = {}
+        temp_dict[net_id] = {}
+        for prop_id, distribution in prop.items():
+            temp_dict[net_id][prop_id] = list(compute_moments(data= np.array(distribution)))
+        dist_moments_array.update(temp_dict)
+    
+    # Add distributions averages to scalars array
+    for net_id, prop in dist_moments_array.items():
+        for prop_id, moments in prop.items():
+            scalars_array[net_id][f'Average {prop_id}'] = moments[0]
+    
+    # Association DataFrame
+    association_df = association(scalars_array)
+
+    # Symmetric Heatmap
+    scalars_heatmap = create_symmetric_heatmap(
+        dataframe= association_df,
+        method= method,
+        title= title
+    )
+    
+    return scalars_heatmap
 
 class ShortestDistances:
     """Summary."""

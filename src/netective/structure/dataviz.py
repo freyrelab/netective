@@ -185,4 +185,4 @@ def create_symmetric_heatmap(dataframe, title: str, method="ward", verbose: str 
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
     # Return the figure and axes
-    return g.fig #, g.ax_heatmap
+    return g.figure #, g.ax_heatmap
