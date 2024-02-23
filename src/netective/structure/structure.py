@@ -417,6 +417,7 @@ class Structure:
         graphs = {}
 
         for mask, class_group in property_groups.items():
+            struct_logger.debug(f'Creating modified graph copy for {class_group} properties class group...')
             directed = mask & DIRECTED != 0
 
             # Modifications for undirected graphs in another fxn
@@ -453,6 +454,7 @@ class Structure:
     def __get_modify_undirected_graphs(self, property_groups, original_graph):
         graphs = {}
         for mask, class_group in property_groups.items():
+            struct_logger.debug(f'Creating modified graph copy for {class_group} properties class group...')
             directed = mask & DIRECTED != 0
 
             # Modifications for directed graph in another fxn
@@ -492,14 +494,18 @@ class Structure:
         modified_directed_graphs = {}
         modified_undirected_graphs = {}
 
+        struct_logger.debug('Creating graph copies...')
         if original_graph.is_directed():
+            struct_logger.debug('Directed graph detected. Creating modified copies...')
             modified_directed_graphs.update(
                 self.__get_modify_directed_graphs(property_groups, original_graph)
             )
+            struct_logger.debug('Removing direction. Creating modified copies...')
             modified_undirected_graphs.update(
                 self.__get_modify_undirected_graphs(property_groups, original_graph.to_undirected())
             )
         else:
+            struct_logger.debug('Undirected graph detected. Creating modified copies...')
             modified_undirected_graphs.update(
                 self.__get_modify_undirected_graphs(property_groups, original_graph)
             )
