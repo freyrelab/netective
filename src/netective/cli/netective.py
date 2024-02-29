@@ -236,7 +236,7 @@ def runmode3(args):
     delimiter = args.delimiter
     cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_dicts {keep_auc_dicts} --cutoff {cutoff} --score {score} --self_loops {self_loops} --verbose {verbose} --output {output} --delimiter {repr(delimiter)} --comments {comments}'
     if keep_auc_dicts: # Keeping dictionaries with aupr and auroc values
-        aupr_scores, auroc_scores = benchmarking(
+        aupr_scores, auroc_scores, pre, sen, fpr = benchmarking(
             networks= inferences,
             gold_standard= gs,
             directed= directed,
@@ -257,10 +257,20 @@ def runmode3(args):
             ext = exts.get(args.delimiter, "txt")
             aupr_output_file = concat_path(output, f"aupr_scores.{ext}")
             auroc_output_file = concat_path(output, f"auroc_scores.{ext}")
+            pre_output_file = concat_path(output, f"precision.{ext}")
+            sen_output_file = concat_path(output, f"recall.{ext}")
+            fpr_output_file = concat_path(output, f"false_positive_rate.{ext}")
             aupr_f = open(aupr_output_file, 'w')
             auroc_f = open(auroc_output_file, 'w')
+            pre_f = open(pre_output_file, 'w')
+            sen_f = open(sen_output_file, 'w')
+            fpr_f = open(fpr_output_file, 'w')
             aupr_f.write(f'{cl}\n{comments}AUPR Scores\n{comments}Network{delimiter}Score')
             auroc_f.write(f'{cl}\n{comments}AUROC Scores\n{comments}Network{delimiter}Score')
+            pre_f.write(pre)
+            sen_f.write(sen)
+            fpr_f.write(fpr)
+        
         else:
             print(f'\t\tAUPR Scores\nNetwork{args.delimiter}Score')
         
@@ -279,6 +289,10 @@ def runmode3(args):
         try:
             aupr_f.close()
             auroc_f.close()
+            pre_f.close()
+            sen_f.close()
+            fpr_f.close()
+
         except UnboundLocalError:
             pass
       

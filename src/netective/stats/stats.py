@@ -11,6 +11,7 @@ from typing import Tuple
 import numpy as np
 from warnings import warn
 from networkx import Graph, DiGraph
+from pandas import DataFrame
 
 from netective.utils import remove_self_loops, parse_network
 
@@ -440,6 +441,26 @@ class Benchmark:
     def coordinates(self, cutoff=None) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """Returns the coordinates for the precision, recall and FPR for every inference in the benchmark."""
         return {net_id: nis.coordinates(cutoff) for net_id, nis in self.nis_instances.items()}
+    
+    def sumarize(self) -> DataFrame:
+        """Sumarizes the evaluation metrics for every inference in the benchmark.
+
+        Returns:
+        -------
+        summary: pd.DataFrame
+            DataFrame containing the evaluation metrics for every inference in the benchmark.
+        """
+        summary = {
+            net_id: {
+                "AUPR": nis.area_under_precision_recall_curve(),
+                "AUROC": nis.area_under_roc_curve(),
+                "F1 score": nis.f1_score(),
+                "MCC": nis.mcc(),
+                "Optimal cutoff": nis.optimal_cutoff(),
+            }
+            for net_id, nis in self.nis_instances.items()
+        }
+        return DataFrame(summary).T
 
 
 class LinkEval:
@@ -956,12 +977,14 @@ class LinkEval:
         f1_score: float
             F1 score for the given cutoff.
         """
-        if precision+recall == 0:
-            return 0
+        
         cutoff = self.__validate_cutoff(cutoff)
         precision = self.precision(cutoff=cutoff)
         recall = self.recall(cutoff=cutoff)
-        return 2 * (precision * recall) / (precision + recall)
+        if precision+recall == 0:
+            return 0
+        else:
+            return 2 * (precision * recall) / (precision + recall)
     
     def mcc(self, cutoff:None|float=None) -> float:
         """Computes the Matthews correlation coefficient for a given cutoff.
@@ -984,7 +1007,10 @@ class LinkEval:
         false_negatives = self.size_gold_standard - true_positives
         true_negatives = self.size_negatives - false_positives
 
-        return (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives))
+        if not true_positives:
+            return 0
+        print(true_positives, true_negatives, false_positives, false_negatives)
+        return (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt(float((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives)))
     
     def __compute_f1_score_dist(self) -> np.ndarray:
         """Computes the F1 score for every score in the inference.
