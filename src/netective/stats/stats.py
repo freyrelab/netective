@@ -436,6 +436,10 @@ class Benchmark:
     def auroc(self) -> dict[str, float]:
         """Returns the AUROC values for every inference in the benchmark."""
         return {net_id: nis.area_under_roc_curve() for net_id, nis in self.nis_instances.items()}
+    
+    def coordinates(self, cutoff=None) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Returns the coordinates for the precision, recall and FPR for every inference in the benchmark."""
+        return {net_id: nis.coordinates(cutoff) for net_id, nis in self.nis_instances.items()}
 
 
 class LinkEval:
@@ -952,6 +956,8 @@ class LinkEval:
         f1_score: float
             F1 score for the given cutoff.
         """
+        if precision+recall == 0:
+            return 0
         cutoff = self.__validate_cutoff(cutoff)
         precision = self.precision(cutoff=cutoff)
         recall = self.recall(cutoff=cutoff)
@@ -1031,3 +1037,72 @@ class LinkEval:
             ax.set_xscale("log")
         stats_logger.debug(self.__f1_score_dist.values(), precision_dist[1:-1], sensitivity_dist[1:-1])
         return ax
+    
+
+    def coordinates(self, cutoff=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Returns the coordinates for the precision, recall and FPR for every score in the inference.
+
+        Args:
+        cutoff (float): Cutoff to use to compute the evaluation metrics.
+            If None, the score provided in the initialization is used.
+
+        Returns:
+        -------
+        precision: np.ndarray
+            Precision values for every score in the inference.
+        sensitivity: np.ndarray
+            Sensitivity values for every score in the inference.
+        fpr: np.ndarray
+            False positive rate values for every score in the inference.
+        """
+        return self.__compute_roc_pr_datapoints(cutoff=cutoff)
+    
+    @staticmethod
+    def curves_from_coordinates(precision: list | np.ndarray, recall: list | np.ndarray, fpr: list | np.ndarray, ax=None, title: str=None, **kwargs) -> tuple[float, float]:
+        # doesn't make much sense to make this a method of the class since it doesn't use any of the class attributes
+        # but you cannot recover the lost information from the coordinates such as the cutoffs, the inference edges, etc.
+        """
+        Plot ROC and Precision-Recall curves and calculate AUCs from coordinates, acknowledging that recall equals TPR.
+
+        Args:
+            precision (list or np.ndarray): Precision values.
+            recall (list or np.ndarray): Recall values, serving as TPR for the ROC curve and as recall for the Precision-Recall curve.
+            fpr (list or np.ndarray): False Positive Rate values for the ROC curve.
+            ax (matplotlib.axes.Axes): Axes object to plot the curve.
+                If None, a new figure and axes are created.
+            title (str): Title to add to the plot.
+            **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
+        
+        Returns:
+        -------
+        auc_pr: float
+            Area under the Precision-Recall curve.
+        auc_roc: float
+            Area under the ROC curve.
+            
+        """
+
+        # TODO: optimization. Use ax = self.__plot_curve
+        ax_roc = _build_ax(ax, xlim=(0, 1.02), ylim=(0, 1.02))
+        ax_roc.fill_between(fpr, recall, color=MAIN_PLOT_COLOR, alpha=1)
+        ax_roc.plot(fpr, recall, color='k', alpha=1, **kwargs)
+        
+        if title is not None:
+            ax_roc.set_title(title, loc="right", size=FONT_SIZE, color=FONT_COLOR)
+        ax_roc.set_xlabel("False positive rate", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax_roc.set_ylabel("True positive rate", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax_roc.tick_params(axis="both", colors=MINOR_FONT_COLOR)
+        
+        ax_pr = _build_ax(ax, xlim=(0, 1.02), ylim=(0, 1.02))
+        ax_pr.fill_between(recall, precision, color=MAIN_PLOT_COLOR, alpha=1)
+        ax_pr.plot(recall, precision, color='k', alpha=1, **kwargs)
+        
+        if title is not None:
+            ax_pr.set_title(title, loc="right", size=FONT_SIZE, color=FONT_COLOR)
+        ax_pr.set_xlabel("Recall", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax_pr.set_ylabel("Precision", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax_pr.tick_params(axis="both", colors=MINOR_FONT_COLOR)
+
+        auc_pr = np.trapz(x=recall, y=precision, dx=0.05)
+        auc_roc = np.trapz(x=fpr, y=recall, dx=0.05)
+        return auc_roc, auc_pr, ax_roc, ax_pr
