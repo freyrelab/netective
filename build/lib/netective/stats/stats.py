@@ -436,6 +436,10 @@ class Benchmark:
     def auroc(self) -> dict[str, float]:
         """Returns the AUROC values for every inference in the benchmark."""
         return {net_id: nis.area_under_roc_curve() for net_id, nis in self.nis_instances.items()}
+    
+    def coordinates(self, cutoff=None) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Returns the coordinates for the precision, recall and FPR for every inference in the benchmark."""
+        return {net_id: nis.coordinates(cutoff) for net_id, nis in self.nis_instances.items()}
 
 
 class LinkEval:
@@ -952,6 +956,8 @@ class LinkEval:
         f1_score: float
             F1 score for the given cutoff.
         """
+        if precision+recall == 0:
+            return 0
         cutoff = self.__validate_cutoff(cutoff)
         precision = self.precision(cutoff=cutoff)
         recall = self.recall(cutoff=cutoff)
@@ -1031,3 +1037,22 @@ class LinkEval:
             ax.set_xscale("log")
         stats_logger.debug(self.__f1_score_dist.values(), precision_dist[1:-1], sensitivity_dist[1:-1])
         return ax
+    
+
+    def coordinates(self, cutoff=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Returns the coordinates for the precision, recall and FPR for every score in the inference.
+
+        Args:
+        cutoff (float): Cutoff to use to compute the evaluation metrics.
+            If None, the score provided in the initialization is used.
+
+        Returns:
+        -------
+        precision: np.ndarray
+            Precision values for every score in the inference.
+        sensitivity: np.ndarray
+            Sensitivity values for every score in the inference.
+        fpr: np.ndarray
+            False positive rate values for every score in the inference.
+        """
+        return self.__compute_roc_pr_datapoints(cutoff=cutoff)
