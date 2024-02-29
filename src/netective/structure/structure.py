@@ -971,7 +971,8 @@ def compare_structure(
     comments : str = '#',
     delimiter : str = '\t',
     keep_averages: bool = True,
-    directed: bool = True
+    directed: bool = True,
+    **kwargs
 ) -> Tuple[dict, dict] | plt.Figure:
     """
     Module-level function to compare multiple networks.
@@ -990,11 +991,18 @@ def compare_structure(
                                   IMPORTANT: if networks is a path, workers is also the max. number of networks loaded into
                                              memory simultaneously at any given moment.
             Auto means number of cpu's - 1.
+    
+    **kwargs:
+        title (str, optional): Title of the plot. Defaults to None.
 
     Raises:
         NormalizationError: Raised if the normalization is not valid.
         ValueError: Raised if there is not enough data to compare.
     """
+
+    title = kwargs.get("title", None)
+
+
     if verbose != None:
         current_level = struct_logger.getEffectiveLevel()
         set_log_level(verbose)
@@ -1146,7 +1154,7 @@ def compare_structure(
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
         df = association(name_scalars_array, corr_func=association_metric)
-        fig_scalar = create_symmetric_heatmap(df, title=f"Global properties", verbose= verbose)
+        fig_scalar = create_symmetric_heatmap(df, title=title, verbose= verbose)
     
     else:
         struct_logger.critical("Not enough data to compare.")

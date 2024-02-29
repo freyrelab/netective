@@ -94,7 +94,7 @@ def plot_distributions(dist_values, verbose: str = None):
     return fig, axs
 
 
-def plot_scalars(data_dict, verbose: str= None):
+def plot_scalars(data_dict, verbose: str= None, title: str = None):
     num_ticks = 4
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
@@ -137,7 +137,9 @@ def plot_scalars(data_dict, verbose: str= None):
         axs.set_xlim(0, max(values) * 1.1)
         axs.set_xlabel("Values")
         axs.set_ylabel("")
-        axs.set_title("Network-level Properties", loc="center", fontsize=16)
+
+        if title is not None:
+            axs.set_title("Network-level Properties", loc="center", fontsize=16)
         if use_log_scale:
             max_log = int(math.log10(ceil_to_next_power_of_10(max(values))))
             tick_locations = np.logspace(0, max_log, max_log-1)
@@ -154,7 +156,7 @@ def plot_scalars(data_dict, verbose: str= None):
 
 
 # Plotting Fxns
-def create_symmetric_heatmap(dataframe, title: str, method="ward", verbose: str = None):
+def create_symmetric_heatmap(dataframe, title: str = None, method="ward", verbose: str = None):
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
@@ -180,7 +182,8 @@ def create_symmetric_heatmap(dataframe, title: str, method="ward", verbose: str 
         raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
 
     # Set the title
-    g.ax_heatmap.set_title(title)
+    if title is not None:
+        g.ax_heatmap.set_title(title, y=0, pad=-25, verticalalignment="top")
 
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
