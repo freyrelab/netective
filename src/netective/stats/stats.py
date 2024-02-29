@@ -234,6 +234,7 @@ def benchmarking(
 
     if return_auc_dicts:
         return_set = benchmark.aupr(), benchmark.auroc()
+        return_set += (benchmark.coordinates(),)
     
     else:
         fig_aupr = benchmark.plot_aupr()
