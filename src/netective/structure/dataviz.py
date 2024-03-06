@@ -169,7 +169,7 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", verbos
     try: 
         g = sns.clustermap(
             dataframe.astype(float),
-            cmap="Blues",
+            cmap="bone_r",
             # vmin=0,
             vmax=1,
             annot=True if dataframe.shape[0] < 10 else False,
