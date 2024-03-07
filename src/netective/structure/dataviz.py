@@ -4,8 +4,18 @@ import numpy as np
 import seaborn as sns
 from netective.logging_info import get_logger, set_log_level
 from matplotlib.ticker import FuncFormatter
+import matplotlib as mpl
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
 import logging
 import math
+
+CATEGORICAL = sns.color_palette("Paired") # for categorical data
+NUMERICAL = "rocket_r"  #  for numerical data
 
 def ceil_to_next_power_of_10(number):
     return 10 ** math.ceil(math.log10(number))
@@ -156,7 +166,24 @@ def plot_scalars(data_dict, verbose: str= None, title: str = None):
 
 
 # Plotting Fxns
-def create_symmetric_heatmap(dataframe, title: str = None, method="ward", verbose: str = None):
+def create_symmetric_heatmap(dataframe, title: str = None, method="ward", features=None, data_type=None, verbose: str = None):
+
+    """Create a symmetric heatmap of the input dataframe.
+    
+    Args:
+        dataframe (pd.DataFrame): The input dataframe.
+        title (str): The title of the heatmap.
+        method (str): The method to use for clustering.
+        features (pd.DataFrame): The input features dataframe. Index must be network names.
+        data_type (dict): The data type of each feature.
+        verbose (str): The verbosity level of the logger.
+
+    Returns:
+        fig (matplotlib.figure.Figure): The figure containing the heatmap.
+        ax (matplotlib.axes._subplots.AxesSubplot): The axes containing the heatmap.
+    
+    """
+
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
@@ -165,21 +192,83 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", verbos
     # Create a figure and axes
     # fig, axs = plt.subplots()
 
-    # Plot the heatmap
-    try: 
-        g = sns.clustermap(
-            dataframe.astype(float),
-            cmap="bone_r",
-            # vmin=0,
-            vmax=1,
-            annot=True if dataframe.shape[0] < 10 else False,
-            fmt=".2f",
-            cbar=True,
-            method=method,
-        )
-    except ValueError:
-        dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
-        raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
+    def add_features(features: pd.DataFrame, data_type: dict):
+        color_mappings = {}
+        norms = {}
+
+        for col in features.columns:
+            if data_type[col] == 'categorical':
+                # Continue handling categorical columns as before
+                unique_values = features[col].unique()
+                mapping = dict(zip(unique_values, CATEGORICAL[:len(unique_values)]))
+                color_mappings[col] = features[col].map(mapping)
+            else:
+                # Normalize and map each numerical column individually
+                norm = Normalize(vmin=features[col].min(), vmax=features[col].max())
+                norms[col] = norm  # Store the normalization
+                cmap = sns.color_palette(NUMERICAL, as_cmap=True)
+                mappable = ScalarMappable(norm=norm, cmap=cmap)
+                color_mappings[col] = features[col].apply(lambda x: mappable.to_rgba(x))
+
+        # Convert color mappings to DataFrame for row_colors
+        row_colors = pd.DataFrame(color_mappings)
+
+        # Generate clustermap
+        g = sns.clustermap(dataframe, row_colors=row_colors, col_cluster=True, cmap="bone_r", yticklabels=False, xticklabels=False, figsize=(5, 5))
+
+        # Add colorbars for numerical columns
+        colorbar_width = 0.02 # each colorbar width 
+        colorbar_spacing = 0.12  # Space between colorbars
+        start_x_position = 1.02
+        colorbar_counter = 0
+        for col, norm in norms.items():
+            cmap = sns.color_palette(NUMERICAL, as_cmap=True)
+            mappable = ScalarMappable(norm=norm, cmap=cmap)
+            current_x_position = start_x_position + colorbar_counter * (colorbar_width + colorbar_spacing)
+            cbar_ax = g.figure.add_axes([current_x_position, .2, colorbar_width, .5])
+            g.figure.colorbar(mappable, cax=cbar_ax, label=col)
+            colorbar_counter += 1
+            cbar_ax.set_ylabel(col, rotation=90, labelpad=2)
+
+        # Add legends for categorical columns
+        start_y_position = 1.0 
+        # Aprox height of each legend entry
+        legend_height = 0.1
+        for index, (col, mapping) in enumerate(color_mappings.items()):
+            if data_type[col] != 'categorical':
+                continue
+            unique_values = features[col].unique()
+            handles = [mpl.patches.Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val) for i, val in enumerate(unique_values)]
+            current_y_position = start_y_position - (index * legend_height)
+            g.figure.legend(handles=handles, title=col, loc='lower left', bbox_to_anchor=(1, current_y_position), ncol=int(len(unique_values)/2))
+
+        return g
+
+    if features is not None and data_type is None:
+        dataviz_logger.critical('Data type of each feature is required to plot the heatmap with features. Please provide the data type of each feature as a dictionary.')
+
+    elif features is not None and data_type is not None:
+        try:
+            g = add_features(features, data_type)
+        except ValueError:
+            dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
+            raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
+
+    else:
+        try: 
+            g = sns.clustermap(
+                dataframe.astype(float),
+                cmap="bone_r",
+                # vmin=0,
+                vmax=1,
+                annot=True if dataframe.shape[0] < 10 else False,
+                fmt=".2f",
+                cbar=True,
+                method=method,
+            )
+        except ValueError:
+            dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
+            raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
 
     # Set the title
     if title is not None:

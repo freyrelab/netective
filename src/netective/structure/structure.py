@@ -972,6 +972,8 @@ def compare_structure(
     delimiter : str = '\t',
     keep_averages: bool = True,
     directed: bool = True,
+    features: pd.DataFrame = None,
+    data_type: dict = None,
     **kwargs
 ) -> Tuple[dict, dict] | plt.Figure:
     """
@@ -991,6 +993,20 @@ def compare_structure(
                                   IMPORTANT: if networks is a path, workers is also the max. number of networks loaded into
                                              memory simultaneously at any given moment.
             Auto means number of cpu's - 1.
+        include_env (None | dict, optional): Dictionary with the environment variables to include. Defaults to None.
+        return_prop_dicts (bool, optional): Whether to return the properties as dictionaries. Defaults to False.
+            If False, the figures are shown.
+        association_metric (Callable, optional): Function to compute the association between the properties of the networks.
+            Defaults to pearsonr.
+        verbose (str, optional): Level of verbose desired for logging process. Defaults to None.
+            View logging levels from Logging library.
+        erdos_renyi (int, optional): Number of random graphs to generate with the same number of nodes and density as G. Defaults to 0.
+        comments (str, optional): Character used to indicate the start of a comment. Defaults to '#'.
+        delimiter (str, optional): String used to separate values. Defaults to '\t'.
+        keep_averages (bool, optional): Whether to keep the averages of the moments of the distributions. Defaults to True.
+        directed (bool, optional): Whether the networks are directed. Defaults to True.
+        features (pd.DataFrame, optional): DataFrame with the features of the networks. Defaults to None. Index must be network names.
+        data_type (dict, optional): Dictionary with the data type of each feature. Defaults to None.
     
     **kwargs:
         title (str, optional): Title of the plot. Defaults to None.
@@ -1154,7 +1170,12 @@ def compare_structure(
     # Scalar properties
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
         df = association(name_scalars_array, corr_func=association_metric)
-        fig_scalar = create_symmetric_heatmap(df, title=title, verbose= verbose)
+
+        if features is not None:
+            fig_scalar = create_symmetric_heatmap(df[df.columns].astype(float), title=title, features=features, data_type=data_type, verbose=verbose)
+            # TODO: Why does it need to be converted to float?
+        else:
+            fig_scalar = create_symmetric_heatmap(df[df.columns].astype(float), title=title, verbose= verbose)
     
     else:
         struct_logger.critical("Not enough data to compare.")
