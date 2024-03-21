@@ -1018,8 +1018,6 @@ def compare_structure(
 
     title = kwargs.get("title", None)
 
-    networks = {net_id: __remove_network_data(G) for net_id, G in networks.items()} # to avoid serialization error py3.8 with nx's data structures
-
 
     if verbose != None:
         current_level = struct_logger.getEffectiveLevel()
