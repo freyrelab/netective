@@ -160,6 +160,7 @@ def benchmarking(
     delimiter : str = '\t',
     score : bool = True,
     verbose: str = None,
+    baseline: bool = True,
 ) -> None:
     """Perform a statistical analysis of the inference networks.
     
@@ -185,16 +186,18 @@ def benchmarking(
             If score is False, the ranking of the edges is used as score (e.g., the first edge has a score of 0, the second a score of 1, etc.).
         verbose (str): Level of verbosity.
             If None, the verbosity level is set to WARNING. Options are: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+        baseline (bool): Whether to include a baseline inference in the benchmark.
 
         
     Returns:
-        If return_auc_dicts is True, a tuple containing the AUPR and AUROC dicts with values for every inference in the benchmark.
+        If return_auc_dicts is True, a tuple containing the AUPRs, AUROCs, and (precision, recall, and FPR) for every inference in the benchmark.
         If return_auc_dicts is False, a tuple containing the figure axis for the AUPR and AUROC plots.
     """
 
     if verbose is not None:
         current_level = stats_logger.getEffectiveLevel()
         set_log_level(stats_logger, verbose)
+
 
     if isinstance(networks, str):
 
@@ -223,12 +226,17 @@ def benchmarking(
     else:
         raise TypeError("networks must be a dictionary or a path to a directory.")
     
+    if baseline:
+        # include empty inference
+        networks = {**networks, "Baseline": DiGraph() if gold_standard.is_directed() else Graph()}
+    
     benchmark = Benchmark(
         gold_standard=gold_standard,
         inferences=networks,
         greater_score_is_better=greater_score_is_better,
         allow_self_loops=allow_self_loops,
         cutoff=cutoff,
+        baseline=baseline,
     )
 
 
@@ -257,11 +265,15 @@ class Benchmark:
         greater_score_is_better: bool = True,
         allow_self_loops: bool = False,
         cutoff: float | False = False,
+        baseline: bool = True,
     ):
         """
         """
         self.__repr_str = f"Benchmark({gold_standard}, {inferences}, greater_is_better={greater_score_is_better}, allow_self_loops={allow_self_loops}, cutoff={cutoff})"
         
+        if baseline:
+            # include empty inference
+            inferences = {**inferences, "Baseline": DiGraph() if gold_standard.is_directed() else Graph()}
 
         # remove self-loops if allow_self_loops is False
         if not allow_self_loops:
@@ -543,7 +555,11 @@ class LinkEval:
         # At the last step, every edge is considered as a positive by inference
         self.__precision_baseline = (self.size_gold_standard / self.size_universe)  # (GS/(GS + (Universe-GS)))
         if not cutoff:
-            self.__cutoff = min([score for score, _ in self.inference_edges]) if self.greater_is_better else max([score for score, _ in self.inference_edges])
+            try:
+                self.__cutoff = min([score for score, _ in self.inference_edges]) if self.greater_is_better else max([score for score, _ in self.inference_edges])
+            except ValueError:
+                stats_logger.warning("The inference is empty. Setting the cutoff to None.")
+                self.__cutoff = None
 
         # Define evaluation
         # Used as flags to know if the curves data points have been computed
