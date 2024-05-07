@@ -294,6 +294,7 @@ class Benchmark:
                 gold_standard_edges=gold_standard_edges,
                 inference_edges=inf,
                 size_universe=size_universe,
+                greater_score_is_better= greater_score_is_better
             )
             for net_id, inf in zip(inferences.keys(), inference_edges)
         }
@@ -560,6 +561,8 @@ class LinkEval:
             except ValueError:
                 stats_logger.warning("The inference is empty. Setting the cutoff to None.")
                 self.__cutoff = None
+        else:
+            self.__cutoff = cutoff
 
         # Define evaluation
         # Used as flags to know if the curves data points have been computed
@@ -696,18 +699,15 @@ class LinkEval:
         ):
             stats_logger.warning("The evaluation metrics have already been computed for this cutoff. Returning cached values.")
             return self.precision_dist, self.sensitivity_dist, self.fpr_dist
-
-        if cutoff == self.cutoff:
-            inference_edges = [edges for _, edges in self.inference_edges]
+        
+        if self.greater_is_better:
+            inference_edges = [
+                edges for score, edges in self.inference_edges if score >= cutoff
+            ]
         else:
-            if self.greater_is_better:
-                inference_edges = [
-                    edges for score, edges in self.inference_edges if score >= cutoff
-                ]
-            else:
-                inference_edges = [
-                    edges for score, edges in self.inference_edges if score <= cutoff
-                ]
+            inference_edges = [
+                edges for score, edges in self.inference_edges if score <= cutoff
+            ]
 
         num_points = len(inference_edges) + 2
         # Initialize arrays to store the evaluation metrics coordinates
