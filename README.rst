@@ -23,6 +23,12 @@ Use structural and standard performance metrics to assess network inference
 
         conda create -n netective python=3.8
 
+* Activate the newly created virtual environment for the project with conda:
+
+    .. code-block:: bash
+
+        conda activate netective
+
 * From the home directory of the project, as administrator, run the following command to install the package:
 
     .. code-block:: bash

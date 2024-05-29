@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import math
 import gc
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import defaultdict
 from itertools import combinations, combinations_with_replacement, permutations, product
 from typing import Tuple
+from bitarray import bitarray
 
 import numpy as np
 from warnings import warn
@@ -47,6 +49,7 @@ def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool
     - If the inference is undirected and self-loops are allowed, the universe is the combinations with replacement of the gold standard geneset.
     - If the inference is undirected and self-loops are not allowed, the universe is the combinations without replacement of the gold standard geneset.
     """
+    stats_logger.debug('Establishing universe from Gold Standard...')
     if directed and allow_self_loops:
         return set(product(gold_standard_geneset, repeat=2))
     elif directed and not allow_self_loops:
@@ -58,6 +61,7 @@ def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool
 
 
 def _anonymize_inference_edges(inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed):
+        stats_logger.debug('Anonymizing inference edges...')
         inference_edges = defaultdict(list)
         for u, v, data in inference.edges(data=True):
             # self-loops are already handled in __init__
@@ -111,6 +115,7 @@ def _anonymize_edges(
     size_universe: int
         Size of the universe of potential edges.
     """
+    stats_logger.debug('Anonymizing GS edges...')
     directed = gold_standard.is_directed()
     gold_standard_edges = set(gold_standard.edges(data=False))
     gold_standard_geneset = set(gold_standard.nodes(data=False))
@@ -155,7 +160,7 @@ def benchmarking(
     greater_score_is_better: bool = True,
     allow_self_loops: bool = False,
     cutoff: float | False = False,
-    return_auc_dicts: bool = False,
+    return_auc_coords_dicts: bool = False,
     comments : str = '#',
     delimiter : str = '\t',
     score : bool = True,
@@ -178,7 +183,7 @@ def benchmarking(
         allow_self_loops (bool): Whether self-loops are allowed or not.
         cutoff (float): Cutoff to use to compute the evaluation metrics.
             If False, the evaluation metrics are computed for every score in the inference.
-        return_auc_dicts (bool): Whether to return the AUC values for every inference in the benchmark.
+        return_auc_coords_dicts (bool): Whether to return the AUC values for every inference in the benchmark and their precision, sensitivity and fpr distributions respectively.
             If False, the figure axis are returned.
         comments (str): Character used to indicate comments in the network files.
         delimiter (str): Character used to separate the columns in the network files.
@@ -190,18 +195,21 @@ def benchmarking(
 
         
     Returns:
-        If return_auc_dicts is True, a tuple containing the AUPRs, AUROCs, and (precision, recall, and FPR) for every inference in the benchmark.
-        If return_auc_dicts is False, a tuple containing the figure axis for the AUPR and AUROC plots.
+        If return_auc_coords_dicts is True, a tuple containing the AUPRs, AUROCs, and (precision, recall, and FPR) for every inference in the benchmark.
+        If return_auc_coords_dicts is False, a tuple containing the figure axis for the AUPR and AUROC plots.
     """
 
     if verbose is not None:
         current_level = stats_logger.getEffectiveLevel()
         set_log_level(stats_logger, verbose)
 
+    stats_logger.info('Beginning benchmarking of inference(s)')
+
 
     if isinstance(networks, str):
 
         # valid networks dir and gold standard path
+        stats_logger.debug('Parsing networks from directory...')
         if not os.path.isdir(networks):
             raise ValueError("networks must be a dictionary or a path to a directory.")
         if not os.path.isfile(gold_standard):
@@ -216,6 +224,7 @@ def benchmarking(
         gold_standard = parse_network(gold_standard, comments=comments, delimiter=delimiter, directed=directed, score=False, use_position_as_score=False)
     
     elif isinstance(networks, dict):
+        stats_logger.debug('Validating inputed networks objects...')
         if gold_standard in networks:
             gold_standard = networks.pop(gold_standard)
         else:
@@ -240,11 +249,13 @@ def benchmarking(
     )
 
 
-    if return_auc_dicts:
+    if return_auc_coords_dicts:
+        stats_logger.info('Calculating AUPR, AUROC and coordinates...')
         return_set = benchmark.aupr(), benchmark.auroc()
         return_set += (benchmark.coordinates(),)
     
     else:
+        stats_logger.info('Plotting AUPR and AUROC curves...')
         fig_aupr = benchmark.plot_aupr()
         fig_pr_curves = benchmark.plot_precision_recall_curves()
         fig_auroc = benchmark.plot_auroc()
@@ -277,6 +288,7 @@ class Benchmark:
 
         # remove self-loops if allow_self_loops is False
         if not allow_self_loops:
+            stats_logger.debug('Removing self-loops from GS and inferences...')
             gold_standard = remove_self_loops(gold_standard)
             inferences = {net_id: remove_self_loops(inf) for net_id, inf in inferences.items()}
 
@@ -287,14 +299,15 @@ class Benchmark:
             allow_self_loops,
         )
 
-
+        stats_logger.debug('Creating LinkEval instances for every GS-inference pair...')
         self.__nis_instances = {
             net_id: LinkEval(
                 cutoff=cutoff,
                 gold_standard_edges=gold_standard_edges,
                 inference_edges=inf,
                 size_universe=size_universe,
-                greater_score_is_better= greater_score_is_better
+                greater_score_is_better= greater_score_is_better,
+                inference_id= net_id
             )
             for net_id, inf in zip(inferences.keys(), inference_edges)
         }
@@ -328,6 +341,7 @@ class Benchmark:
         ax: matplotlib.axes.Axes
             Axes object containing the plot.
         """
+        stats_logger.info('Plotting AUROC curves for every inference in the benchmark')
         ax = _build_ax(ax, figsize=(3,3))
         best_name, _ = self.best_auroc()
         for net_id, nis in self.nis_instances.items():
@@ -348,6 +362,7 @@ class Benchmark:
         ax: matplotlib.axes.Axes
             Axes object containing the plot.
         """
+        stats_logger.info('Plotting AUPR curves for every inference in the benchmark')
         ax = _build_ax(ax, figsize=(3,3))
         best_name, _ = self.best_aupr()
         for net_id, nis in self.nis_instances.items():
@@ -378,6 +393,7 @@ class Benchmark:
     
     def plot_aupr(self, ax=None, **kwargs):
         """Plots the AUPR values for every inference in the benchmark."""
+        stats_logger.info('Plotting AUPR values for every inference in the benchmark')
         ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
         ax.barh(list(self.nis_instances.keys()), [nis.area_under_precision_recall_curve() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
         ax.set_title("AUPR", loc="right", size=FONT_SIZE, color=FONT_COLOR)
@@ -388,6 +404,7 @@ class Benchmark:
     
     def plot_auroc(self, ax=None, **kwargs):
         """Plots the AUROC values for every inference in the benchmark."""
+        stats_logger.info('Plotting AUROC values for every inference in the benchmark')
         ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
         ax.barh(list(self.nis_instances.keys()), [nis.area_under_roc_curve() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
         ax.set_title("AUROC", loc="right", size=FONT_SIZE, color=FONT_COLOR)
@@ -398,6 +415,7 @@ class Benchmark:
     
     def plot_f1_score(self, ax=None, **kwargs):
         """Plots the F1 score values for every inference in the benchmark."""
+        stats_logger.info('Plotting F1 scores values for every inference in the benchmark')
         ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
         ax.barh(list(self.nis_instances.keys()), [nis.f1_score() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
         ax.set_title("F1 score", loc="right", size=FONT_SIZE, color=FONT_COLOR)
@@ -408,6 +426,7 @@ class Benchmark:
     
     def plot_mcc(self, ax=None, **kwargs):
         """Plots the MCC values for every inference in the benchmark."""
+        stats_logger.info('Plotting MCC values for every inference in the benchmark')
         ax = _build_ax(ax, xlim=[-1.01,1.01], ylim=None)
         ax.barh(list(self.nis_instances.keys()), [nis.mcc() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
         ax.set_title("MCC", loc="right", size=FONT_SIZE, color=FONT_COLOR)
@@ -464,6 +483,7 @@ class Benchmark:
         summary: pd.DataFrame
             DataFrame containing the evaluation metrics for every inference in the benchmark.
         """
+        stats_logger.info('Creating stats summary...')
         summary = {
             net_id: {
                 "AUPR": nis.area_under_precision_recall_curve(),
@@ -488,6 +508,7 @@ class LinkEval:
         gold_standard_edges: set = None,
         inference_edges: list = None,
         size_universe: int = None,
+        inference_id: str = None
     ):
         """
         Class for evaluating binary classification results.
@@ -522,6 +543,7 @@ class LinkEval:
         self.__inference = inference
         self.__greater_is_better = greater_score_is_better
         self.__allow_self_loops = allow_self_loops
+        self.__inference_id = inference_id
 
         if all([x is not None for x in [gold_standard_edges, inference_edges, size_universe]]):
             self.__gold_standard_edges = gold_standard_edges
@@ -557,6 +579,7 @@ class LinkEval:
         self.__precision_baseline = (self.size_gold_standard / self.size_universe)  # (GS/(GS + (Universe-GS)))
         if not cutoff:
             try:
+                stats_logger.warning('No cutoff provided, establishing one based on greater_is_better argument...')
                 self.__cutoff = min([score for score, _ in self.inference_edges]) if self.greater_is_better else max([score for score, _ in self.inference_edges])
             except ValueError:
                 stats_logger.warning("The inference is empty. Setting the cutoff to None.")
@@ -587,6 +610,7 @@ class LinkEval:
 
     @cutoff.setter
     def cutoff(self, cutoff: float | None):
+        stats_logger.warning('New cutoff established. Cache of previous datapoints cleared.')
         self.__cutoff = cutoff
         # Reset the cache
         self.__precision_dist = None
@@ -650,9 +674,14 @@ class LinkEval:
     def allow_self_loops(self) -> bool:
         return self.__allow_self_loops
     
+    @property
+    def inference_id(self) -> str:
+        return self.__inference_id
+    
     def __validate_networks(self):
         for name, network in [("Gold standard", self.gold_standard), ("Inference", self.inference)]:
             if not isinstance(network, (Graph, DiGraph)):
+                stats_logger.critical(f'Network {name} provided is not a compatible Networkx object.')
                 raise TypeError(f"{name} must be a networkx.Graph or networkx.DiGraph.")
 
         if self.gold_standard.is_directed() != self.inference.is_directed():
@@ -664,6 +693,50 @@ class LinkEval:
         if any("score" in data for _, _, data in self.gold_standard.edges(data=True)):
             warn("The gold standard edges have a score attribute. It might be a prediction.")
 
+    def __get_tp_fp(self, gs_edges: set, inference_edges: set):
+        stats_logger.debug(f'Calculating true positives and false positives for: {self.inference_id}')
+        # Getting complete set of predicted edges
+        all_predicted_edges = set()
+        for edges in inference_edges:
+            all_predicted_edges.update(edges)
+        
+        # Universe creation
+        stats_logger.debug('Creating universe for binary mapping...')
+        universe = gs_edges | all_predicted_edges
+        ids_indexes = {
+            ids : i
+            for i, ids in enumerate(universe)
+        }
+
+        # Binary Gold Standard Edges array
+        stats_logger.debug('Creating binary array of GS edges mapped to a binary universe of both GS and inference edges.')
+        gs_bin = bitarray(len(universe))
+        for interaction in gs_edges:
+            gs_bin[ids_indexes[interaction]] |= 1
+
+        # Predicted Positives Edges array & true positives and false positives calculations
+        tp_fp = []
+        stats_logger.debug(f'{self.inference_id} has a total of {len(inference_edges)} scores after trimming.')
+        predicted_positives_bin = bitarray(len(universe))
+        for i, bunch_edges in enumerate(inference_edges):
+            stats_logger.debug(f"Creating {i + 1}/{len(inference_edges)} binary array and calculating this score's true positives and false positives...")
+            
+            # Predicted edges binary array update
+            for interaction in bunch_edges:
+                predicted_positives_bin[ids_indexes[interaction]] |= 1
+            
+            # Intersection
+            intersection_bin = gs_bin & predicted_positives_bin
+
+            # Intersection cardinality
+            tp = intersection_bin.count(1)
+
+            # Substraction cardinality
+            fp = (predicted_positives_bin & ~intersection_bin).count(1)
+
+            tp_fp.append((tp, fp))
+
+        return tp_fp
 
     def __compute_roc_pr_datapoints(self, cutoff=None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Computes the false positive rate, sensitivity and precision for a given cutoff.
@@ -700,6 +773,8 @@ class LinkEval:
             stats_logger.warning("The evaluation metrics have already been computed for this cutoff. Returning cached values.")
             return self.precision_dist, self.sensitivity_dist, self.fpr_dist
         
+        stats_logger.debug(f'Computing pr and roc datapoints for: {self.inference_id}')
+        stats_logger.debug(f'Trimming predicted edges according to cutoff established ({cutoff}) and greater_is_better argument ({self.greater_is_better})')
         if self.greater_is_better:
             inference_edges = [
                 edges for score, edges in self.inference_edges if score >= cutoff
@@ -720,12 +795,17 @@ class LinkEval:
         precision_dist[0] = 0
         sensitivity_dist[0] = 0
 
-        predicted_positives = set()
-        for i, edges in enumerate(inference_edges, 1):
-            predicted_positives.update(edges)
-            true_positives = len(self.gold_standard_edges & predicted_positives)
-            false_positives = len(predicted_positives - self.gold_standard_edges)
-            # remplace the corresponding values in the arrays
+        # True positives and False positives from optimized intersection
+        tp_fp = self.__get_tp_fp(
+            gs_edges= self.gold_standard_edges,
+            inference_edges= inference_edges
+        )
+
+        # Statistics calculation
+        stats_logger.debug('Calculating precision, sensitivity and false positive rate for each score in the inference...')
+        for i, elements in enumerate(tp_fp, 1):
+            true_positives, false_positives = elements 
+            # Replace the corresponding values in the arrays
             fpr_dist[i] = false_positives / self.size_negatives
             sensitivity_dist[i] = true_positives / self.size_gold_standard
             precision_dist[i] = true_positives / (true_positives + false_positives)
@@ -740,6 +820,7 @@ class LinkEval:
 
         if cache:
             # enters only when the three arrays are None
+            stats_logger.debug('Setting cache for computed datapoints...')
             self.__precision_dist = precision_dist
             self.__sensitivity_dist = sensitivity_dist
             self.__fpr_dist = fpr_dist
@@ -881,6 +962,7 @@ class LinkEval:
         predicted_edges: set
             Set of edges predicted by the inference for the given cutoff.
         """
+        stats_logger.debug(f'Trimming predicted edges according to cutoff established ({cutoff}) and greater_is_better argument ({self.greater_is_better})')
         if cutoff is None:
             raise ValueError("A cutoff must be provided.")
         if self.greater_is_better:
@@ -901,6 +983,7 @@ class LinkEval:
         recall: float
             Recall for the given cutoff.
         """
+        stats_logger.info('Calculating recall for entire inference...')
         cutoff = self.__validate_cutoff(cutoff)
 
         if cutoff == self.cutoff and self.__sensitivity_dist is not None:
@@ -924,6 +1007,7 @@ class LinkEval:
             Precision for the given cutoff.
         """
         cutoff = self.__validate_cutoff(cutoff)
+        stats_logger(f'Calculating precision for cutoff: {cutoff}')
         
         if cutoff == self.cutoff and self.__precision_dist is not None:
             precision = self.__precision_dist[-2]
@@ -947,6 +1031,7 @@ class LinkEval:
             False positive rate for the given cutoff.
         """
         cutoff = self.__validate_cutoff(cutoff)
+        stats_logger.info(f'Calculating false positive rate for cutoff: {cutoff}')
 
         if cutoff == self.cutoff and self.__fpr_dist is not None:
             fpr = self.__fpr_dist[-2]
@@ -969,6 +1054,7 @@ class LinkEval:
             Accuracy for the given cutoff.
         """
         cutoff = self.__validate_cutoff(cutoff)
+        stats_logger.info(f'Calculating accuracy for cutoff: {cutoff}')
         if cutoff == self.cutoff:
             predicted_edges = set().union(*[edges for _, edges in self.inference_edges])
         else:
@@ -994,8 +1080,8 @@ class LinkEval:
         f1_score: float
             F1 score for the given cutoff.
         """
-        
         cutoff = self.__validate_cutoff(cutoff)
+        stats_logger.info(f'Calculating F1 score for cutoff: {cutoff}')
         precision = self.precision(cutoff=cutoff)
         recall = self.recall(cutoff=cutoff)
         if precision+recall == 0:
@@ -1018,6 +1104,7 @@ class LinkEval:
             Matthews correlation coefficient for the given cutoff.
         """
         cutoff = self.__validate_cutoff(cutoff)
+        stats_logger.info(f'Calculating Matthews Correlation Coefficient for cutoff: {cutoff}')
         predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
         true_positives = len(self.gold_standard_edges & predicted_edges)
         false_positives = len(predicted_edges - self.gold_standard_edges)
@@ -1036,6 +1123,7 @@ class LinkEval:
         f1_score_dist: dict[float, float]
             Dictionary containing the F1 score for every score in the inference.
         """
+        stats_logger.info('Calculating F1 score for every score in the inference...')
         f1_score_dist = {}
         for score, _ in self.inference_edges:
             f1_score_dist[score] = self.f1_score(cutoff=score)
@@ -1049,6 +1137,7 @@ class LinkEval:
         optimal_cutoff: float
             Optimal cutoff for the inference.
         """
+        stats_logger.info('Calculating optimal cutoff for the inference. Requires to maximize F1 score.')
         self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
         return max(self.__f1_score_dist, key=self.__f1_score_dist.get)
     

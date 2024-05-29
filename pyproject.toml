@@ -28,6 +28,8 @@ dependencies = [
   "seaborn>=0.12.2",
   "tqdm==4.65.0",
   "mpmath>=1.2.1",
+  "psutil>=5.9.0",
+  "bitarray>=2.9.2",
 ]
 
 [project.optional-dependencies]

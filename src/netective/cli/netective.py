@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from multiprocessing import cpu_count
 
 from netective.cli._arrguments import _parse_arguments
@@ -226,24 +227,26 @@ def runmode3(args):
     inferences = args.inferences
     directed = args.directed
     greater_is_better = args.greater_is_better
-    keep_auc_dicts = args.keep_auc_dicts
+    keep_auc_coords_dicts = args.keep_auc_coords_dicts
     cutoff = args.cutoff
     score = args.score
+    baseline = args.baseline
     self_loops = args.self_loops
     verbose = args.verbose
     output = args.output
     comments = args.comments
     delimiter = args.delimiter
-    cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_dicts {keep_auc_dicts} --cutoff {cutoff} --score {score} --self_loops {self_loops} --verbose {verbose} --output {output} --delimiter {repr(delimiter)} --comments {comments}'
-    if keep_auc_dicts: # Keeping dictionaries with aupr and auroc values
-        aupr_scores, auroc_scores, pre, sen, fpr = benchmarking(
+    cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_coords_dicts {keep_auc_coords_dicts} --cutoff {cutoff} --score {score} --self_loops {self_loops} --baseline {baseline} --verbose {verbose} --output {output} --delimiter {repr(delimiter)} --comments {comments}'
+    if keep_auc_coords_dicts: # Keeping dictionaries with aupr and auroc values
+        aupr_scores, auroc_scores, coords = benchmarking(
             networks= inferences,
             gold_standard= gs,
             directed= directed,
             greater_score_is_better= greater_is_better,
             allow_self_loops= self_loops,
             cutoff= cutoff,
-            return_auc_dicts= True,
+            baseline= baseline,
+            return_auc_coords_dicts= True,
             comments= comments,
             delimiter= delimiter,
             score= score,
@@ -257,20 +260,34 @@ def runmode3(args):
             ext = exts.get(args.delimiter, "txt")
             aupr_output_file = concat_path(output, f"aupr_scores.{ext}")
             auroc_output_file = concat_path(output, f"auroc_scores.{ext}")
-            pre_output_file = concat_path(output, f"precision.{ext}")
-            sen_output_file = concat_path(output, f"recall.{ext}")
-            fpr_output_file = concat_path(output, f"false_positive_rate.{ext}")
+            pre_output_file = concat_path(output, f'precision.{ext}')
+            sen_output_file = concat_path(output, f'sensitivity.{ext}')
+            fpr_output_file = concat_path(output, f'fpr.{ext}')
+
             aupr_f = open(aupr_output_file, 'w')
             auroc_f = open(auroc_output_file, 'w')
             pre_f = open(pre_output_file, 'w')
             sen_f = open(sen_output_file, 'w')
             fpr_f = open(fpr_output_file, 'w')
+
             aupr_f.write(f'{cl}\n{comments}AUPR Scores\n{comments}Network{delimiter}Score')
             auroc_f.write(f'{cl}\n{comments}AUROC Scores\n{comments}Network{delimiter}Score')
-            pre_f.write(pre)
-            sen_f.write(sen)
-            fpr_f.write(fpr)
-        
+            pre_f.write(f'{cl}\n{comments}Precision datapoints for every inference\n')
+            sen_f.write(f'{cl}\n{comments}Sensistivity datapoints for every inference\n')
+            fpr_f.write(f'{cl}\n{comments}False positive rate datapoints for every inference\n')
+            
+            for _, value in coords.items():
+                for i, dist in enumerate(value):
+                    if i == 0:
+                        pre_f.write(np.array2string(dist, separator= delimiter).replace('\n', '').replace('[','').replace(']',''))
+                        pre_f.write('\n')
+                    elif i == 1:
+                        sen_f.write(np.array2string(dist, separator= delimiter).replace('\n', '').replace('[','').replace(']',''))
+                        sen_f.write('\n')
+                    else:
+                        fpr_f.write(np.array2string(dist, separator= delimiter).replace('\n', '').replace('[','').replace(']',''))
+                        fpr_f.write('\n')
+
         else:
             print(f'\t\tAUPR Scores\nNetwork{args.delimiter}Score')
         
@@ -289,8 +306,8 @@ def runmode3(args):
         try:
             aupr_f.close()
             auroc_f.close()
-            pre_f.close()
             sen_f.close()
+            pre_f.close()
             fpr_f.close()
 
         except UnboundLocalError:
@@ -304,7 +321,8 @@ def runmode3(args):
             greater_score_is_better= greater_is_better,
             allow_self_loops= self_loops,
             cutoff= cutoff,
-            return_auc_dicts= False,
+            baseline= baseline,
+            return_auc_coords_dicts= False,
             comments= comments,
             delimiter= delimiter,
             score= score,

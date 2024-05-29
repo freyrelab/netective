@@ -273,9 +273,15 @@ def _parse_arguments():
         required= False
     )
     parser_c.add_argument(
-        '-k', '--keep_auc_dicts',
+        '-bl', '--baseline',
         action= 'store_true',
-        help= 'whether to return both AUPR and AUROC values for every inference in the benchmark.',
+        help= 'whether to include the precision baseline or not.',
+        required= False
+    )
+    parser_c.add_argument(
+        '-k', '--keep_auc_coords_dicts',
+        action= 'store_true',
+        help= 'whether to return AUPR, AUROC values and precision, sensitivity and fpr datapoints for every inference in the benchmark.',
         required= False
     )
     parser_c.add_argument(
