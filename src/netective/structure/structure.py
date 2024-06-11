@@ -516,7 +516,7 @@ class Structure:
 
         for mask, class_group in property_groups.items():
             if mask not in inputs:
-                for class_ in class_group: # Será sólo un warning
+                for class_ in class_group:
                     struct_logger.warning(f"{class_.CLASS_NAME} cannot be computed for the input graph.")
                 continue
 
@@ -615,10 +615,8 @@ class Structure:
         Returns:
             Tuple[dict, dict]: Tuple of dictionaries with the network id and the properties, values of the network.
         """
+
         # Compute the properties if they have not been computed yet or if the network has changed
-        # print(
-        #         f", is None?: {self.graph_observer.graph_hash is None}, graph changed: {self.graph_observer.changed(self._original_G, update_G=True)}, norm changed: {self.norm_observer.change()}"
-        #     )
         if self.verbose != None:
             current_level = struct_logger.getEffectiveLevel()
             set_log_level(self.verbose)
@@ -771,9 +769,7 @@ def er_nets_per_net_analysis(
     }
 
     return scalars_avg_er_net, dist_avg_er_net
-    
 
-# User Fxn's
 # Characterization of one network
 def characterize_network(
     G: DiGraph | Graph,
@@ -784,7 +780,8 @@ def characterize_network(
     include_env: None | dict = None,
     return_prop_dicts: bool = False,
     verbose: str = None,
-) -> None | Tuple[dict, dict]:
+    title: str = None
+) -> Tuple[plt.Figure, plt.Figure] | Tuple[dict, dict]:
     """
     Module-level function to characterize a single network.
 
@@ -802,8 +799,8 @@ def characterize_network(
             If False, the figures are shown.
 
     Returns:
-        dict: Dictionary with the properties of the network if return_prop_dicts is True.
-        tuple: Tuple of figures with the properties of the network if return_prop_dicts is False.
+        tuple: Tuple of figures with the properties of the network.
+        tuple: Tuple of dictionaries with the properties of the network if return_prop_dicts is True.
 
     Raises:
         Exception: Raised if the normalization is not valid.
@@ -828,10 +825,10 @@ def characterize_network(
         return scalar_values, dist_values
     
     if len(dist_values) != 0:
-        fig_dist, _ = plot_distributions(dist_values[net_id], verbose= verbose)
+        fig_dist, _ = plot_distributions(dist_values[net_id], verbose= verbose, title= title)
 
     if len(scalar_values) != 0:
-        fig_scalar, _ = plot_scalars(scalar_values[net_id], verbose= verbose)
+        fig_scalar, _ = plot_scalars(scalar_values[net_id], verbose= verbose, title= title)
     
     if verbose != None:
         set_log_level(current_level)
@@ -974,7 +971,7 @@ def compare_structure(
     directed: bool = True,
     features: pd.DataFrame = None,
     data_type: dict = None,
-    **kwargs
+    title: str = None
 ) -> Tuple[dict, dict] | plt.Figure:
     """
     Module-level function to compare multiple networks.
@@ -991,8 +988,8 @@ def compare_structure(
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
         workers (int, optional): Number of workers to use. Defaults to 'auto'.
                                   IMPORTANT: if networks is a path, workers is also the max. number of networks loaded into
-                                             memory simultaneously at any given moment.
-            Auto means number of cpu's - 1.
+                                             memory simultaneously at any given moment
+                                             Auto means number of cpu's - 1.
         include_env (None | dict, optional): Dictionary with the environment variables to include. Defaults to None.
         return_prop_dicts (bool, optional): Whether to return the properties as dictionaries. Defaults to False.
             If False, the figures are shown.
@@ -1007,18 +1004,12 @@ def compare_structure(
         directed (bool, optional): Whether the networks are directed. Defaults to True.
         features (pd.DataFrame, optional): DataFrame with the features of the networks. Defaults to None. Index must be network names.
         data_type (dict, optional): Dictionary with the data type of each feature. Defaults to None.
-    
-    **kwargs:
         title (str, optional): Title of the plot. Defaults to None.
 
     Raises:
         NormalizationError: Raised if the normalization is not valid.
         ValueError: Raised if there is not enough data to compare.
     """
-
-    title = kwargs.get("title", None)
-
-
     if verbose != None:
         current_level = struct_logger.getEffectiveLevel()
         set_log_level(verbose)
@@ -1048,9 +1039,6 @@ def compare_structure(
         warnings.resetwarnings()
         
         struct_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_workers} usable threads detected')
-        # TODO hay un error que puede intentar tomar más cores de los que puede debido al tamaño del diccionario
-        # TODO se tiene que agregar que se cree un pequeño subset del diccionario que dependa del número de workers
-        # TODO Se tiene que hacer algo similar a lo que se hace con los directorios 
         if len(networks) <= workers:
             struct_logger.warning(f'Starting topological characterization of networks: {list(networks.keys())}...')
             name_scalars_array, name_dist_arrays = __batch_processing(
@@ -1093,7 +1081,6 @@ def compare_structure(
 
     # networks is a directory path    
     else:
-
         # handle workers
         usable_workers = cpu_count() - 1
         if workers == "auto" or workers > usable_workers:
@@ -1159,7 +1146,6 @@ def compare_structure(
     if return_prop_dicts:
         if verbose != None:
             set_log_level(current_level)
-        # No se regresen momentos, sino distribuciones !!!!!!
         return name_scalars_array, name_dist_arrays
     
     # TODO: Optimization:  only compute the common properties
@@ -1187,7 +1173,7 @@ def compare_structure(
     return fig_scalar
 
 def classify_networks(
-        networks: dict(str, Graph),
+        networks: dict[str, Graph] | str,
         norm: str | None = None,
         selected_props: str | list = ['Average Local Efficiency',
             'Radius',
@@ -1200,7 +1186,8 @@ def classify_networks(
             'Global Efficiency',
             'Undirected Gini Index',
             'Entropy of Degree Distribution',
-            'Self-Loops'],
+            'Self-Loops'
+        ],
         workers: str | int = "auto",
         get_clusters_kargs: dict = None,
 ) -> dict:
@@ -1209,7 +1196,7 @@ def classify_networks(
     Returns groups of networks with similar properties.
 
     Args:
-        networks (dict): Dictionary of networks to compare.
+        networks (dict | str): Dictionary of networks to compare.
             {'net_id': DiGraph | Graph}
         norm (str, optional): Normalization to apply. Defaults to None.
             Valid values are 'network', 'biological' or None.

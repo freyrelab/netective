@@ -11,18 +11,20 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
+import matplotlib.gridspec
+import matplotlib.patches as mpatches
 import logging
 import math
 
-CATEGORICAL = sns.color_palette("Paired") # for categorical data
-NUMERICAL = "rocket_r"  #  for numerical data
-
-def ceil_to_next_power_of_10(number):
-    return 10 ** math.ceil(math.log10(number))
+CATEGORICAL = sns.color_palette("Paired")
+NUMERICAL = "rocket_r"
 
 dataviz_logger = get_logger(__name__)
 
-def format_title(input_str):
+def ceil_to_next_power_of_10(number: int):
+    return 10 ** math.ceil(math.log10(number))
+
+def format_title(input_str: str):
     # Check if the length of the string is greater than 22
     if len(input_str) > 22:
 
@@ -50,9 +52,7 @@ def format_title(input_str):
     else:
         return input_str
 
-
-
-def plot_distributions(dist_values, verbose: str = None):
+def plot_distributions(dist_values: dict, verbose: str = None, title: str = None):
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
@@ -76,7 +76,7 @@ def plot_distributions(dist_values, verbose: str = None):
         axs = axs.flatten()
 
     # Iterate over the dictionary items and create the subplots
-    for i, (title, data) in enumerate(dist_values.items()):
+    for i, (dist_title, data) in enumerate(dist_values.items()):
         ax = axs[i] if num_items > 1 else axs  # Use a single axis if there's only one item
 
 
@@ -85,7 +85,7 @@ def plot_distributions(dist_values, verbose: str = None):
         ax.scatter(unique, prob, color="#384265", s=30, alpha=0.3)
 
         # sns.kdeplot(data, ax=ax, fill=True, color="#384265")
-        ax.set_title(format_title(title))
+        ax.set_title(format_title(dist_title))
         
         ax.set_ylabel("Probability")
 
@@ -96,7 +96,9 @@ def plot_distributions(dist_values, verbose: str = None):
                 fig.delaxes(axs[j])
             # Adjust spacing between subplots
     fig.tight_layout()
-    fig.suptitle('Node-level Properties', y=1.02, fontsize=16)
+
+    if title is not None:
+        fig.suptitle('Node-level properties', y=1.02, fontsize=14)
     
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
@@ -104,7 +106,25 @@ def plot_distributions(dist_values, verbose: str = None):
     return fig, axs
 
 
-def plot_scalars(data_dict, verbose: str= None, title: str = None):
+def plot_scalars(data_dict: dict, verbose: str= None, title: str = None):
+    """_summary_
+
+    _extended summary_[#_unique ID_]_
+
+    .. math:: _LaTeX formula_
+
+    Arguments:
+        data_dict (dict): _description_
+        verbose (str): _description_. Defaults to None.
+        title (str): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
+
+    References:
+        .. [#_unique ID_] _pubmed abbr journal title_ _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
+        .. [#_unique ID_] _first-author first-name last-name_ _book title_ (_year_) ISBN:_ISBN_ _http link_
+        .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
     num_ticks = 4
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
@@ -119,9 +139,6 @@ def plot_scalars(data_dict, verbose: str= None, title: str = None):
     # use log scale if more than 30% of the values are below the threshold
     use_log_scale = num_below_threshold > (len(values) / 3) and max(values) > 1
     
-
-
-
     dataviz_logger.info('Plotting global properties...')
     with sns.axes_style("darkgrid"):
         # Create the figure and axes
@@ -149,7 +166,7 @@ def plot_scalars(data_dict, verbose: str= None, title: str = None):
         axs.set_ylabel("")
 
         if title is not None:
-            axs.set_title("Network-level Properties", loc="center", fontsize=16)
+            axs.set_title('Network-level properties', loc="center", fontsize=16)
         if use_log_scale:
             max_log = int(math.log10(ceil_to_next_power_of_10(max(values))))
             tick_locations = np.logspace(0, max_log, max_log-1)
@@ -158,7 +175,7 @@ def plot_scalars(data_dict, verbose: str= None, title: str = None):
         axs.set_xticks(tick_locations)
         # axs.xaxis.set_major_formatter(FuncFormatter(lambda value,_: f'{int(value)}'))
 
-    # plt.tight_layout()
+    plt.tight_layout()
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
     
@@ -167,7 +184,6 @@ def plot_scalars(data_dict, verbose: str= None, title: str = None):
 
 # Plotting Fxns
 def create_symmetric_heatmap(dataframe, title: str = None, method="ward", features=None, data_type=None, verbose: str = None):
-
     """Create a symmetric heatmap of the input dataframe.
     
     Args:
@@ -179,9 +195,7 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
         verbose (str): The verbosity level of the logger.
 
     Returns:
-        fig (matplotlib.figure.Figure): The figure containing the heatmap.
-        ax (matplotlib.axes._subplots.AxesSubplot): The axes containing the heatmap.
-    
+        fig (matplotlib.figure.Figure): The figure containing the heatmap.    
     """
 
     if verbose != None:
@@ -189,9 +203,7 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
         set_log_level(dataviz_logger, verbose)
     
     dataviz_logger.info('Creating symmetric heatmap...')
-    # Create a figure and axes
-    # fig, axs = plt.subplots()
-
+    
     def add_features(features: pd.DataFrame, data_type: dict):
         color_mappings = {}
         norms = {}
@@ -212,36 +224,44 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
 
         # Convert color mappings to DataFrame for row_colors
         row_colors = pd.DataFrame(color_mappings)
-
         # Generate clustermap
-        g = sns.clustermap(dataframe, row_colors=row_colors, col_cluster=True, cmap="bone_r", yticklabels=False, xticklabels=False, figsize=(5, 5))
-
+        g = sns.clustermap(dataframe, row_colors=row_colors, col_cluster=True, cmap="bone_r", yticklabels=False, xticklabels=False, figsize=(8, 8))
+        
         # Add colorbars for numerical columns
+        heatmap_bbox = g.ax_heatmap.get_position()
+        dendrogram_bbox = g.ax_row_dendrogram.get_position()
+        row_colors_bbox = g.ax_row_colors.get_position()
         colorbar_width = 0.02 # each colorbar width 
         colorbar_spacing = 0.12  # Space between colorbars
-        start_x_position = 1.02
+        start_x_position = dendrogram_bbox.width + row_colors_bbox.width + heatmap_bbox.width + 0.025
         colorbar_counter = 0
         for col, norm in norms.items():
             cmap = sns.color_palette(NUMERICAL, as_cmap=True)
             mappable = ScalarMappable(norm=norm, cmap=cmap)
             current_x_position = start_x_position + colorbar_counter * (colorbar_width + colorbar_spacing)
-            cbar_ax = g.figure.add_axes([current_x_position, .2, colorbar_width, .5])
-            g.figure.colorbar(mappable, cax=cbar_ax, label=col)
+            cbar_ax = g.figure.add_axes([current_x_position, heatmap_bbox.y0, colorbar_width, heatmap_bbox.height])
+            cbar = g.figure.colorbar(mappable, cax=cbar_ax, label=col)
+            cbar.outline.set_visible(False)
             colorbar_counter += 1
             cbar_ax.set_ylabel(col, rotation=90, labelpad=2)
 
         # Add legends for categorical columns
-        start_y_position = 1.0 
-        # Aprox height of each legend entry
-        legend_height = 0.1
-        for index, (col, mapping) in enumerate(color_mappings.items()):
+        current_y_position = heatmap_bbox.height
+        start_x_position = 0.1 * (colorbar_counter + 1) + 1
+        legend_counter = 0
+        legend_height = 0
+        for col, mapping in color_mappings.items():
             if data_type[col] != 'categorical':
                 continue
             unique_values = features[col].unique()
             handles = [mpl.patches.Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val) for i, val in enumerate(unique_values)]
-            current_y_position = start_y_position - (index * legend_height)
-            g.figure.legend(handles=handles, title=col, loc='lower left', bbox_to_anchor=(1, current_y_position), ncol=int(len(unique_values)/2))
-
+            current_y_position -= legend_height
+            current_x_position = start_x_position + (0.2 * legend_counter)
+            # Aprox height of current legend entry
+            legend_height = (len(unique_values) + 1) * 0.029
+            g.figure.legend(handles=handles, title=col, ncol=1, loc= 'upper center', bbox_to_anchor= (start_x_position, current_y_position, 0.2, 0.05), mode= 'expand', frameon= False, alignment= 'left')
+            legend_counter += 1
+        
         return g
 
     if features is not None and data_type is None:
@@ -259,7 +279,6 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
             g = sns.clustermap(
                 dataframe.astype(float),
                 cmap="bone_r",
-                # vmin=0,
                 vmax=1,
                 annot=True if dataframe.shape[0] < 10 else False,
                 fmt=".2f",
@@ -276,5 +295,5 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
 
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
-    # Return the figure and axes
-    return g.figure #, g.ax_heatmap
+    # Return the figure
+    return g.figure
