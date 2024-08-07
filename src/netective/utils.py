@@ -446,9 +446,12 @@ def process_netective_properties_files(results_dir: str, title: str, method= 'wa
 
     # Retrieve properties values
     for dir, _, files in os.walk(results_dir):
-        if len(files) % 2 != 0:
-            raise TypeError('No')
+        # if len(files) % 2 != 0:
+        #     raise TypeError('No')
         for f in files:
+            if f.find('_distributions_props') == -1 and f.find('_scalars_props') == -1:
+                utils_logger.warning(f'A file not created by Netective detected, cannot be processed. Skipping: {f}')
+                continue
             temp_dict = {}
             
             # We take advantage of the file extension Netective gives to output files
