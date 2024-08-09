@@ -765,11 +765,11 @@ def er_nets_per_net_analysis(
     scalars_avg_er_net = {
         f'{net_id}_Avg_ER' : scalars_props_avg
     }
-    dist_avg_er_net = {
+    moments_avg_er_net = {
         f'{net_id}_Avg_ER' : dist_props_avg
     }
 
-    return scalars_avg_er_net, dist_avg_er_net
+    return scalars_avg_er_net, moments_avg_er_net
 
 # Characterization of one network
 def characterize_network(
