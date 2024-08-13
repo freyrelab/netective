@@ -5,7 +5,6 @@ import numpy as np
 import networkx as nx
 from abc import ABC, abstractmethod
 from mpmath import fac
-import igraph as ig
 
 from netective.utils import Efficiency, giant_component_size
 

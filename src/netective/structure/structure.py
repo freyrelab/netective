@@ -5,15 +5,14 @@ import warnings
 import tracemalloc
 import psutil
 import gc
-import uuid
 import inspect
 import hashlib
 import traceback
 import numpy as np
 import pandas as pd
-import matplotlib
+import logging
+import matplotlib.pyplot as plt
 from typing import Tuple
-from warnings import warn
 from networkx import Graph
 from itertools import chain
 from networkx import DiGraph
@@ -21,6 +20,7 @@ from scipy.stats import pearsonr
 from collections import defaultdict
 from multiprocessing import cpu_count
 from networkx import fast_gnp_random_graph
+from typing import Callable
 
 from netective.structure import properties
 from netective.utils import (
@@ -38,16 +38,8 @@ from netective.utils import (
     sort_files,parse_network,
     get_allocated_memory
 )
-
-import logging
-
 from netective.logging_info import get_logger
-
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
-
-import matplotlib.pyplot as plt
-
-from typing import Callable
 
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
@@ -910,7 +902,7 @@ def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, deli
     for net_id, props in spam.items():
         fig_dist, _ = plot_distributions(props, verbose= 'critical')
     snapshot = tracemalloc.take_snapshot()
-    matplotlib.pyplot.close('all')
+    plt.close('all')
     mem_peak = get_allocated_memory(snapshot, filtered= False)
     for i in range(workers, 0, -1):
         if (mem_peak * i) < eighty_percent_available_mem:
