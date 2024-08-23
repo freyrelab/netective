@@ -14,7 +14,6 @@ from __future__ import annotations
 import os
 import sys
 import tracemalloc
-import psutil
 import warnings
 import numpy as np
 import pandas as pd
@@ -23,17 +22,15 @@ import igraph as ig
 from tqdm import tqdm
 import concurrent.futures
 from itertools import chain
-from scipy.stats import pearsonr
+from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
-from scipy.stats import kurtosis, skew
+from scipy.stats import pearsonr, kurtosis, skew, rv_discrete
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
 from typing import Union, Callable, Iterable
 
 from netective.logging_info import get_logger, set_log_level
 from netective.structure.dataviz import create_symmetric_heatmap
-
-import logging
 
 import matplotlib
 
@@ -231,13 +228,17 @@ def association(
 
             # Calculate Pearson correlation coefficient and p-value
             try:
-                result = corr_func(filtered_array1, filtered_array2)
+                if corr_func != cosine_similarity:
+                    result = corr_func(filtered_array1, filtered_array2)
+                else:
+                    result = corr_func(filtered_array1.reshape(1, -1), filtered_array2.reshape(1, -1))[0][0]
             except TypeError:
                 utils_logger.critical('Correlation function not accepted.')
 
-            accepted_types = (float, Iterable)
+            accepted_types = [(float, Iterable), float]
 
-            if not isinstance(result, accepted_types):
+            if not isinstance(result, accepted_types[0]) and not isinstance(result, accepted_types[1]):
+                print(result)
                 utils_logger.critical(
                     f"Correlation function not admitted, Return Type must be {accepted_types}"
                 )
