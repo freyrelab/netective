@@ -21,6 +21,7 @@ from collections import defaultdict
 from multiprocessing import cpu_count
 from networkx import fast_gnp_random_graph
 from typing import Callable
+import uuid
 
 from netective.structure import properties
 from netective.utils import (
@@ -568,12 +569,12 @@ class Structure:
         self.scalar_values = {}
         self.dist_values = {}
         struct_logger.debug('Starting properties computation...')
-        for name, x in instances.items():
-            if x._return_type == 'scalar':
-                self.scalar_values[x.CLASS_NAME] = x.compute()
+        for prop_name, prop in instances.items():
+            if prop._return_type == 'scalar':
+                self.scalar_values[prop.CLASS_NAME] = prop.compute()
             else:
-                self.dist_values[x.CLASS_NAME] = x.compute()
-            struct_logger.debug(f'Finished computing: {x.CLASS_NAME}')
+                self.dist_values[prop.CLASS_NAME] = prop.compute()
+            struct_logger.debug(f'Finished computing: {prop.CLASS_NAME}')
 
         if self.norm_observer.norm is not None:
             self.scalar_values, self.dist_values = self._normalize_props(
@@ -656,112 +657,6 @@ class Structure:
             set_log_level(current_level)
         
         return self._scalar_arrays, self._dist_arrays
-
-def er_nets_per_net_analysis(
-    G: DiGraph | Graph,
-    net_id: str,
-    norm: None | str | pd.Series,
-    erdos_renyi: int = 2,
-    selected_props : str | list = 'all',
-    workers: str | int = "auto",
-    verbose: str = None,
-    include_env: None | dict = None,
-) -> Tuple[dict[str, float | int], dict[str, np.array]]:
-    """Average of Erdos Renyi networks for a given network.
-
-    Call the function er_nets_per_net_analysis to generate erdos_renyi number of ER networks for a given network.
-    The function will compute properties for all ER networks generated, then calculate averages for each property.
-
-    It returns a tuple of dictionaries, one for the average scalar properties and one for the average moments of each distribution.
-
-    Arguments:
-        G (DiGraph or Graph): Network to use as temple for ER networks created.
-        norm (str, optional): Normalization to apply.
-            Valid values are 'network', 'biological' or None. Defaults to None.
-        selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
-        erdos_renyi (int): Number of random graphs to generate with the same number of nodes and density as G. Defaults to 2.
-        workers (int, optional): Number of workers to use. Defaults to 'auto'.
-            Auto performs a quick calculation of potential total memory allocated and determines maximal number of possible cpus.
-            Maximal number of available cpus will always be determined from [1, total cpus).
-        verbose (str, optional): The verbosity level of the logger.
-            View logging levels from Logging library.
-
-    Returns:
-        Tuple[dict[str, float | int], dict[str, np.array]]: Tuple of dictionaries with the network id and the properties of the network.
-    """
-
-    # Creating erdos_renyi number of ER networks, with the same number of nodes, density and direction
-    n = G.number_of_nodes()
-    m = G.number_of_edges()
-    er_networks = {
-        f'ER_model_{i}_{net_id}' : fast_gnp_random_graph(n, m / (n**2))
-        for i in range(erdos_renyi)
-    }
-    
-    # Computing properties for erdos_renyi number of ER networks created
-    struct_logger.warning('--------------------------------------------------------------------------------')
-    struct_logger.warning(f'Starting characterization of {erdos_renyi} ER networks created from: {net_id}...')
-    name_er_scalars_array, name_er_moments_arrays = compare_structure(
-                            networks= er_networks,
-                            norm= norm,
-                            selected_props= selected_props,
-                            workers= workers,
-                            return_prop_dicts= True,
-                            verbose= verbose,
-                            erdos_renyi= None,
-                            include_env= include_env
-    )
-
-    # Determining averages for all scalar properties computed for each ER network
-    properties = {}
-    for i,(temp_net_id, prop) in enumerate(name_er_scalars_array.items()):
-        for prop_name, value in prop.items():
-            if i == 0:
-                properties[prop_name] = []
-            properties[prop_name].append(value)
-    scalars_props_avg = {
-        prop_name : sum(values) / erdos_renyi
-        for prop_name, values in properties.items()
-    }
-    
-    # Determining averages for all distribution properties computed for each ER network
-    properties = {}
-    for i, (temp_net_id, prop)  in enumerate(name_er_moments_arrays.items()):
-        for prop_name, values in prop.items():
-            if i == 0:
-                properties[prop_name] = {
-                    'Average' : [],
-                    'Variation' : [],
-                    'Skewness' : [],
-                    'Kurtosis' : []
-                }
-            for k, value in enumerate(values):
-                if k == 0:
-                    moment = 'Average'
-                elif k == 1:
-                    moment = 'Variation'
-                elif k == 2:
-                    moment = 'Skewness'
-                elif k == 3:
-                    moment = 'Kurtosis'
-                properties[prop_name][moment].append(value)
-
-    dist_props_avg = {}
-    for prop_name, moments in properties.items():
-        dist_props_avg[prop_name] = []
-        for moment, values in moments.items():
-            moment_avg = sum(values) / len(values)
-            dist_props_avg[prop_name].append(moment_avg)
-    
-    # Final dictionaries
-    scalars_avg_er_net = {
-        f'{net_id}_Avg_ER' : scalars_props_avg
-    }
-    moments_avg_er_net = {
-        f'{net_id}_Avg_ER' : dist_props_avg
-    }
-
-    return scalars_avg_er_net, moments_avg_er_net
 
 # Characterization of one network
 def characterize_network(
@@ -972,23 +867,6 @@ def __batch_processing(
                 # name_scalars_array[net_id][f'Variation {prop_name}'] = values[1]
                 # name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
                 # name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
-    
-    if erdos_renyi:
-        if erdos_renyi < 0:
-            struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
-            raise ValueError("erdos_renyi must be 0 or greater")
-        for net_id, net in networks.items():
-            er_scalars_array, er_name_dist_arrays = er_nets_per_net_analysis(
-                                                                G= net, 
-                                                                net_id= net_id, 
-                                                                norm= norm, 
-                                                                erdos_renyi= erdos_renyi, 
-                                                                selected_props= selected_props,
-                                                                workers= workers,
-                                                                include_env= include_env,
-                                                            )
-            name_scalars_array.update(er_scalars_array)
-            name_dist_arrays.update(er_name_dist_arrays)
     
     return name_scalars_array, name_dist_arrays
 
