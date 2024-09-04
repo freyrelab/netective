@@ -771,7 +771,7 @@ def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, deli
     if isinstance(nets, dict):
         max_edges = 0
         for net_id, net in nets.items():
-            if net.number_of_edges() > max_edges:
+            if net.number_of_edges() >= max_edges:
                 max_edges = net.number_of_edges()
                 max_net = net_id
         net_id = max_net
