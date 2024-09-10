@@ -19,10 +19,8 @@ from networkx import DiGraph
 from scipy.stats import pearsonr
 from collections import defaultdict
 from multiprocessing import cpu_count
-from networkx import fast_gnp_random_graph
 from typing import Callable
 import uuid
-
 from netective.structure import properties
 from netective.utils import (
     compute_moments,
@@ -37,7 +35,9 @@ from netective.utils import (
     common_props_dict,
     get_clusters,
     sort_files,parse_network,
-    get_allocated_memory
+    get_allocated_memory,
+    filter_association_df_for_models,
+    get_models_abbreviations
 )
 from netective.logging_info import get_logger
 from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
@@ -771,7 +771,7 @@ def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, deli
     if isinstance(nets, dict):
         max_edges = 0
         for net_id, net in nets.items():
-            if net.number_of_edges() >= max_edges:
+            if net.number_of_edges() > max_edges:
                 max_edges = net.number_of_edges()
                 max_net = net_id
         net_id = max_net
@@ -812,7 +812,6 @@ def __batch_processing(
         verbose: str,
         workers: int,
         keep_averages: bool,
-        erdos_renyi: int,
         include_env: dict
     ) -> Tuple[dict[str, float | int], dict[str, np.array]]:
     """Batch processing for parallelization of the structural characterization process
@@ -871,7 +870,7 @@ def __batch_processing(
     return name_scalars_array, name_dist_arrays
 
 # Comparison of multiple networks
-def compare_structure(
+def old_compare_structure(
     networks: dict | str,
     norm: str | None = None,
     selected_props: str | list = "all",
@@ -963,7 +962,6 @@ def compare_structure(
                 verbose= verbose,
                 workers= workers,
                 keep_averages= keep_averages,
-                erdos_renyi= erdos_renyi,
                 include_env= include_env,
             )
         else:
@@ -985,7 +983,6 @@ def compare_structure(
                         verbose= verbose,
                         workers= workers,
                         keep_averages= keep_averages,
-                        erdos_renyi= erdos_renyi,
                         include_env= include_env,
                     )
                         name_scalars_array.update(temp_name_scalars_array)
@@ -1034,7 +1031,6 @@ def compare_structure(
                     verbose= verbose,
                     workers= workers,
                     keep_averages= keep_averages,
-                    erdos_renyi= erdos_renyi,
                     include_env= include_env,
                 )
                 name_scalars_array.update(temp_name_scalars_array)
@@ -1052,7 +1048,6 @@ def compare_structure(
                 verbose= verbose,
                 workers= workers,
                 keep_averages= keep_averages,
-                erdos_renyi= erdos_renyi,
                 include_env= include_env,
             )
  
@@ -1086,6 +1081,185 @@ def compare_structure(
     
     return fig_scalar
 
+def compare_structure(
+    networks: dict | str,
+    norm: str | None = None,
+    selected_props: str | list = "all",
+    workers: str | int = "auto",
+    include_env: None | dict = None,
+    return_prop_dicts: bool = False,
+    association_metric: str | Callable = 'pearson',
+    compare_to_models: str | list = None,
+    n_random_models : int = 2,
+    random_graph_generator_params : dict = None,
+    ba_m : int | str | list = 2,
+    verbose: str = None,
+    comments : str = '#',
+    delimiter : str = '\t',
+    keep_averages: bool = True,
+    directed: bool = True,
+    features: pd.DataFrame = None,
+    data_type: dict = None,
+    title: str = None
+) -> Tuple[dict, dict] | plt.Figure:
+    
+    if verbose != None:
+        current_level = struct_logger.getEffectiveLevel()
+        set_log_level(verbose)
+    
+    if norm not in NORM_OPTIONS:
+        struct_logger.critical("Normalization not valid")
+        raise properties.NormalizationError("Normalization not valid")
+
+    # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
+    # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
+    child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
+
+    # handle workers
+    usable_workers = cpu_count() - 1
+    if workers == "auto" or workers > usable_workers:
+        struct_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
+        workers = __get_optimal_workers(
+            nets= networks,
+            directed= directed,
+            comments= comments,
+            delimiter= delimiter
+        )
+
+    # Processing of input networks
+    struct_logger.info('Starting processing of input networks...')
+    name_scalars_array = {}
+    name_dist_arrays = {}
+    # networks is a directory path
+    if isinstance(networks, str):
+        sorted_files = sort_files(networks)
+        complete_batches = len(sorted_files) // workers
+        last_batch = len(sorted_files) % workers
+        if last_batch:
+            total_batches = complete_batches + 1
+        else:
+            total_batches = complete_batches
+        
+        # Batch generation
+        for batch_number in range(total_batches):
+            temp_nets = {}
+            inicial_net = batch_number * workers
+            if batch_number < complete_batches:
+                final_net = inicial_net + workers
+            else:
+                final_net = inicial_net + last_batch
+            for i in range(inicial_net, final_net):
+                net_path = sorted_files[i]
+                net_id = os.path.basename(net_path)
+                temp_nets[net_id] = parse_network(
+                    file_path= net_path,
+                    comments= comments,
+                    delimiter= delimiter,
+                    directed= directed,
+                    use_position_as_score= False
+                )
+            
+            struct_logger.warning(f'Starting topological characterization of networks: {list(temp_nets.keys())}...')
+            temp_arrays = __batch_processing(
+                    networks= temp_nets,
+                    norm= norm,
+                    selected_props= selected_props,
+                    child_classes= child_classes,
+                    verbose= verbose,
+                    workers= workers,
+                    keep_averages= keep_averages,
+                    include_env= include_env,
+                )
+            name_scalars_array.update(temp_arrays[0])
+            name_dist_arrays.update(temp_arrays[1])
+            del temp_nets
+    # networks is a dict
+    else:
+        net_ids = list(networks.keys())
+        complete_batches = len(net_ids) // workers
+        last_batch = len(net_ids) % workers
+        if last_batch:
+            total_batches = complete_batches + 1
+        else:
+            total_batches = complete_batches
+        
+        # Batch generation    
+        for batch_number in range(total_batches):
+            temp_nets = {}
+            inicial_net = batch_number * workers
+            if batch_number < complete_batches:
+                final_net = inicial_net + workers
+            else:
+                final_net = inicial_net + last_batch
+            
+            for i in range(inicial_net, final_net):
+                net_id = net_ids[i]
+                temp_nets[net_id] = networks[net_id]
+            
+            struct_logger.warning(f'Starting topological characterization of networks: {list(temp_nets.keys())}...')
+            temp_arrays = __batch_processing(
+                    networks= temp_nets,
+                    norm= norm,
+                    selected_props= selected_props,
+                    child_classes= child_classes,
+                    verbose= verbose,
+                    workers= workers,
+                    keep_averages= keep_averages,
+                    include_env= include_env,
+                )
+            name_scalars_array.update(temp_arrays[0])
+            name_dist_arrays.update(temp_arrays[1])
+            del temp_nets
+
+    # In case there are directed and undirected networks in input bunch
+    name_scalars_array = common_props_dict(name_scalars_array)
+
+    # Models generation 
+    if compare_to_models is not None:
+        avg_nets_scalars_arrays = {}
+        avg_nets_moments_arrays = {}
+        # Call to characterize_models fxn
+        avg_nets_scalars_arrays = common_props_dict(avg_nets_scalars_arrays)
+    
+    # Returning of props dict
+    if return_prop_dicts:
+        if verbose != None:
+                set_log_level(current_level)
+        if compare_to_models:
+            return name_scalars_array, name_dist_arrays, avg_nets_scalars_arrays, avg_nets_moments_arrays
+        else:
+            return name_scalars_array, name_dist_arrays
+        
+    if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
+        if compare_to_models:
+            name_scalars_array.update(avg_nets_scalars_arrays)
+            name_scalars_array = common_props_dict(name_scalars_array)
+            association_df = association(name_scalars_array, corr_func= association_metric, distance= compare_to_models)
+            
+            # Getting abbreviations for filtered names
+            abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
+            association_df = filter_association_df_for_models(association_df, abbreviations)
+            # Plotting nuevo, debe ir en dataviz
+            fig_scalar = None
+        else:
+            association_df = association(name_scalars_array, corr_func= association_metric)
+            if features is not None:
+                fig_scalar = create_symmetric_heatmap(association_df[association_df.columns].astype(float), title=title, features=features, data_type=data_type, verbose=verbose)
+                # TODO: Why does it need to be converted to float?
+            else:
+                fig_scalar = create_symmetric_heatmap(association_df[association_df.columns].astype(float), title=title, verbose= verbose)
+    else:
+        struct_logger.critical("Not enough data to compare.")
+        raise ValueError("Not enough data to compare.")
+    
+    if verbose != None:
+        set_log_level(current_level)
+    return fig_scalar
+
+
+
+
+######################################################################
 def classify_networks(
         networks: dict[str, Graph] | str,
         norm: str | None = None,

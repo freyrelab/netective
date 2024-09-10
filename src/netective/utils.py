@@ -12,6 +12,7 @@ from __future__ import annotations
 # ]
 
 import os
+import re
 import sys
 import tracemalloc
 import warnings
@@ -24,7 +25,8 @@ import concurrent.futures
 from itertools import chain
 from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
-from scipy.stats import pearsonr, kurtosis, skew, rv_discrete
+# TODO Incluir las demas correlaciones admitidas (tiene que regresar tupla)
+from scipy.stats import pearsonr, spearmanr, kurtosis, skew
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
 from typing import Union, Callable, Iterable
@@ -37,6 +39,12 @@ import matplotlib
 concat_path = os.path.join
 
 utils_logger = get_logger(__name__)
+
+CORRELATIONS = {
+    'pearson' : pearsonr,
+    'spearman' : spearmanr,
+    'cosine' : cosine_similarity
+}
 
 def run_parallel(f, my_iter, workers, verbose: str = None):
 
@@ -183,8 +191,9 @@ def parse_network(
 
 # Comparison Fxn
 def association(
-    dict_data: dict[str, dict[str, float]], corr_func: Callable(Iterable, Iterable) = pearsonr
+    dict_data: dict[str, dict[str, float]], corr_func: str | Callable(Iterable, Iterable) = 'pearson', distance : bool = None
 ) -> pd.DataFrame:
+    # TODO AGREGAR REFERENCIA AL CALCULO DE LA DISTANCIA
     """
     Computes correlation between elements in a dictionary
 
@@ -208,6 +217,7 @@ def association(
 
     # Initialize an empty DataFrame to store the correlation coefficients
     corr_df = pd.DataFrame(index=name_dists, columns=name_dists)
+    corr_func = CORRELATIONS[corr_func]
 
     # Calculate the pairwise correlation
     for i in range(len(name_dists)):
@@ -253,7 +263,55 @@ def association(
             corr_df.loc[name_dist1, name_dist2] = corr_coef
             corr_df.loc[name_dist2, name_dist1] = corr_coef
 
+    # Calculation of distance ref.
+    if distance:
+        corr_df = abs(1 - abs(corr_df))
+        corr_df = round(corr_df.applymap(np.sqrt))
+
     return corr_df
+
+# Obtaining models abbreviations for filtering
+def get_models_abbreviations(avg_random_scalars_array: dict):
+    # Gets files extensions (dictionary keys extensions)
+    files_prefix = r'Avg_[^_]+_'
+    base_abbreviations = {
+            'GNP' : 'ER GNP',
+            'GNM' : 'ER GNM',
+            'KR' : 'Regular',
+            'BA-out' : 'BA (out-degree)',
+            'BA-in' : 'BA (in-degree)',
+            'BA-degree' : 'BA (degree)'
+        }
+    abbreviations = {}
+    for net_id, _ in avg_random_scalars_array.items():
+        model_abbreviation = re.findall(files_prefix, net_id)[0].split('_')[1]
+        if model_abbreviation not in abbreviations.keys():
+            abbreviations[model_abbreviation] = base_abbreviations[model_abbreviation] if model_abbreviation in base_abbreviations.keys() else model_abbreviation.replace('-', ' ')
+
+    return abbreviations
+
+# Filtering of association df to compare to models fxn
+def filter_association_df_for_models(association_mtrx: pd.DataFrame, abbreviations: dict):
+    files_prefix = r'Avg_[^_]+_'
+    # Final fig names and values for plotting
+    filtered_association = {
+        v : [] for k, v in abbreviations.items()
+    }
+    filtered_association['input networks'] = []
+    for index_name in association_mtrx.index:
+        if index_name.find('Avg') == -1:
+            filtered_columns = [
+                col
+                for col in association_mtrx.columns
+                if index_name == re.sub(files_prefix, '', col)
+            ]
+            row_values = association_mtrx.loc[index_name, filtered_columns]
+            filtered_association['input networks'].append(index_name.replace('.txt', '').replace('_', ' '))
+            for column, value in row_values.items():
+                if column != index_name:
+                    filtered_association[abbreviations[column.split('_')[1]]].append(value)
+            
+    return pd.DataFrame({k : v for k, v in filtered_association.items() if v}, index= filtered_association['input networks']).drop('input networks', axis= 1)
 
 def remove_self_loops(G: nx.DiGraph):
     G.remove_edges_from(nx.selfloop_edges(G))
