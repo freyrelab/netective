@@ -3,8 +3,8 @@ import numpy as np
 from multiprocessing import cpu_count
 
 from netective.cli._arrguments import _parse_arguments
-from netective.utils import save_prop_dicts, save_figs, common_props_dict, association, get_clusters, parse_network
-from netective.structure.dataviz import create_symmetric_heatmap, plot_distributions, plot_scalars
+from netective.utils import save_prop_dicts, save_figs, common_props_dict, association, get_clusters, parse_network, clean_names_association_df, get_models_abbreviations, filter_association_df_for_models
+from netective.structure.dataviz import create_comp_heatmap, plot_distributions, plot_scalars
 from netective import compare_structure, characterize_network, benchmarking
 from netective.structure.structure import __get_optimal_workers
 
@@ -51,21 +51,22 @@ def runmode1(args):
     
     return_prop_dicts = args.keep_props
     # Technical Args
+    nets_file_format = args.net_f_format
     comments = args.comments
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --dir {dir} --workers {workers} --selected_props {selected_props} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
+    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --dir {dir} --workers {workers} --selected_props {selected_props} --verbose {verbose} --nets_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
 
     if os.path.isdir(nets_path):
         if workers == 'auto':
             cli_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
             workers = __get_optimal_workers(
                 nets = nets_path,
-                workers = workers,
                 directed= dir,
                 comments= comments,
-                delimiter= delimiter
+                delimiter= delimiter,
+                nets_file_format= nets_file_format
             )
         cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
         scalars_array, dist_array = compare_structure(
@@ -77,6 +78,7 @@ def runmode1(args):
                     return_prop_dicts= True,
                     keep_averages= False,
                     directed= dir,
+                    nets_file_format= nets_file_format,
                     delimiter= delimiter,
                     comments= comments
         )
@@ -87,7 +89,8 @@ def runmode1(args):
                 comments= comments,
                 delimiter= delimiter,
                 directed= dir,
-                use_position_as_score= False
+                use_position_as_score= False,
+                net_file_format= nets_file_format
         )
         scalars_array, dist_array = characterize_network(
             G= net,
@@ -138,12 +141,20 @@ def runmode1(args):
             )
 
 def runmode2(args):
+    exts = {",": "csv", "\t": "tsv"}
     # Args for network analysis
     nets_path = args.input
     norm = args.normalization
     dir = args.directed
     verbose = args.verbose
-    
+    association_metric = args.association
+    metric = args.metric
+    method = args.method
+    compare_to_models = args.comp2models
+    n_random_models = args.n_models
+    ba_m = args.m4ba
+    keep_averages = args.keep_averages
+
     if verbose is not None:
         set_log_level(cli_logger, verbose)
     
@@ -157,38 +168,69 @@ def runmode2(args):
     workers = args.workers
     
     return_prop_dicts = args.keep_props
-    erdos_renyi = args.erdos_renyi
 
     # Technical Args
+    nets_file_format = args.net_f_format
     comments = args.comments
     delimiter = args.delimiter
     output = args.output
+    title = args.title
 
-    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --erdos_renyi {erdos_renyi} --workers {workers} --verbose {verbose} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
+    if compare_to_models:
+        cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --comp2models {compare_to_models} --n_models {n_random_models} --m4ba {ba_m} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --title {title} --output {output}\n"
+    else:
+        cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --title {title} --output {output}\n"
 
     if workers == 'auto':
         cli_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
         workers = __get_optimal_workers(
             nets = nets_path,
-            workers = workers,
             directed= dir,
             comments= comments,
-            delimiter= delimiter
+            delimiter= delimiter,
+            nets_file_format= nets_file_format
         )
     usable_threads = cpu_count() - 1
     cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
-    scalars_array, dist_array = compare_structure(
-        networks= nets_path, 
-        norm= norm, 
-        workers= workers, 
-        selected_props= selected_props,
-        verbose= verbose,
-        return_prop_dicts= True,
-        erdos_renyi= erdos_renyi,
-        directed= dir,
-        delimiter= delimiter,
-        comments= comments
-    )
+    
+    # Networks topological characterization
+    if compare_to_models:
+        scalars_array, dist_array, avg_nets_scalars_arrays, avg_nets_moments_arrays = compare_structure(
+            networks= nets_path, 
+            norm= norm, 
+            workers= workers, 
+            selected_props= selected_props,
+            association_metric= association_metric,
+            method= method,
+            compare_to_models= compare_to_models,
+            n_random_models= n_random_models,
+            ba_m= ba_m,
+            verbose= verbose,
+            return_prop_dicts= True,
+            directed= dir,
+            nets_file_format= nets_file_format,
+            delimiter= delimiter,
+            comments= comments,
+            keep_averages= keep_averages,
+            title= title
+        )
+    else:
+        scalars_array, dist_array = compare_structure(
+            networks= nets_path, 
+            norm= norm, 
+            workers= workers, 
+            selected_props= selected_props,
+            association_metric= association_metric,
+            method= method,
+            verbose= verbose,
+            return_prop_dicts= True,
+            directed= dir,
+            nets_file_format= nets_file_format,
+            delimiter= delimiter,
+            comments= comments,
+            keep_averages= keep_averages,
+            title= title
+        )
 
     if return_prop_dicts:
         if args.runmode == 4:
@@ -211,13 +253,45 @@ def runmode2(args):
                 delimiter= delimiter,
                 cl= cl
             )
-    else:
+        if compare_to_models:
+            for net_id, props in avg_nets_scalars_arrays.items():
+                save_prop_dicts(
+                    array= props,
+                    net_id= net_id,
+                    type= 'scalars',
+                    output_dir= output,
+                    delimiter= delimiter,
+                    cl= cl
+                )
+            for net_id, props in avg_nets_moments_arrays.items():
+                save_prop_dicts(
+                    array= props,
+                    net_id= net_id,
+                    type= 'moments',
+                    output_dir= output,
+                    delimiter= delimiter,
+                    cl= cl
+                )
+    else: # Plotting is required
         scalars_array = common_props_dict(scalars_array)
-        # Scalar properties
+        
         if len(scalars_array) > 0 and len(list(scalars_array.values())[0]) > 1:
-            df = association(scalars_array)
-            fig_scalars = create_symmetric_heatmap(df, title=f"Global properties", verbose= verbose)
+            if compare_to_models:
+                # Getting abbreviations for filtered names
+                abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
+                avg_nets_scalars_arrays = common_props_dict(avg_nets_scalars_arrays)
+                scalars_array.update(avg_nets_scalars_arrays)
+                scalars_array = common_props_dict(scalars_array)
+            
+            association_df = association(scalars_array, corr_func= association_metric)
+            
+            if compare_to_models:
+                association_df = filter_association_df_for_models(association_df, abbreviations)
+            
+            association_df = clean_names_association_df(association_df)
+            fig_scalars = create_comp_heatmap(association_df, metric= metric, method= method, title= title, verbose= verbose, compare_to_models= True if compare_to_models else False)
             save_figs(fig_scalars, output_dir= output)
+            association_df.to_csv(concat_path(output, f'association_df.{exts[delimiter]}'), sep= delimiter)
         else:
             cli_logger.critical("Not enough data to compare. Probably input directory has only one network file.")
             raise ValueError("Not enough data to compare.")
@@ -236,6 +310,7 @@ def runmode3(args):
     output = args.output
     comments = args.comments
     delimiter = args.delimiter
+
     cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_coords_dicts {keep_auc_coords_dicts} --cutoff {cutoff} --score {score} --self_loops {self_loops} --baseline {baseline} --verbose {verbose} --output {output} --delimiter {repr(delimiter)} --comments {comments}'
     if keep_auc_coords_dicts: # Keeping dictionaries with aupr and auroc values
         aupr_scores, auroc_scores, coords = benchmarking(

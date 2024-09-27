@@ -6,9 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "netective"
 version = "0.9.0"
 authors = [
-  { name="Juan M. Escorcia-Rodríguez", email="juanesscorcia@gmail.com" },
+  { name="Juan Miguel Escorcia-Rodríguez", email="juanesscorcia@gmail.com" },
   { name="José Antonio Sánchez-Villicaña", email="josesv@lcg.unam.mx" },
-  { name="Julio A. Freyre-González", email="jfreyreg@gmail.com" },
+  { name="Julio Augusto Freyre-González", email="jfreyreg@gmail.com" },
+  { name="Jocelyn Trujillo-Guitérrez", email= "jocelynt@lcg.unam.mx" }
 ]
 description = "Use structural and standard performance metrics to assess network inference"
 readme = "README.md"
@@ -30,6 +31,7 @@ dependencies = [
   "mpmath>=1.2.1",
   "psutil>=5.9.0",
   "bitarray>=2.9.2",
+  "scikit-learn==1.3.2"
 ]
 
 [project.optional-dependencies]
@@ -38,7 +40,7 @@ lint = [ "black"]
 cov = ["pytest < 5.0.0", "pytest-cov[all]"]
 
 [project.urls]
-"Homepage" = "https://github.com/JuanEscorcia/netective.git"
+"Homepage" = "https://github.com/freyrelab/netective.git"
 
 [project.scripts]
 netective = "netective.cli.netective:main"

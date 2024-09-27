@@ -166,7 +166,6 @@ class NormalizationError(Exception):
 
 class NullGraphError(Exception):
     """Exception raised for null graph."""
-
     pass
 
 

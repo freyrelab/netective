@@ -38,10 +38,11 @@ from netective.utils import (
     parse_network,
     get_allocated_memory,
     filter_association_df_for_models,
-    get_models_abbreviations
+    get_models_abbreviations,
+    clean_names_association_df
 )
 from netective.logging_info import get_logger
-from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
+from netective.structure.dataviz import plot_scalars, create_comp_heatmap, plot_distributions
 
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
@@ -744,7 +745,7 @@ def __remove_network_data(G: Graph) -> Graph:
         G.edges[u, v].clear()
     return G
 
-def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, delimiter: str) -> int:
+def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, delimiter: str, nets_file_format: str = 'edgelist') -> int:
     """Calculation of optimal workers for parallelization
 
     Computes a preliminary structural characterization and plotting of the biggest network from the inputed bunch of networks.
@@ -787,7 +788,8 @@ def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, deli
             file_path= sorted_files[0],
             comments= comments,
             delimiter= delimiter,
-            directed= directed
+            directed= directed,
+            net_file_format= nets_file_format
         )
     foo, spam = characterize_network(
         G= net,
@@ -886,6 +888,7 @@ def avg_random_nets_per_net(
     workers: int = 2,
     verbose: str = None,
     include_env: None | dict = None,
+    nets_file_format: str = 'edgelist',
     comments: str = '#',
     delimiter: str = '\t',
     directed: bool = True,
@@ -903,11 +906,11 @@ def avg_random_nets_per_net(
             Valid values are 'network', 'biological' or None.
         random_model (str | function): The random graph generator model that is going to be used.
             If model required not available, user can introduce their own function generator with the condition it retuns an nx.Graph() or an ig.Graph(). 
-            Defaults to None.
+            Choices are "Erdos GNP", "Erdos GNM", "K Regular", "Barabasi Albert". Defaults to None.
         number_of_random_nets (int): Number of random graphs to generate with some of G properties. Defaults to 2.
         random_graph_parameters (dict): If random_model is a fuction given by user, user must also give the parameter in a dictionary. Defaults to None.
         ba_m (str | int): Type of m (integrer or a degree distribution) that is going to be used in Barabasi Albert generator. Defaults to 2.
-            Valid values are "out degree", "in degree", "degree" or any positive integrer.
+            Choices are "out degree", "in degree", "degree" or any positive integrer.
         selected_props (str | list):  Properties to compute. Defaults to 'all'.
         keep_averages (bool): Whether to keep the averages of the moments of the distributions. Defaults to True.
         workers (int): Number of workers to use. Defaults to 2.
@@ -918,6 +921,7 @@ def avg_random_nets_per_net(
         verbose (str): The verbosity level of the logger.
             View logging levels from Logging library.
         include_env (None | dict): Dictionary with the environment variables to include. Defaults to None.
+        nets_file_format (str): format for the networks files to parse.
         comments (str): Comment character in edge list file. Defaults to '#'.
         delimiter (str): Delimiter character in edge list file. Defaults to '\t'.
         directed (bool): If True, the network will be a DiGraph, otherwise it will be a Graph. Defaults to True.
@@ -968,7 +972,7 @@ def avg_random_nets_per_net(
         # If G is a file_path veryfing if path exists.
         if isinstance(G,str):
             try:
-                G = parse_network(file_path=G,comments=comments,delimiter=delimiter,directed=directed)
+                G = parse_network(file_path= G, comments= comments, delimiter= delimiter, directed= directed, net_file_format= nets_file_format)
             except:
                 struct_logger.warning(f"Error computing graph in path {G}, please verify if file path.")
                 return None 
@@ -1068,7 +1072,7 @@ def avg_random_nets_per_net(
             model_generator = ig.GraphBase.Barabasi
             random_graph_parameters = {
                     'n' : n_nodes,
-                    'm' : 2,
+                    'm' : ba_m,
             }
             model_name = f'BA-{ba_m}'
         
@@ -1148,7 +1152,7 @@ def avg_random_nets_per_net(
         
         random_networks = {}
 
-        struct_logger.debug(f"Creating nets of batch no.{batch + 1} and sending them to characterize...")
+        struct_logger.debug(f"Creating nets of batch no.{batch + 1} and characterizing them...")
 
         # Creating nets necesary per batch using the introduced model
         for i in range(inicial_net,final_net):
@@ -1254,6 +1258,7 @@ def characterize_models(
     workers: int = 2,
     verbose: str = None,
     include_env: None | dict = None,
+    nets_file_format: str = 'edgelist',
     comments: str = '#',
     delimiter: str = '\t',
     directed: bool = True,
@@ -1281,6 +1286,7 @@ def characterize_models(
         verbose (str): The verbosity level of the logger.
             View logging levels from Logging library.
         include_env (None | dict): Dictionary with the environment variables to include. Defaults to None.
+        nets_file_format (str): format for the networks files to parse.
         comments (str): Comment character in edge list file. Defaults to '#'.
         delimiter (str): Delimiter character in edge list file. Defaults to '\t'.
         directed (bool): If True, the network will be a DiGraph, otherwise it will be a Graph. Defaults to True.
@@ -1320,6 +1326,7 @@ def characterize_models(
                                                 workers=workers,
                                                 verbose= verbose,
                                                 include_env= include_env,
+                                                nets_file_format= nets_file_format,
                                                 comments = comments,
                                                 delimiter = delimiter,
                                                 directed = directed,
@@ -1340,6 +1347,7 @@ def characterize_models(
                                             workers=workers,
                                             verbose= verbose,
                                             include_env= include_env,
+                                            nets_file_format= nets_file_format,
                                             comments = comments,
                                             delimiter = delimiter,
                                             directed = directed,
@@ -1359,11 +1367,14 @@ def compare_structure(
     include_env: None | dict = None,
     return_prop_dicts: bool = False,
     association_metric: str | Callable = 'pearson',
+    metric: str = 'euclidean',
+    method: str = 'ward',
     compare_to_models: str | list = None,
     n_random_models : int = 2,
     random_graph_generator_params : dict = None,
     ba_m : int | str | list = 2,
     verbose: str = None,
+    nets_file_format: str = 'edgelist',
     comments : str = '#',
     delimiter : str = '\t',
     keep_averages: bool = True,
@@ -1371,7 +1382,7 @@ def compare_structure(
     features: pd.DataFrame = None,
     data_type: dict = None,
     title: str = None
-) -> Tuple[dict, dict] | plt.Figure:
+) -> Tuple[dict, dict] | Tuple[plt.Figure, pd.DataFrame]:
     
     if verbose != None:
         current_level = struct_logger.getEffectiveLevel()
@@ -1392,6 +1403,7 @@ def compare_structure(
         workers = __get_optimal_workers(
             nets= networks,
             directed= directed,
+            nets_file_format= nets_file_format,
             comments= comments,
             delimiter= delimiter
         )
@@ -1399,86 +1411,60 @@ def compare_structure(
     # Processing of input networks
     name_scalars_array = {}
     name_dist_arrays = {}
-    # networks is a directory path
+    # networks is a directory path, transforming into dict
     if isinstance(networks, str):
         sorted_files = sort_files(networks)
-        complete_batches = len(sorted_files) // workers
-        last_batch = len(sorted_files) % workers
-        if last_batch:
-            total_batches = complete_batches + 1
+        networks = {os.path.basename(net_path): net_path for net_path in sorted_files}
+    
+    # Calculations for batch generation
+    net_ids = list(networks.keys())
+    complete_batches = len(net_ids) // workers
+    last_batch = len(net_ids) % workers
+    if last_batch:
+        total_batches = complete_batches + 1
+    else:
+        total_batches = complete_batches
+    
+    # Batch processing of input networks
+    for batch_number in range(total_batches):
+        temp_nets = {}
+        inicial_net = batch_number * workers
+        if batch_number < complete_batches:
+            final_net = inicial_net + workers
         else:
-            total_batches = complete_batches
+            final_net = inicial_net + last_batch
         
+        struct_logger.debug(f"Creating nets of batch no.{batch_number + 1}/{total_batches} and characterizing them...")
         # Batch generation
-        for batch_number in range(total_batches):
-            temp_nets = {}
-            inicial_net = batch_number * workers
-            if batch_number < complete_batches:
-                final_net = inicial_net + workers
-            else:
-                final_net = inicial_net + last_batch
-            for i in range(inicial_net, final_net):
-                net_path = sorted_files[i]
-                net_id = os.path.basename(net_path)
+        for i in range(inicial_net, final_net):
+            net_id = net_ids[i]
+            if isinstance(networks[net_id], str):
                 temp_nets[net_id] = parse_network(
-                    file_path= net_path,
+                    file_path= networks[net_id],
+                    net_file_format= nets_file_format,
                     comments= comments,
                     delimiter= delimiter,
                     directed= directed,
                     use_position_as_score= False
                 )
-            
-            struct_logger.warning(f'Starting topological characterization of networks: {list(temp_nets.keys())}...')
-            temp_arrays = __batch_processing(
-                    networks= temp_nets,
-                    norm= norm,
-                    selected_props= selected_props,
-                    child_classes= child_classes,
-                    verbose= verbose,
-                    workers= workers,
-                    keep_averages= keep_averages,
-                    include_env= include_env,
-                )
-            name_scalars_array.update(temp_arrays[0])
-            name_dist_arrays.update(temp_arrays[1])
-            del temp_nets
-    # networks is a dict
-    else:
-        net_ids = list(networks.keys())
-        complete_batches = len(net_ids) // workers
-        last_batch = len(net_ids) % workers
-        if last_batch:
-            total_batches = complete_batches + 1
-        else:
-            total_batches = complete_batches
-        
-        # Batch generation    
-        for batch_number in range(total_batches):
-            temp_nets = {}
-            inicial_net = batch_number * workers
-            if batch_number < complete_batches:
-                final_net = inicial_net + workers
             else:
-                final_net = inicial_net + last_batch
-            
-            for i in range(inicial_net, final_net):
-                net_id = net_ids[i]
                 temp_nets[net_id] = networks[net_id]
-            
-            struct_logger.warning(f'Starting topological characterization of networks: {list(temp_nets.keys())}...')
-            temp_arrays = __batch_processing(
-                    networks= temp_nets,
-                    norm= norm,
-                    selected_props= selected_props,
-                    child_classes= child_classes,
-                    verbose= verbose,
-                    workers= workers,
-                    keep_averages= keep_averages,
-                    include_env= include_env,
-                )
-            name_scalars_array.update(temp_arrays[0])
-            name_dist_arrays.update(temp_arrays[1])
-            del temp_nets
+        
+        # Topological caracterization of batch 
+        struct_logger.warning(f'Starting topological characterization of networks: {list(temp_nets.keys())}...')
+        temp_arrays = __batch_processing(
+                networks= temp_nets,
+                norm= norm,
+                selected_props= selected_props,
+                child_classes= child_classes,
+                verbose= verbose,
+                workers= workers,
+                keep_averages= keep_averages,
+                include_env= include_env,
+            )
+        name_scalars_array.update(temp_arrays[0])
+        name_dist_arrays.update(temp_arrays[1])
+        del temp_nets
 
     # In case there are directed and undirected networks in input bunch
     name_scalars_array = common_props_dict(name_scalars_array)
@@ -1497,12 +1483,11 @@ def compare_structure(
             workers=workers,
             verbose=verbose,
             include_env=include_env,
+            nets_file_format= nets_file_format,
             comments=comments,
             delimiter=delimiter,
             directed=directed
         )
-        # Call to characterize_models fxn
-        
         avg_nets_scalars_arrays = common_props_dict(avg_nets_scalars_arrays)
     
     # Returning of props dict
@@ -1516,32 +1501,32 @@ def compare_structure(
         
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
         if compare_to_models:
+            abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
             name_scalars_array.update(avg_nets_scalars_arrays)
             name_scalars_array = common_props_dict(name_scalars_array)
-            association_df = association(name_scalars_array, corr_func= association_metric, distance= compare_to_models)
-            
-            # Getting abbreviations for filtered names
-            abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
+        
+        association_df = association(name_scalars_array, corr_func= association_metric)
+        
+        if compare_to_models:
             association_df = filter_association_df_for_models(association_df, abbreviations)
-            # Plotting nuevo, debe ir en dataviz
-            fig_scalar = association_df
+        
+        association_df = clean_names_association_df(association_df)
+
+        if features is not None:
+            # TODO: Why does it need to be converted to float?
+            # fig_scalar = create_symmetric_heatmap(association_df[association_df.columns].astype(float), method= method, title=title, features=features, data_type=data_type, verbose=verbose, compare_to_models= True if compare_to_models else False)
+            fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title=title, features=features, data_type=data_type, verbose=verbose, compare_to_models= True if compare_to_models else False)
         else:
-            association_df = association(name_scalars_array, corr_func= association_metric)
-            if features is not None:
-                fig_scalar = create_symmetric_heatmap(association_df[association_df.columns].astype(float), title=title, features=features, data_type=data_type, verbose=verbose)
-                # TODO: Why does it need to be converted to float?
-            else:
-                fig_scalar = create_symmetric_heatmap(association_df[association_df.columns].astype(float), title=title, verbose= verbose)
+            fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title=title, verbose= verbose, compare_to_models= True if compare_to_models else False)
+
     else:
         struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")
     
     if verbose != None:
         set_log_level(current_level)
-    return fig_scalar
-
-
-
+    
+    return fig_scalar, association_df
 
 ######################################################################
 def classify_networks(

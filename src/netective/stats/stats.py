@@ -217,7 +217,7 @@ def benchmarking(
 
         # load networks using the filename as key
         networks = {
-            os.path.splitext(network)[0]: parse_network(os.path.join(networks, network), comments=comments, delimiter=delimiter, directed=directed, score=score, use_position_as_score=True if not score else False)
+            os.path.splitext(network)[0]: parse_network(os.path.join(networks, network), comments=comments, delimiter=delimiter, directed=directed, score=score, use_position_as_score=True if not score else False, net_file_format= 'edgelist')
             for network in os.listdir(networks) if network != gold_standard
             }
         
