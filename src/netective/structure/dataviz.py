@@ -179,21 +179,26 @@ def plot_scalars(data_dict: dict, verbose: str= None, title: str = None):
     
     return fig, axs
 
-def create_comp_heatmap(distances_df, title: str = None, metric= 'euclidean', method= "ward", features= None, data_type= None, verbose: str = None, compare_to_models: bool = None):
+def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: str= 'euclidean', method:str = "ward", features: pd.DataFrame= None, data_type: dict= None, verbose: str= None, compare_to_models: bool= None)-> matplotlib.figure.Figure:
     """Create a comparison heatmap of the input dataframe.
-    
-    Args:
-        dataframe (pd.DataFrame): The input dataframe.
-        title (str): The title of the heatmap. Defaults to None.
-        method (str): The method to use for clustering. Defaults to 'ward'.
-        features (pd.DataFrame): The input features dataframe. Index must be network names. Defaults to None.
-        data_type (dict): The data type of each feature. Defaults to None.
-        verbose (str): The verbosity level of the logger. Defaults to None.
+
+    Arguments:
+        distances_df (pd.DataFrame): the input dataframe.
+        title (str): title of the heatmap. Defaults to None.
+        metric (str): distance metric to use . Defaults to 'euclidean'.
+        method (str): method to use for clustering. Defaults to "ward".
+        features (pd.DataFrame): input features dataframe. Defaults to None.
+        data_type (dict): data type of each feature. Defaults to None.
+        verbose (str): verbosity level of the logger. Defaults to None.
         compare_to_models (bool): whether the heatmap is comparing input networks to model analogs. Defaults to None.
 
+    Raises:
+        TypeError: if either features or data_type is provided and not the other.
+        ValueError: when a properties array is constant. Not possible to calculate correlation.
+        ValueError: when a properties array is constant. Not possible to calculate correlation.
+
     Returns:
-        fig (matplotlib.figure.Figure): The figure containing the heatmap.    
-    """
+        matplotlib.figure.Figure: figure containing the heatmap."""
 
     # Linkage
     row_linkage = linkage(distances_df, metric= metric, method= method)
@@ -265,14 +270,15 @@ def create_comp_heatmap(distances_df, title: str = None, metric= 'euclidean', me
         
         return g
 
-    if features is not None and data_type is None:
-        dataviz_logger.critical('Data type of each feature is required to plot the heatmap with features. Please provide the data type of each feature as a dictionary.')
+    if (features is not None and data_type is None) or (features is None and data_type is not None):
+        dataviz_logger.critical('Both features DataFrame and data_type dictionary must be provided. Please provide a features DataFrame and the data type of each feature as a dictionary.')
+        raise TypeError('Both features DataFrame and data_type dictionary must be provided. Please provide a features DataFrame and the data type of each feature as a dictionary.')
 
     elif features is not None and data_type is not None:
         try:
             g = add_features(features= features, data_type= data_type)
         except ValueError:
-            dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
+            dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties for analysis...')
             raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
 
     else:

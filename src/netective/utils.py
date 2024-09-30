@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import matplotlib.figure
+
 """Utility functions for the netective package."""
 
 # __all__ = [
@@ -229,8 +231,8 @@ def association(
         corr_func (str | Callable): correlation function desired for analysis. Defaults to 'pearson'.
 
     Raises:
+        ValueError: invalid correlation.
         ValueError: occurs when one or both arrays correlated are constants.
-        TypeError: invalid correlation.
 
     Returns:
         pd.DataFrame: correlation-based distance matrix for the input data.
@@ -247,7 +249,7 @@ def association(
     # Correlation fxn
     if corr_func not in CORRELATIONS.keys():
         utils_logger.critical(f"Correlation function not admitted. Admitted options: {CORRELATIONS.keys()}")
-        raise TypeError(f"Correlation function not admitted. Admitted options: {CORRELATIONS.keys()}")
+        raise ValueError(f"Correlation function not admitted. Admitted options: {CORRELATIONS.keys()}")
     corr_func = CORRELATIONS[corr_func]
 
     # Get the keys (name_dists) from the dictionary
@@ -368,11 +370,9 @@ def clean_names_association_df(df):
 
     return df
 
-
 def remove_self_loops(G: nx.DiGraph):
     G.remove_edges_from(nx.selfloop_edges(G))
     return G
-
 
 def compute_moments(data: np.ndarray, ddof: int = 1) -> tuple[float, float, float, float]:
     """Computes the four first moments of a distribution.
@@ -397,10 +397,8 @@ def compute_moments(data: np.ndarray, ddof: int = 1) -> tuple[float, float, floa
     warnings.resetwarnings()
     return mean, variance, skewness, kurt
 
-
 def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
-
 
 def get_clusters(
     corr_df, clust_num: int = None, threshold: float = 0.7, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True, fcluster_kwargs: dict = None
@@ -447,18 +445,15 @@ def get_clusters(
 
     return cluster_vector if not map_ids else clusters
 
-
 def giant_component(G):
     """Summary."""
     components = nx.weakly_connected_components if G.is_directed() else nx.connected_components
     return G.subgraph(max(components(G), key=len)).copy()
 
-
 def giant_component_size(G):
     """Summary."""
     components = nx.weakly_connected_components if G.is_directed() else nx.connected_components
     return len(max(components(G), key=len))
-
 
 def is_iterable(obj):
     return hasattr(obj, "__iter__") and not isinstance(obj, str)
@@ -551,21 +546,38 @@ def common_props_dict(networks):
 
     return new
 
-def process_netective_properties_files(results_dir: str, title: str, method= 'ward'):
+def process_netective_properties_files(results_dir: str, corr_func: str= 'pearson', metric: str= 'euclidean', method: str= 'ward', compare_to_models: bool= None, features: pd.DataFrame= None, data_type: dict= None, title: str= None)-> matplotlib.figure.Figure:
+    """Utils fxn for processing output properties files created by Netective.
+
+    By processing, it is understood comparing the input networks using a clustermap.
+
+    Arguments:
+        results_dir (str): directory path with output properties files created by Netective.
+        corr_func (str): correlation metric to use to correlate properties' arrays between networks. Defaults to 'pearson'.
+        metric (str): distance metric to use . Defaults to 'euclidean'.
+        method (str): method to use for clustering. Defaults to "ward".
+        compare_to_models (bool): whether the heatmap is comparing input networks to model analogs. Defaults to None.
+        features (pd.DataFrame): input features dataframe. Defaults to None.
+        data_type (dict): data type of each feature. Defaults to None.
+        verbose (str): verbosity level of the logger. Defaults to None.
+        title (str): title of the heatmap. Defaults to None.
+
+    Returns:
+        matplotlib.figure.Figure: figure containing the heatmap."""
+    
     scalars_array = {}
     dist_array = {}
     delimiters = {
         '.tsv' : '\t',
         '.csv' : ',',
+        '.txt' : ' ',
     }
 
     # Retrieve properties values
     for dir, _, files in os.walk(results_dir):
-        # if len(files) % 2 != 0:
-        #     raise TypeError('No')
         for f in files:
             if f.find('_distributions_props') == -1 and f.find('_scalars_props') == -1:
-                utils_logger.warning(f'A file not created by Netective detected, cannot be processed. Skipping: {f}')
+                utils_logger.warning(f'A file not created by Netective detected, cannot be processed. Skipping it: {f}')
                 continue
             temp_dict = {}
             
@@ -613,17 +625,22 @@ def process_netective_properties_files(results_dir: str, title: str, method= 'wa
             scalars_array[net_id][f'Average {prop_id}'] = moments[0]
     
     # Association DataFrame
-    association_df = association(scalars_array)
+    distances_df = association(scalars_array, corr_func)
+    association_df = clean_names_association_df(association_df)
 
-    # Symmetric Heatmap
-    scalars_heatmap = create_comp_heatmap(
-        distances_df= association_df,
+    # Comparison Heatmap
+    comp_heatmap = create_comp_heatmap(
+        distances_df= distances_df,
+        metric= metric,
         method= method,
+        features= features,
+        data_type= data_type,
         title= title
     )
     
-    return scalars_heatmap
+    return comp_heatmap
 
+# Paths objects
 class ShortestDistances:
     """Summary."""
 

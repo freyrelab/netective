@@ -1512,13 +1512,7 @@ def compare_structure(
         
         association_df = clean_names_association_df(association_df)
 
-        if features is not None:
-            # TODO: Why does it need to be converted to float?
-            # fig_scalar = create_symmetric_heatmap(association_df[association_df.columns].astype(float), method= method, title=title, features=features, data_type=data_type, verbose=verbose, compare_to_models= True if compare_to_models else False)
-            fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title=title, features=features, data_type=data_type, verbose=verbose, compare_to_models= True if compare_to_models else False)
-        else:
-            fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title=title, verbose= verbose, compare_to_models= True if compare_to_models else False)
-
+        fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title= title, features= features, data_type= data_type, verbose= verbose, compare_to_models= True if compare_to_models else False)
     else:
         struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")
