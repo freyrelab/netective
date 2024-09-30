@@ -5,6 +5,7 @@
 /Applications/
 /netective_old_code/
 /results_dummy/
+/build/
 *.pyc
 *.ini
 *.pkl
