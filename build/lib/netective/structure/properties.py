@@ -5,7 +5,6 @@ import numpy as np
 import networkx as nx
 from abc import ABC, abstractmethod
 from mpmath import fac
-import igraph as ig
 
 from netective.utils import Efficiency, giant_component_size
 
@@ -91,10 +90,12 @@ def _max_loops(*, n: int, r: int, non_leafs: int, r_non_leafs: int) -> int:
     """
 
     if r_non_leafs > non_leafs or r_non_leafs > r:
-        raise ValueError("r_non_leafs cannot be greater than r or non_leafs")
+        raise NotImplementedError
+        # raise ValueError("r_non_leafs cannot be greater than r or non_leafs")
     
     if r > n or non_leafs > n:
-        raise ValueError("r nor non_leafs cannot be greater than n")
+        raise NotImplementedError
+        # raise ValueError("r nor non_leafs cannot be greater than n")
     
     # print(f'putative max loops: {math.factorial(n)} / {math.factorial(r)} / {math.factorial(n - r)}')
     putative = int(fac(n) / fac(r) / fac(n - r))
@@ -165,7 +166,6 @@ class NormalizationError(Exception):
 
 class NullGraphError(Exception):
     """Exception raised for null graph."""
-
     pass
 
 
@@ -449,7 +449,10 @@ class FeedbackLoops_3(_Property):
     def norm_biol(self) -> float:
         """Normalize the number of feedback loops of length 3 to the number of non-leaf nodes."""
         non_leafs = len(get_non_leaf_nodes(self.G))
-        max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        if non_leafs >= self._non_leafs_required:
+            max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        else:
+            max_feedbacks3 = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_feedbacks3
 
     @check_raw_value
@@ -486,7 +489,10 @@ class FeedForwardCircuits(_Property):
     def norm_biol(self) -> float:
         """Normalize the number of feed-forward circuits to the number of non-leaf nodes."""
         non_leafs = len(get_non_leaf_nodes(self.G))
-        max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        if non_leafs >= self._non_leafs_required:
+            max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        else:
+            max_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_ff
     
     @check_raw_value
@@ -524,7 +530,10 @@ class ComplexFeedForwardCircuits(_Property):
     def norm_biol(self) -> float:
         """Normalize the number of complex feed-forward circuits to the number of non-leaf nodes."""
         non_leafs = len(get_non_leaf_nodes(self.G))
-        max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        if non_leafs >= self._non_leafs_required:
+            max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=non_leafs, r_non_leafs=self._non_leafs_required)
+        else:
+            max_complex_ff = _max_loops(n=self._n_nodes, r=self._motif_size, non_leafs=self._n_nodes, r_non_leafs=self._non_leafs_required)
         return self._raw_value / max_complex_ff
 
     @check_raw_value
@@ -535,7 +544,6 @@ class ComplexFeedForwardCircuits(_Property):
 
 
 @return_scalar
-@use_giant_component
 class GenesintheGiantComponent(_Property):
     """Number of genes in the giant component.
 
@@ -545,7 +553,7 @@ class GenesintheGiantComponent(_Property):
         norm_network: Normalize the number of genes in the giant component to the number of nodes.
     """
 
-    CLASS_NAME = "Gene % in the Giant Component"
+    CLASS_NAME = "Giant Component Size"
 
     def __init__(self, G: nx.Graph):
         super().__init__(G)
@@ -817,20 +825,12 @@ class RichClub(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> np.array:
-        """
-        dict_coeff = nx.rich_club_coefficient(self.G, normalized=True)
-        self._norm_value = np.fromiter(dict_coeff.values(), dtype=float)
-        """
-        return self._raw_value
+    def norm_biol(self) -> None:
+        raise NotImplementedError
 
     @check_raw_value
-    def norm_network(self) -> np.array:
-        """
-        dict_coeff = nx.rich_club_coefficient(self.G, normalized=True)
-        self._norm_value = np.fromiter(dict_coeff.values(), dtype=float)
-        """
-        return self._raw_value
+    def norm_network(self) -> None:
+        raise NotImplementedError
 
 
 @return_distribution
@@ -873,18 +873,14 @@ class SubgraphCentrality(_Property):
         return self._raw_value
 
     @check_raw_value
-    def norm_biol(self) -> np.array:
-        T = nx.complete_graph(self._n_nodes)
-        max = SubgraphCentrality(T)
-        return self._raw_value / max.compute()
+    def norm_biol(self) -> None:
+        raise NotImplementedError
 
     @check_raw_value
-    def norm_network(self) -> np.array:
+    def norm_network(self) -> None:
         """Normalize the subgraph centrality of the graph to the max value, obtained from a complete graph of the same size"""
 
-        T = nx.complete_graph(self._n_nodes)
-        max = SubgraphCentrality(T)
-        return self._raw_value / max.compute()
+        raise NotImplementedError
 
 
 @return_distribution
@@ -1101,8 +1097,11 @@ class EntropyPKout(_Property):
     @check_raw_value
     def norm_biol(self) -> float:
         """Normalize the entropy of the out-degree distribution to the max theoretical entropy."""
-        biol_h_max = math.log2(self._non_leafs)
-        return self._raw_value / biol_h_max
+        if self._non_leafs > 1:
+            biol_h_max = math.log2(self._non_leafs)
+            return self._raw_value / biol_h_max
+        else:
+            return self._raw_value / self.h_max
     
     @check_raw_value
     def norm_network(self) -> float:

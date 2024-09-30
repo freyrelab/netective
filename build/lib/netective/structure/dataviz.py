@@ -1,18 +1,28 @@
 from __future__ import annotations
-import matplotlib.pyplot as plt
-import numpy as np
-import seaborn as sns
-from netective.logging_info import get_logger, set_log_level
-from matplotlib.ticker import FuncFormatter
-import logging
-import math
 
-def ceil_to_next_power_of_10(number):
-    return 10 ** math.ceil(math.log10(number))
+from netective.logging_info import get_logger, set_log_level
+
+import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize, LinearSegmentedColormap
+from matplotlib.cm import ScalarMappable
+from matplotlib.patches import Patch
+
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import math
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
+
+CATEGORICAL = sns.color_palette("Paired")
+NUMERICAL = "rocket_r"
 
 dataviz_logger = get_logger(__name__)
 
-def format_title(input_str):
+def ceil_to_next_power_of_10(number: int):
+    return 10 ** math.ceil(math.log10(number))
+
+def format_title(input_str: str):
     # Check if the length of the string is greater than 22
     if len(input_str) > 22:
 
@@ -40,9 +50,8 @@ def format_title(input_str):
     else:
         return input_str
 
-
-
-def plot_distributions(dist_values, verbose: str = None):
+# Plotting fxns
+def plot_distributions(dist_values: dict, verbose: str = None, title: str = None):
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
@@ -66,7 +75,7 @@ def plot_distributions(dist_values, verbose: str = None):
         axs = axs.flatten()
 
     # Iterate over the dictionary items and create the subplots
-    for i, (title, data) in enumerate(dist_values.items()):
+    for i, (dist_title, data) in enumerate(dist_values.items()):
         ax = axs[i] if num_items > 1 else axs  # Use a single axis if there's only one item
 
 
@@ -75,7 +84,7 @@ def plot_distributions(dist_values, verbose: str = None):
         ax.scatter(unique, prob, color="#384265", s=30, alpha=0.3)
 
         # sns.kdeplot(data, ax=ax, fill=True, color="#384265")
-        ax.set_title(format_title(title))
+        ax.set_title(format_title(dist_title))
         
         ax.set_ylabel("Probability")
 
@@ -86,15 +95,34 @@ def plot_distributions(dist_values, verbose: str = None):
                 fig.delaxes(axs[j])
             # Adjust spacing between subplots
     fig.tight_layout()
-    fig.suptitle('Node-level Properties', y=1.02, fontsize=16)
+
+    if title is not None:
+        fig.suptitle('Node-level properties', y=1.02, fontsize=14)
     
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
 
     return fig, axs
 
+def plot_scalars(data_dict: dict, verbose: str= None, title: str = None):
+    """_summary_
 
-def plot_scalars(data_dict, verbose: str= None):
+    _extended summary_[#_unique ID_]_
+
+    .. math:: _LaTeX formula_
+
+    Arguments:
+        data_dict (dict): _description_
+        verbose (str): _description_. Defaults to None.
+        title (str): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
+
+    References:
+        .. [#_unique ID_] _pubmed abbr journal title_ _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
+        .. [#_unique ID_] _first-author first-name last-name_ _book title_ (_year_) ISBN:_ISBN_ _http link_
+        .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
     num_ticks = 4
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
@@ -109,9 +137,6 @@ def plot_scalars(data_dict, verbose: str= None):
     # use log scale if more than 30% of the values are below the threshold
     use_log_scale = num_below_threshold > (len(values) / 3) and max(values) > 1
     
-
-
-
     dataviz_logger.info('Plotting global properties...')
     with sns.axes_style("darkgrid"):
         # Create the figure and axes
@@ -137,7 +162,9 @@ def plot_scalars(data_dict, verbose: str= None):
         axs.set_xlim(0, max(values) * 1.1)
         axs.set_xlabel("Values")
         axs.set_ylabel("")
-        axs.set_title("Network-level Properties", loc="center", fontsize=16)
+
+        if title is not None:
+            axs.set_title('Network-level properties', loc="center", fontsize=16)
         if use_log_scale:
             max_log = int(math.log10(ceil_to_next_power_of_10(max(values))))
             tick_locations = np.logspace(0, max_log, max_log-1)
@@ -146,43 +173,132 @@ def plot_scalars(data_dict, verbose: str= None):
         axs.set_xticks(tick_locations)
         # axs.xaxis.set_major_formatter(FuncFormatter(lambda value,_: f'{int(value)}'))
 
-    # plt.tight_layout()
+    plt.tight_layout()
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
     
     return fig, axs
 
+def create_comp_heatmap(distances_df, title: str = None, metric= 'euclidean', method= "ward", features= None, data_type= None, verbose: str = None, compare_to_models: bool = None):
+    """Create a comparison heatmap of the input dataframe.
+    
+    Args:
+        dataframe (pd.DataFrame): The input dataframe.
+        title (str): The title of the heatmap. Defaults to None.
+        method (str): The method to use for clustering. Defaults to 'ward'.
+        features (pd.DataFrame): The input features dataframe. Index must be network names. Defaults to None.
+        data_type (dict): The data type of each feature. Defaults to None.
+        verbose (str): The verbosity level of the logger. Defaults to None.
+        compare_to_models (bool): whether the heatmap is comparing input networks to model analogs. Defaults to None.
 
-# Plotting Fxns
-def create_symmetric_heatmap(dataframe, title: str, method="ward", verbose: str = None):
+    Returns:
+        fig (matplotlib.figure.Figure): The figure containing the heatmap.    
+    """
+
+    # Linkage
+    row_linkage = linkage(distances_df, metric= metric, method= method)
+    color_map = LinearSegmentedColormap.from_list('BlueWhiteRed', ['blue', 'white', 'red']) if compare_to_models else 'bone_r'
+
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
     
-    dataviz_logger.info('Creating symmetric heatmap...')
-    # Create a figure and axes
-    # fig, axs = plt.subplots()
+    dataviz_logger.info('Creating comparison heatmap...')
+    
+    def add_features(features: pd.DataFrame, data_type: dict):
+        color_mappings = {}
+        norms = {}
 
-    # Plot the heatmap
-    try: 
-        g = sns.clustermap(
-            dataframe.astype(float),
-            cmap="Blues",
-            # vmin=0,
-            vmax=1,
-            annot=True if dataframe.shape[0] < 10 else False,
-            fmt=".2f",
-            cbar=True,
-            method=method,
-        )
-    except ValueError:
-        dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
-        raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
+        for col in features.columns:
+            if data_type[col] == 'categorical':
+                # Continue handling categorical columns as before
+                unique_values = features[col].unique()
+                mapping = dict(zip(unique_values, CATEGORICAL[:len(unique_values)]))
+                color_mappings[col] = features[col].map(mapping)
+            else:
+                # Normalize and map each numerical column individually
+                norm = Normalize(vmin=features[col].min(), vmax=features[col].max())
+                norms[col] = norm  # Store the normalization
+                cmap = sns.color_palette(NUMERICAL, as_cmap=True)
+                mappable = ScalarMappable(norm=norm, cmap=cmap)
+                color_mappings[col] = features[col].apply(lambda x: mappable.to_rgba(x))
+
+        # Convert color mappings to DataFrame for row_colors
+        row_colors = pd.DataFrame(color_mappings)
+        # Generate clustermap
+        g = sns.clustermap(distances_df, row_linkage= row_linkage, row_colors= row_colors, col_cluster= False if compare_to_models else True, cmap= color_map, yticklabels= True, xticklabels= False if title else True, figsize= (8, 8), vmax= 1, annot= True if distances_df.shape[0] < 10 else False, fmt= '.2f')
+        
+        # Add colorbars for numerical columns
+        heatmap_bbox = g.ax_heatmap.get_position()
+        dendrogram_bbox = g.ax_row_dendrogram.get_position()
+        row_colors_bbox = g.ax_row_colors.get_position()
+        colorbar_width = 0.02 # each colorbar width 
+        colorbar_spacing = 0.12  # Space between colorbars
+        start_x_position = dendrogram_bbox.width + row_colors_bbox.width + heatmap_bbox.width + 0.025
+        colorbar_counter = 0
+        for col, norm in norms.items():
+            cmap = sns.color_palette(NUMERICAL, as_cmap=True)
+            mappable = ScalarMappable(norm=norm, cmap= cmap)
+            current_x_position = start_x_position + colorbar_counter * (colorbar_width + colorbar_spacing)
+            cbar_ax = g.figure.add_axes([current_x_position, heatmap_bbox.y0, colorbar_width, heatmap_bbox.height])
+            cbar = g.figure.colorbar(mappable, cax= cbar_ax, label= col)
+            cbar.outline.set_visible(False)
+            colorbar_counter += 1
+            cbar_ax.set_ylabel(col, rotation=90, labelpad=2)
+
+        # Add legends for categorical columns
+        current_y_position = heatmap_bbox.height
+        start_x_position = 0.1 * (colorbar_counter + 1) + 1
+        legend_counter = 0
+        legend_height = 0
+        for col, mapping in color_mappings.items():
+            if data_type[col] != 'categorical':
+                continue
+            unique_values = features[col].unique()
+            handles = [Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val) for i, val in enumerate(unique_values)]
+            current_y_position -= legend_height
+            current_x_position = start_x_position + (0.2 * legend_counter)
+            # Aprox height of current legend entry
+            legend_height = (len(unique_values) + 1) * 0.029
+            g.figure.legend(handles=handles, title=col, ncol=1, loc= 'upper center', bbox_to_anchor= (start_x_position, current_y_position, 0.2, 0.05), mode= 'expand', frameon= False, alignment= 'left')
+            legend_counter += 1
+        
+        return g
+
+    if features is not None and data_type is None:
+        dataviz_logger.critical('Data type of each feature is required to plot the heatmap with features. Please provide the data type of each feature as a dictionary.')
+
+    elif features is not None and data_type is not None:
+        try:
+            g = add_features(features= features, data_type= data_type)
+        except ValueError:
+            dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
+            raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
+
+    else:
+        try: 
+            g = sns.clustermap(
+                distances_df,
+                row_linkage= row_linkage,
+                cmap= color_map,
+                vmax= 1,
+                annot= True if distances_df.shape[0] < 10 else False,
+                fmt= '.2f',
+                cbar= True,
+                col_cluster= False if compare_to_models else True,
+                yticklabels= True,
+                xticklabels= False if title else True
+            )
+        except ValueError:
+            dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
+            raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
 
     # Set the title
-    g.ax_heatmap.set_title(title)
+    if title:
+        g.ax_heatmap.set_title(title, y=0, pad=-25, verticalalignment="top")
 
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
-    # Return the figure and axes
-    return g.fig #, g.ax_heatmap
+    
+    # Return the figure
+    return g.figure
