@@ -8,6 +8,10 @@ def _parse_arguments():
     def list_of_strings(arg):
         return [x.strip() for x in arg.split(',')]
     
+    def mixed_list(arg):
+        return [x.strip() if not x.strip().isdigit() else int(x.strip()) for x in arg.split(',')]
+
+    
     def restricted_float(x):
         try:
             x = float(x)
@@ -46,6 +50,7 @@ def _parse_arguments():
         required=True
     )
     
+    #########################################################################################################################
     # create the parser for the "characterize" command
     parser_a = subparsers.add_parser('characterize', help='characterization of inputed network through structural properties.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_a.add_argument(
@@ -65,7 +70,7 @@ def _parse_arguments():
     parser_a.add_argument(
         '-dir', '--directed',
         action= 'store_true',
-        help= 'whether the gold standard and inferences are directed or not.',
+        help= 'whether input networks are directed or not.',
         required= False
     )
         # Selected props
@@ -73,7 +78,7 @@ def _parse_arguments():
         '-p', '--selected_props',
         type= list_of_strings,
         default= ['all'],
-        help= 'list of selected properties used for analysis. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
+        help= 'list of selected properties used for analysis. Accepted format: coma-separated string, written between "s.',
         required= False
     )
         # Workers
@@ -100,6 +105,16 @@ def _parse_arguments():
         choices= ['DEBUG', 'INFO','WARNING', 'ERROR', 'CRITICAL'],
         required= False
     )
+        # Nets files format
+    parser_a.add_argument(
+        '-nff', '--net_f_format',
+        type= str,
+        default= 'edgelist',
+        help= 'nets files format to parse.',
+        choices= ['edgelist', 'graphml', 'adj list', 'multiline adj list'],
+        required= False
+    )
+
         # Comments character in networks files
     parser_a.add_argument(
         '-c','--comments',
@@ -132,6 +147,7 @@ def _parse_arguments():
         required= True,
     )
 
+    ##########################################################################################
     # create the parser for the "compare" command
     parser_b = subparsers.add_parser('compare', help='comparison between multiple networks based on their topologies.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_b.add_argument(
@@ -151,7 +167,7 @@ def _parse_arguments():
     parser_b.add_argument(
         '-dir', '--directed',
         action= 'store_true',
-        help= 'whether the gold standard and inferences are directed or not.',
+        help= 'whether input networks are directed or not.',
         required= False
     )
         # Selected props
@@ -159,7 +175,7 @@ def _parse_arguments():
         '-p', '--selected_props',
         type= list_of_strings,
         default= ['all'],
-        help= 'list of selected properties used for analysis. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
+        help= 'list of selected properties used for analysis. Accepted format: coma-separated string, written between "s.',
         required= False
     )
         # Workers
@@ -177,23 +193,109 @@ def _parse_arguments():
         help= "whether to save dataframes of the properties values for each network analyzed.",
         required= False
     )
+
+        # Association metric
+    parser_b.add_argument(
+        '-a', '--association',
+        type= str,
+        default= 'pearson',
+        help= 'association metric for calculating correlation between scalar properties arrays.',
+        choices= ['pearson', 'spearman', 'cosine'],
+        required= False
+    )
+    # Distance metric
+    parser_b.add_argument(
+        '-mtr','--metric',
+        default= 'euclidean',
+        metavar= 'https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html#scipy.spatial.distance.pdist',
+        type= str,
+        help= 'distance metric to use. See scipy.spatial.distance.pdist() for more info.',
+        choices= ['braycurtis', 
+                  'canberra', 
+                  'chebyshev', 
+                  'cityblock', 
+                  'correlation', 
+                  'cosine', 
+                  'dice', 
+                  'euclidean', 
+                  'hamming', 
+                  'jaccard', 
+                  'jensenshannon', 
+                  'kulczynski1', 
+                  'mahalanobis', 
+                  'matching', 
+                  'minkowski', 
+                  'rogerstanimoto', 
+                  'russellrao', 
+                  'seuclidean', 
+                  'sokalmichener', 
+                  'sokalsneath', 
+                  'sqeuclidean',
+                  'yule'],
+        required= False
+    )
+        # Linkage method
+    parser_b.add_argument(
+        '-m','--method',
+        default= 'ward',
+        type= str,
+        metavar= 'https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html',
+        help= "linkage method to use for calculating clusters. See scipy.clusters.hierarchy.linkage() for more info.",
+        choices= ['single', 
+                  'complete', 
+                  'average', 
+                  'weighted', 
+                  'centroid', 
+                  'median', 
+                  'ward'],
+        required= False
+    )
+        # Compare to models
+    parser_b.add_argument(
+        '-c2m', '--comp2models',
+        type= list_of_strings,
+        default= None,
+        help= 'which random network generators to use to create analogs to each input network for comparison to them. Accepted format: coma-separated string, written between "s. Admitted models are: Erdos GNP, Erdos GNM, K Regular and Barabasi Albert.',
+        required= False
+    )
+        # Number of random models
+    parser_b.add_argument(
+        '-nm', '--n_models',
+        default = 2,
+        type= int,
+        help= 'number of analog networks from each random model to create for each input network.',
+        required= False
+    )
+
+        # m to use in Barabasi Albert algorithm
+    parser_b.add_argument(
+        '-ba', '--m4ba',
+        default= [2],
+        type= mixed_list,
+        help= 'm to use in Barbasi Albert algorithm. It can either be positive integers or degree distributions from each input network. Accepted format: coma-separated string, written between "s. Admitted distributions: in degree, out-degree and undurected degree. String may include several positive integers aswell as any or all distributions.',
+        required= False
+    )
+    
         # Verbose
     parser_b.add_argument(
         '-v','--verbose',
-        type= str,
         default= 'WARNING',
+        type= str,
         help= "level of verbose to handle progress of process. Check logging levels for more information.",
         choices= ['DEBUG', 'INFO','WARNING', 'ERROR', 'CRITICAL'],
         required= False
     )
-        # Erdos Renyi
+    
+        # Nets files format
     parser_b.add_argument(
-        '-er','--erdos_renyi',
-        type= int,
-        default= 0,
-        help= "number of Erdos-Renyi networks to generate for each inputed network.",
+        '-nff', '--net_f_format',
+        type= str,
+        default= 'edgelist',
+        help= 'nets files format to parse.',
+        choices= ['edgelist', 'graphml', 'adj list', 'multiline adj list'],
         required= False
     )
+
         # Comments character in networks files
     parser_b.add_argument(
         '-c','--comments',
@@ -218,6 +320,23 @@ def _parse_arguments():
         help= "path to output directory.",
         required= False
     )
+        # Whether to keep distribution averages in scalars arrays
+    parser_b.add_argument(
+        '-ka', '--keep_averages',
+        action= 'store_true',
+        help= "whether to include distribution averages for global properties to scalar properties array.",
+        required= False
+
+    )
+        # Title for plotting
+    parser_b.add_argument(
+        '-t', '--title',
+        default= None,
+        type= str,
+        help= 'title to include in plots.',
+        required= False
+    )
+        # Input networks
     requiredNamed = parser_b.add_argument_group("required named arguments")
     requiredNamed.add_argument(
         '-i','--input',
@@ -226,6 +345,7 @@ def _parse_arguments():
         required= True,
     )
 
+    ####################################################################################################################
     # create the parser for the "assess" command
     parser_c = subparsers.add_parser('assess', help='statistical evaluation of inferences based on a Gold Standard.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_c.add_argument(
@@ -269,7 +389,7 @@ def _parse_arguments():
     parser_c.add_argument(
         '-dir', '--directed',
         action= 'store_true',
-        help= 'whether the gold standard and inferences are directed or not.',
+        help= 'whether gold standard and inferences are directed or not.',
         required= False
     )
     parser_c.add_argument(
@@ -320,6 +440,7 @@ def _parse_arguments():
         required= False
     )
 
+    ##############################################################################################################################
     # create the parser for the "classify" command
     parser_d = subparsers.add_parser('classify', help='classification of networks into clusters and evaluation of said classification.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_d.add_argument(
@@ -360,13 +481,13 @@ def _parse_arguments():
         help= "t distance for clustering, threshold to apply when forming flat clusters. IMPORTANT: if a threshold is given, no max number of clusters can apply.",
         required= False
     )
-        # Clustering metric
+        # Clustering method
     parser_d.add_argument(
         '-m','--method',
         default= 'ward',
         type= str,
         metavar= 'https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html',
-        help= "method for calculating the distance between the newly formed cluster v and each cluster u. See scipy.clusters.hierarchy.linkage for more info.",
+        help= "linkage method to use for calculating clusters. See scipy.clusters.hierarchy.linkage() for more info.",
         choices= ['single', 
                   'complete', 
                   'average', 
@@ -376,13 +497,13 @@ def _parse_arguments():
                   'ward'],
         required= False
     )
-        # Clustering method
+        # Distance metric
     parser_d.add_argument(
         '-mtr','--metric',
         default= 'euclidean',
         metavar= 'https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html#scipy.spatial.distance.pdist',
         type= str,
-        help= 'distance metric to use. See scipy.spatial.distance.pdist for more info.',
+        help= 'distance metric to use. See scipy.spatial.distance.pdist() for more info.',
         choices= ['braycurtis', 
                   'canberra', 
                   'chebyshev', 
@@ -424,7 +545,7 @@ def _parse_arguments():
             'Entropy of Degree Distribution',
             'Self-Loops'],
         required= False,
-        help= 'list of selected properties used for analysis, defaults to selected properties for best classification. Format accepted: "Gini Index, Density, Average Out-Degree for Nearest Neighbors, etc..."',
+        help= 'list of selected properties used for analysis, defaults to selected properties for best classification. Accepted format: coma-separated string, written between "s.',
     )
         # Workers
     parser_d.add_argument(

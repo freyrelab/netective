@@ -1,20 +1,18 @@
 from __future__ import annotations
-import matplotlib.pyplot as plt
-import numpy as np
-import seaborn as sns
+
 from netective.logging_info import get_logger, set_log_level
-from matplotlib.ticker import FuncFormatter
-import matplotlib as mpl
+
+import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize, LinearSegmentedColormap
+from matplotlib.cm import ScalarMappable
+from matplotlib.patches import Patch
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
-from matplotlib.cm import ScalarMappable
-import matplotlib.gridspec
-import matplotlib.patches as mpatches
-import logging
 import math
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
 
 CATEGORICAL = sns.color_palette("Paired")
 NUMERICAL = "rocket_r"
@@ -52,6 +50,7 @@ def format_title(input_str: str):
     else:
         return input_str
 
+# Plotting fxns
 def plot_distributions(dist_values: dict, verbose: str = None, title: str = None):
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
@@ -104,7 +103,6 @@ def plot_distributions(dist_values: dict, verbose: str = None, title: str = None
         set_log_level(dataviz_logger, current_level)
 
     return fig, axs
-
 
 def plot_scalars(data_dict: dict, verbose: str= None, title: str = None):
     """_summary_
@@ -181,28 +179,31 @@ def plot_scalars(data_dict: dict, verbose: str= None, title: str = None):
     
     return fig, axs
 
-
-# Plotting Fxns
-def create_symmetric_heatmap(dataframe, title: str = None, method="ward", features=None, data_type=None, verbose: str = None):
-    """Create a symmetric heatmap of the input dataframe.
+def create_comp_heatmap(distances_df, title: str = None, metric= 'euclidean', method= "ward", features= None, data_type= None, verbose: str = None, compare_to_models: bool = None):
+    """Create a comparison heatmap of the input dataframe.
     
     Args:
         dataframe (pd.DataFrame): The input dataframe.
-        title (str): The title of the heatmap.
-        method (str): The method to use for clustering.
-        features (pd.DataFrame): The input features dataframe. Index must be network names.
-        data_type (dict): The data type of each feature.
-        verbose (str): The verbosity level of the logger.
+        title (str): The title of the heatmap. Defaults to None.
+        method (str): The method to use for clustering. Defaults to 'ward'.
+        features (pd.DataFrame): The input features dataframe. Index must be network names. Defaults to None.
+        data_type (dict): The data type of each feature. Defaults to None.
+        verbose (str): The verbosity level of the logger. Defaults to None.
+        compare_to_models (bool): whether the heatmap is comparing input networks to model analogs. Defaults to None.
 
     Returns:
         fig (matplotlib.figure.Figure): The figure containing the heatmap.    
     """
 
+    # Linkage
+    row_linkage = linkage(distances_df, metric= metric, method= method)
+    color_map = LinearSegmentedColormap.from_list('BlueWhiteRed', ['blue', 'white', 'red']) if compare_to_models else 'bone_r'
+
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
     
-    dataviz_logger.info('Creating symmetric heatmap...')
+    dataviz_logger.info('Creating comparison heatmap...')
     
     def add_features(features: pd.DataFrame, data_type: dict):
         color_mappings = {}
@@ -225,7 +226,7 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
         # Convert color mappings to DataFrame for row_colors
         row_colors = pd.DataFrame(color_mappings)
         # Generate clustermap
-        g = sns.clustermap(dataframe, row_colors=row_colors, col_cluster=True, cmap="bone_r", yticklabels=False, xticklabels=False, figsize=(8, 8))
+        g = sns.clustermap(distances_df, row_linkage= row_linkage, row_colors= row_colors, col_cluster= False if compare_to_models else True, cmap= color_map, yticklabels= True, xticklabels= False if title else True, figsize= (8, 8), vmax= 1, annot= True if distances_df.shape[0] < 10 else False, fmt= '.2f')
         
         # Add colorbars for numerical columns
         heatmap_bbox = g.ax_heatmap.get_position()
@@ -237,10 +238,10 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
         colorbar_counter = 0
         for col, norm in norms.items():
             cmap = sns.color_palette(NUMERICAL, as_cmap=True)
-            mappable = ScalarMappable(norm=norm, cmap=cmap)
+            mappable = ScalarMappable(norm=norm, cmap= cmap)
             current_x_position = start_x_position + colorbar_counter * (colorbar_width + colorbar_spacing)
             cbar_ax = g.figure.add_axes([current_x_position, heatmap_bbox.y0, colorbar_width, heatmap_bbox.height])
-            cbar = g.figure.colorbar(mappable, cax=cbar_ax, label=col)
+            cbar = g.figure.colorbar(mappable, cax= cbar_ax, label= col)
             cbar.outline.set_visible(False)
             colorbar_counter += 1
             cbar_ax.set_ylabel(col, rotation=90, labelpad=2)
@@ -254,7 +255,7 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
             if data_type[col] != 'categorical':
                 continue
             unique_values = features[col].unique()
-            handles = [mpl.patches.Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val) for i, val in enumerate(unique_values)]
+            handles = [Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val) for i, val in enumerate(unique_values)]
             current_y_position -= legend_height
             current_x_position = start_x_position + (0.2 * legend_counter)
             # Aprox height of current legend entry
@@ -269,7 +270,7 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
 
     elif features is not None and data_type is not None:
         try:
-            g = add_features(features, data_type)
+            g = add_features(features= features, data_type= data_type)
         except ValueError:
             dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
             raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
@@ -277,23 +278,27 @@ def create_symmetric_heatmap(dataframe, title: str = None, method="ward", featur
     else:
         try: 
             g = sns.clustermap(
-                dataframe.astype(float),
-                cmap="bone_r",
-                vmax=1,
-                annot=True if dataframe.shape[0] < 10 else False,
-                fmt=".2f",
-                cbar=True,
-                method=method,
+                distances_df,
+                row_linkage= row_linkage,
+                cmap= color_map,
+                vmax= 1,
+                annot= True if distances_df.shape[0] < 10 else False,
+                fmt= '.2f',
+                cbar= True,
+                col_cluster= False if compare_to_models else True,
+                yticklabels= True,
+                xticklabels= False if title else True
             )
         except ValueError:
             dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
             raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
 
     # Set the title
-    if title is not None:
+    if title:
         g.ax_heatmap.set_title(title, y=0, pad=-25, verticalalignment="top")
 
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
+    
     # Return the figure
     return g.figure

@@ -12,9 +12,9 @@ from __future__ import annotations
 # ]
 
 import os
+import re
 import sys
 import tracemalloc
-import psutil
 import warnings
 import numpy as np
 import pandas as pd
@@ -23,23 +23,33 @@ import igraph as ig
 from tqdm import tqdm
 import concurrent.futures
 from itertools import chain
-from scipy.stats import pearsonr
+from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
-from scipy.stats import kurtosis, skew
+# TODO Incluir las demas correlaciones admitidas (tiene que regresar tupla)
+from scipy.stats import pearsonr, spearmanr, kurtosis, skew
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
 from typing import Union, Callable, Iterable
 
 from netective.logging_info import get_logger, set_log_level
-from netective.structure.dataviz import create_symmetric_heatmap
-
-import logging
+from netective.structure.dataviz import create_comp_heatmap
 
 import matplotlib
 
 concat_path = os.path.join
 
 utils_logger = get_logger(__name__)
+
+CORRELATIONS = {
+    'pearson' : pearsonr,
+    'spearman' : spearmanr,
+    'cosine' : cosine_similarity
+}
+
+class NullGraphError(Exception):
+    """Exception raised for null graph."""
+    pass
+
 
 def run_parallel(f, my_iter, workers, verbose: str = None):
 
@@ -133,7 +143,7 @@ def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph):
     return G
 
 def parse_network(
-    file_path, comments="#", delimiter="\t", directed=True, score=False, use_position_as_score=False
+    file_path, comments="#", delimiter="\t", directed=True, score=False, use_position_as_score=False, net_file_format= 'edgelist'
 ) -> Union(nx.DiGraph, nx.Graph):
     """
     Parse a network file and return a networkx.DiGraph or networkx.Graph depending on the directed parameter.
@@ -145,67 +155,101 @@ def parse_network(
         directed (bool): If True, the network will be a DiGraph, otherwise it will be a Graph.
         score (bool): If True, the network will use the third column of the file as the score of the edge.
         use_position_as_score (bool): If True, the position of the edge in the file will be used as the score of the edge.
+        net_file_format (str): format to read network from file. Accepted formats are: edgelist, graphml, adj list and multiline adj list.
     """
     if score and use_position_as_score:
         utils_logger.critical("score and use_position_as_score cannot be True at the same time.")
         raise ValueError("score and use_position_as_score cannot be True at the same time.")
 
-    if not use_position_as_score:
+    if net_file_format == 'edgelist':
+        if not use_position_as_score:
+            if score:
+                # check if first line has 3 columns
+                with open(file_path, "r") as f:
+                    first_line = f.readline()
+                    cols = first_line.strip().split(delimiter)
+                    if len(cols) < 3:
+                        utils_logger.critical(
+                            f"File {file_path} does not have a score column. Set score=False."
+                        )
+                        raise ValueError(
+                            f"File {file_path} does not have a score column. Set score=False."
+                        )
 
-        if score:
-            # check if first line has 3 columns
+            G = nx.read_edgelist(
+                file_path,
+                comments=comments,
+                delimiter=delimiter,
+                create_using=nx.DiGraph if directed else nx.Graph,
+                data=(("score", float),) if score else False,
+            )
+        else:
+            G = nx.DiGraph() if directed else nx.Graph()
             with open(file_path, "r") as f:
-                first_line = f.readline()
-                cols = first_line.strip().split(delimiter)
-                if len(cols) < 3:
-                    utils_logger.critical(
-                        f"File {file_path} does not have a score column. Set score=False."
-                    )
-                    raise ValueError(
-                        f"File {file_path} does not have a score column. Set score=False."
-                    )
-
-        G = nx.read_edgelist(
-            file_path,
-            comments=comments,
-            delimiter=delimiter,
-            create_using=nx.DiGraph if directed else nx.Graph,
-            data=(("score", float),) if score else False,
-        )
+                for i, line in enumerate(f):
+                    if line.startswith(comments):
+                        continue
+                    cols = line.strip().split(delimiter)
+                    source = cols[0]
+                    target = cols[1]
+                    G.add_edge(source, target, score=i)
+    
+    elif net_file_format == 'graphml':
+        G = nx.read_graphml(file_path)
+    
     else:
-        G = nx.DiGraph() if directed else nx.Graph()
-        with open(file_path, "r") as f:
-            for i, line in enumerate(f):
-                if line.startswith(comments):
-                    continue
-                cols = line.strip().split(delimiter)
-                source = cols[0]
-                target = cols[1]
-                G.add_edge(source, target, score=i)
+        adj_readers = {
+            'multiline adj list' : nx.read_multiline_adjlist,
+            'adj list' : nx.read_adjlist
+        }
+        G = adj_readers[net_file_format](file_path, comments= comments, delimiter= delimiter, create_using= nx.DiGraph if directed else nx.Graph)
+    
+    if G.number_of_edges() == 0:
+        utils_logger.critical(f'Empty graph detected after parsing. It is probably due to an error declaring delimiters or comments in network file -> {file_path}')
+        raise NullGraphError(f'Empty graph detected after parsing. It is probably due to an error declaring delimiters or comments in network file -> {file_path}')
+    
     return G
 
 # Comparison Fxn
 def association(
-    dict_data: dict[str, dict[str, float]], corr_func: Callable(Iterable, Iterable) = pearsonr
+    dict_data: dict[str, dict[str, float]], corr_func: str | Callable(Iterable, Iterable) = 'pearson',
 ) -> pd.DataFrame:
-    """
-    Computes correlation between elements in a dictionary
+    """Computes correlation between elements in a dictionary
 
-    Args:
-        dict_data (dict): dictionary with keys as IDs for each element and values as np.arrays with data.
-        corr_func (function): correlation function desired for analysis. Default is pearsonr from scipy.
+    _extended summary_[#_unique ID_]_
+    Performs correlation between all elements in a dictionary (pairwise).
+    Then calculates a correlation-based distance, for each element, that satisfies the triangle inequality [#OTICBDGEP23].
+    Admitted correlations include: pearson correlation, spearman correlation and cosine similarity.
+
+    .. math:: d = \sqrt[]{1 - \left| \rho \right|} [#OTICBDGEP23]
+    Where \rho is the correlation coefficient.
+
+    Arguments:
+        dict_data (dict[str, dict[str, float]]): dictionary with keys as IDs for each element and values as np.arrays with data.
+        corr_func (str | Callable): correlation function desired for analysis. Defaults to 'pearson'.
+
+    Raises:
+        ValueError: occurs when one or both arrays correlated are constants.
+        TypeError: invalid correlation.
 
     Returns:
-        corr_df (numpy.DataFrame): DataFrame with the correlation results of the input data.
+        pd.DataFrame: correlation-based distance matrix for the input data.
 
-    Note:
+    Notes:
         Correlation function must return either a float with the correlation value
         or an Iterable where the first element is the correlation value.
 
         Correlation function's not optional parameters must only be the two arrays to compare.
+    
+    References:
+        .. [#OTICBDGEP23] *BMC Bioinformatics* 24:40 (2023) https://doi.org/10.1186/s12859-023-05161-y """
 
-        All scipy.stats functions admitted except page_trend_test
-    """
+    # Correlation fxn
+    if corr_func not in CORRELATIONS.keys():
+        utils_logger.critical(f"Correlation function not admitted. Admitted options: {CORRELATIONS.keys()}")
+        raise TypeError(f"Correlation function not admitted. Admitted options: {CORRELATIONS.keys()}")
+    corr_func = CORRELATIONS[corr_func]
+
     # Get the keys (name_dists) from the dictionary
     name_dists = list(dict_data.keys())
 
@@ -231,15 +275,18 @@ def association(
 
             # Calculate Pearson correlation coefficient and p-value
             try:
-                result = corr_func(filtered_array1, filtered_array2)
+                if corr_func != cosine_similarity:
+                    result = corr_func(filtered_array1, filtered_array2)
+                else:
+                    result = corr_func(filtered_array1.reshape(1, -1), filtered_array2.reshape(1, -1))[0][0]
             except TypeError:
                 utils_logger.critical('Correlation function not accepted.')
 
-            accepted_types = (float, Iterable)
+            accepted_types = [(float, Iterable), float]
 
-            if not isinstance(result, accepted_types):
+            if not isinstance(result, accepted_types[0]) and not isinstance(result, accepted_types[1]):
                 utils_logger.critical(
-                    f"Correlation function not admitted, Return Type must be {accepted_types}"
+                    f"Return Type must be {accepted_types}"
                 )
                 raise TypeError(f"Correlation function not admitted, Return Type must be {accepted_types}")
 
@@ -252,7 +299,75 @@ def association(
             corr_df.loc[name_dist1, name_dist2] = corr_coef
             corr_df.loc[name_dist2, name_dist1] = corr_coef
 
-    return corr_df
+    # Calculation of distance ref.
+    dist_df = abs(1 - abs(corr_df))
+    dist_df = round(dist_df.applymap(np.sqrt), 5)
+
+    return dist_df
+
+# Obtaining models abbreviations for filtering
+def get_models_abbreviations(avg_random_scalars_array: dict):
+    # Gets files extensions (dictionary keys extensions)
+    files_prefix = r'Avg_[^_]+_'
+    base_abbreviations = {
+            'GNP' : 'ER GNP',
+            'GNM' : 'ER GNM',
+            'KR' : 'Regular',
+            'BA-out' : 'BA (out-degree)',
+            'BA-in' : 'BA (in-degree)',
+            'BA-degree' : 'BA (degree)'
+        }
+    abbreviations = {}
+    for net_id, _ in avg_random_scalars_array.items():
+        model_abbreviation = re.findall(files_prefix, net_id)[0].split('_')[1]
+        if model_abbreviation not in abbreviations.keys():
+            abbreviations[model_abbreviation] = base_abbreviations[model_abbreviation] if model_abbreviation in base_abbreviations.keys() else model_abbreviation.replace('-', ' ')
+
+    return abbreviations
+
+# Filtering of association df to compare to models fxn
+def filter_association_df_for_models(association_mtrx: pd.DataFrame, abbreviations: dict):
+    files_prefix = r'Avg_[^_]+_'
+    # Final fig names and values for plotting
+    filtered_association = {
+        v : [] for k, v in abbreviations.items()
+    }
+    filtered_association['input networks'] = []
+    for index_name in association_mtrx.index:
+        if index_name.find('Avg') == -1:
+            filtered_columns = [
+                col
+                for col in association_mtrx.columns
+                if index_name == re.sub(files_prefix, '', col)
+            ]
+            row_values = association_mtrx.loc[index_name, filtered_columns]
+            # filtered_association['input networks'].append(index_name.replace('.txt', '').replace('_', ' '))
+            filtered_association['input networks'].append(index_name)
+            for column, value in row_values.items():
+                if column != index_name:
+                    filtered_association[abbreviations[column.split('_')[1]]].append(value)
+            
+    return pd.DataFrame({k : v for k, v in filtered_association.items() if v}, index= filtered_association['input networks']).drop('input networks', axis= 1)
+
+def clean_names_association_df(df):
+    # Auxiliar fxn to remove potential file extensions and replace _ for blank spaces
+    def clean_name(name):
+        # Remove file extensions (.txt, .tsv, .csv, etc.)
+        name = re.sub(r'\.(txt|tsv|csv|xlsx|xls|json|parquet|adjlist|graphml)$', '', name)
+        # Replace _ for blank spaces
+        name = name.replace('_', ' ')
+        return name
+
+    # Limpiar nombres de columnas
+    df.columns = [clean_name(col) for col in df.columns]
+    
+    
+    # Clean row names (if index is an index of names)
+    if df.index.dtype == 'object':
+        df.index = [clean_name(idx) for idx in df.index]
+
+    return df
+
 
 def remove_self_loops(G: nx.DiGraph):
     G.remove_edges_from(nx.selfloop_edges(G))
@@ -446,9 +561,12 @@ def process_netective_properties_files(results_dir: str, title: str, method= 'wa
 
     # Retrieve properties values
     for dir, _, files in os.walk(results_dir):
-        if len(files) % 2 != 0:
-            raise TypeError('No')
+        # if len(files) % 2 != 0:
+        #     raise TypeError('No')
         for f in files:
+            if f.find('_distributions_props') == -1 and f.find('_scalars_props') == -1:
+                utils_logger.warning(f'A file not created by Netective detected, cannot be processed. Skipping: {f}')
+                continue
             temp_dict = {}
             
             # We take advantage of the file extension Netective gives to output files
@@ -498,8 +616,8 @@ def process_netective_properties_files(results_dir: str, title: str, method= 'wa
     association_df = association(scalars_array)
 
     # Symmetric Heatmap
-    scalars_heatmap = create_symmetric_heatmap(
-        dataframe= association_df,
+    scalars_heatmap = create_comp_heatmap(
+        distances_df= association_df,
         method= method,
         title= title
     )
@@ -579,7 +697,6 @@ class ShortestDistances:
             else:
                 return self.__sp.filled()[self.__name2id[v], [self.__name2id[i] for i in u]]
 
-
 class ShortestPaths:
     """Summary."""
 
@@ -641,7 +758,6 @@ class ShortestPaths:
         )
 
 # Effciciency object
-
 class Efficiency:
     """
     Reference:

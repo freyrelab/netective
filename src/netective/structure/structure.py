@@ -5,23 +5,22 @@ import warnings
 import tracemalloc
 import psutil
 import gc
-import uuid
 import inspect
 import hashlib
 import traceback
 import numpy as np
 import pandas as pd
-import matplotlib
+import logging
+import igraph as ig
+import matplotlib.pyplot as plt
 from typing import Tuple
-from warnings import warn
-from networkx import Graph
 from itertools import chain
-from networkx import DiGraph
-from scipy.stats import pearsonr
+from networkx import Graph, DiGraph, number_of_nodes, number_of_edges, is_directed
+from scipy.stats import pearsonr, rv_discrete
 from collections import defaultdict
 from multiprocessing import cpu_count
-from networkx import fast_gnp_random_graph
-
+from typing import Callable
+import uuid
 from netective.structure import properties
 from netective.utils import (
     compute_moments,
@@ -35,19 +34,15 @@ from netective.utils import (
     association,
     common_props_dict,
     get_clusters,
-    sort_files,parse_network,
-    get_allocated_memory
+    sort_files,
+    parse_network,
+    get_allocated_memory,
+    filter_association_df_for_models,
+    get_models_abbreviations,
+    clean_names_association_df
 )
-
-import logging
-
 from netective.logging_info import get_logger
-
-from netective.structure.dataviz import plot_scalars, create_symmetric_heatmap, plot_distributions
-
-import matplotlib.pyplot as plt
-
-from typing import Callable
+from netective.structure.dataviz import plot_scalars, create_comp_heatmap, plot_distributions
 
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
@@ -57,6 +52,8 @@ DIRECTED = 8
 SELF_LOOPS = 4
 GIANT_COMPONENT = 2
 PATHS = 1
+MODELS = ["Erdos GNP", "Erdos GNM", "K Regular", "Barabasi Albert"]
+BARABASI_M = ["out degree", "in degree", "degree"]
 
 struct_logger = get_logger(__name__)
 
@@ -159,7 +156,7 @@ class GraphObserver:
         Initialize the GraphObserver class.
 
         Arguments:
-            G (nx.Graph | nx.Graph): The graph to observe.
+            G (Graph | DiGraph): The graph to observe.
             data (bool): If True, the node/edge data will be considered when computing the hash.
         """
         self.G = G
@@ -171,7 +168,7 @@ class GraphObserver:
         Compute the hash of the graph.
 
         Arguments:
-            G (nx.Graph | nx.DiGraph): The graph to compute the hash.
+            G (Graph | DiGraph): The graph to compute the hash.
 
         Returns:
             str: The hash of the graph.
@@ -190,7 +187,7 @@ class GraphObserver:
         Check if G has changed with reference to the last call.
 
         Arguments:
-            G (nx.Graph | nx.DiGraph): The graph to check. If None, the original graph will be used.
+            G (Graph | DiGraph): The graph to check. If None, the original graph will be used.
             update_G (bool): If True, the graph will be updated to G. If False, the graph will not be updated.
 
         Returns:
@@ -576,12 +573,12 @@ class Structure:
         self.scalar_values = {}
         self.dist_values = {}
         struct_logger.debug('Starting properties computation...')
-        for name, x in instances.items():
-            if x._return_type == 'scalar':
-                self.scalar_values[x.CLASS_NAME] = x.compute()
+        for prop_name, prop in instances.items():
+            if prop._return_type == 'scalar':
+                self.scalar_values[prop.CLASS_NAME] = prop.compute()
             else:
-                self.dist_values[x.CLASS_NAME] = x.compute()
-            struct_logger.debug(f'Finished computing: {x.CLASS_NAME}')
+                self.dist_values[prop.CLASS_NAME] = prop.compute()
+            struct_logger.debug(f'Finished computing: {prop.CLASS_NAME}')
 
         if self.norm_observer.norm is not None:
             self.scalar_values, self.dist_values = self._normalize_props(
@@ -664,112 +661,6 @@ class Structure:
             set_log_level(current_level)
         
         return self._scalar_arrays, self._dist_arrays
-
-def er_nets_per_net_analysis(
-    G: DiGraph | Graph,
-    net_id: str,
-    norm: None | str | pd.Series,
-    erdos_renyi: int = 2,
-    selected_props : str | list = 'all',
-    workers: str | int = "auto",
-    verbose: str = None,
-    include_env: None | dict = None,
-) -> Tuple[dict[str, float | int], dict[str, np.array]]:
-    """Average of Erdos Renyi networks for a given network.
-
-    Call the function er_nets_per_net_analysis to generate erdos_renyi number of ER networks for a given network.
-    The function will compute properties for all ER networks generated, then calculate averages for each property.
-
-    It returns a tuple of dictionaries, one for the average scalar properties and one for the average moments of each distribution.
-
-    Arguments:
-        G (DiGraph or Graph): Network to use as temple for ER networks created.
-        norm (str, optional): Normalization to apply.
-            Valid values are 'network', 'biological' or None. Defaults to None.
-        selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
-        erdos_renyi (int): Number of random graphs to generate with the same number of nodes and density as G. Defaults to 2.
-        workers (int, optional): Number of workers to use. Defaults to 'auto'.
-            Auto performs a quick calculation of potential total memory allocated and determines maximal number of possible cpus.
-            Maximal number of available cpus will always be determined from [1, total cpus).
-        verbose (str, optional): The verbosity level of the logger.
-            View logging levels from Logging library.
-
-    Returns:
-        Tuple[dict[str, float | int], dict[str, np.array]]: Tuple of dictionaries with the network id and the properties of the network.
-    """
-
-    # Creating erdos_renyi number of ER networks, with the same number of nodes, density and direction
-    n = G.number_of_nodes()
-    m = G.number_of_edges()
-    er_networks = {
-        f'ER_model_{i}_{net_id}' : fast_gnp_random_graph(n, m / (n**2))
-        for i in range(erdos_renyi)
-    }
-    
-    # Computing properties for erdos_renyi number of ER networks created
-    struct_logger.warning('--------------------------------------------------------------------------------')
-    struct_logger.warning(f'Starting characterization of {erdos_renyi} ER networks created from: {net_id}...')
-    name_er_scalars_array, name_er_moments_arrays = compare_structure(
-                            networks= er_networks,
-                            norm= norm,
-                            selected_props= selected_props,
-                            workers= workers,
-                            return_prop_dicts= True,
-                            verbose= verbose,
-                            erdos_renyi= None,
-                            include_env= include_env
-    )
-
-    # Determining averages for all scalar properties computed for each ER network
-    properties = {}
-    for i,(temp_net_id, prop) in enumerate(name_er_scalars_array.items()):
-        for prop_name, value in prop.items():
-            if i == 0:
-                properties[prop_name] = []
-            properties[prop_name].append(value)
-    scalars_props_avg = {
-        prop_name : sum(values) / erdos_renyi
-        for prop_name, values in properties.items()
-    }
-    
-    # Determining averages for all distribution properties computed for each ER network
-    properties = {}
-    for i, (temp_net_id, prop)  in enumerate(name_er_moments_arrays.items()):
-        for prop_name, values in prop.items():
-            if i == 0:
-                properties[prop_name] = {
-                    'Average' : [],
-                    'Variation' : [],
-                    'Skewness' : [],
-                    'Kurtosis' : []
-                }
-            for k, value in enumerate(values):
-                if k == 0:
-                    moment = 'Average'
-                elif k == 1:
-                    moment = 'Variation'
-                elif k == 2:
-                    moment = 'Skewness'
-                elif k == 3:
-                    moment = 'Kurtosis'
-                properties[prop_name][moment].append(value)
-
-    dist_props_avg = {}
-    for prop_name, moments in properties.items():
-        dist_props_avg[prop_name] = []
-        for moment, values in moments.items():
-            moment_avg = sum(values) / len(values)
-            dist_props_avg[prop_name].append(moment_avg)
-    
-    # Final dictionaries
-    scalars_avg_er_net = {
-        f'{net_id}_Avg_ER' : scalars_props_avg
-    }
-    dist_avg_er_net = {
-        f'{net_id}_Avg_ER' : dist_props_avg
-    }
-
-    return scalars_avg_er_net, dist_avg_er_net
 
 # Characterization of one network
 def characterize_network(
@@ -854,7 +745,7 @@ def __remove_network_data(G: Graph) -> Graph:
         G.edges[u, v].clear()
     return G
 
-def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, delimiter: str) -> int:
+def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, delimiter: str, nets_file_format: str = 'edgelist') -> int:
     """Calculation of optimal workers for parallelization
 
     Computes a preliminary structural characterization and plotting of the biggest network from the inputed bunch of networks.
@@ -897,7 +788,8 @@ def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, deli
             file_path= sorted_files[0],
             comments= comments,
             delimiter= delimiter,
-            directed= directed
+            directed= directed,
+            net_file_format= nets_file_format
         )
     foo, spam = characterize_network(
         G= net,
@@ -910,7 +802,7 @@ def __get_optimal_workers(nets : str | dict, directed: bool, comments: str, deli
     for net_id, props in spam.items():
         fig_dist, _ = plot_distributions(props, verbose= 'critical')
     snapshot = tracemalloc.take_snapshot()
-    matplotlib.pyplot.close('all')
+    plt.close('all')
     mem_peak = get_allocated_memory(snapshot, filtered= False)
     for i in range(workers, 0, -1):
         if (mem_peak * i) < eighty_percent_available_mem:
@@ -925,7 +817,6 @@ def __batch_processing(
         verbose: str,
         workers: int,
         keep_averages: bool,
-        erdos_renyi: int,
         include_env: dict
     ) -> Tuple[dict[str, float | int], dict[str, np.array]]:
     """Batch processing for parallelization of the structural characterization process
@@ -981,24 +872,491 @@ def __batch_processing(
                 # name_scalars_array[net_id][f'Skewness {prop_name}'] = values[2]
                 # name_scalars_array[net_id][f'Kurtosis {prop_name}'] = values[3]
     
-    if erdos_renyi:
-        if erdos_renyi < 0:
-            struct_logger.critical('Erdos-Renyi argument must be 0 or greater.')
-            raise ValueError("erdos_renyi must be 0 or greater")
-        for net_id, net in networks.items():
-            er_scalars_array, er_name_dist_arrays = er_nets_per_net_analysis(
-                                                                G= net, 
-                                                                net_id= net_id, 
-                                                                norm= norm, 
-                                                                erdos_renyi= erdos_renyi, 
-                                                                selected_props= selected_props,
-                                                                workers= workers,
-                                                                include_env= include_env,
-                                                            )
-            name_scalars_array.update(er_scalars_array)
-            name_dist_arrays.update(er_name_dist_arrays)
-    
     return name_scalars_array, name_dist_arrays
+
+# Random Graph Analog Generator
+def avg_random_nets_per_net(
+    G: DiGraph | Graph | str,
+    net_id: str,
+    norm: None | str | pd.Series,
+    random_model: str | function = None,
+    number_of_random_nets: int =  2,
+    random_graph_parameters: dict = None,
+    ba_m: str | int = 2,
+    selected_props : str | list = 'all',
+    keep_averages: bool = True,
+    workers: int = 2,
+    verbose: str = None,
+    include_env: None | dict = None,
+    nets_file_format: str = 'edgelist',
+    comments: str = '#',
+    delimiter: str = '\t',
+    directed: bool = True,
+    ) -> Tuple[dict[str, float | int], dict[str, np.array]]:
+    """Module-level function to generate and characterize an x number of graph analog networks based on a random model generator.
+
+    Generates an x number of networks based on a an specific model generator using as base some of the characteristics of a given graph.
+
+    .. math:: $$ k = \frac{(2 * n_edges)}{n_nodes} $$ extracted from: $$ edges = \frac{(nodos * k)}{2} $$ [1]
+
+    Arguments:
+        G (DiGraph | Graph | str): network (directed or not) to create random analogs from. | Path to file containing edge list.
+        net_id (str): Name given to the network introduced.
+        norm (None | str | pd.Series): Normalization to apply. Defaults to None.
+            Valid values are 'network', 'biological' or None.
+        random_model (str | function): The random graph generator model that is going to be used.
+            If model required not available, user can introduce their own function generator with the condition it retuns an nx.Graph() or an ig.Graph(). 
+            Choices are "Erdos GNP", "Erdos GNM", "K Regular", "Barabasi Albert". Defaults to None.
+        number_of_random_nets (int): Number of random graphs to generate with some of G properties. Defaults to 2.
+        random_graph_parameters (dict): If random_model is a fuction given by user, user must also give the parameter in a dictionary. Defaults to None.
+        ba_m (str | int): Type of m (integrer or a degree distribution) that is going to be used in Barabasi Albert generator. Defaults to 2.
+            Choices are "out degree", "in degree", "degree" or any positive integrer.
+        selected_props (str | list):  Properties to compute. Defaults to 'all'.
+        keep_averages (bool): Whether to keep the averages of the moments of the distributions. Defaults to True.
+        workers (int): Number of workers to use. Defaults to 2.
+                                IMPORTANT : Introducing a number of workers bigger than available is not going to make 
+                                            the function break, but it will make batch creation incorrect, so computing 
+                                            random models properties may be a little bit slower and consume more memory
+                                            than necesary.
+        verbose (str): The verbosity level of the logger.
+            View logging levels from Logging library.
+        include_env (None | dict): Dictionary with the environment variables to include. Defaults to None.
+        nets_file_format (str): format for the networks files to parse.
+        comments (str): Comment character in edge list file. Defaults to '#'.
+        delimiter (str): Delimiter character in edge list file. Defaults to '\t'.
+        directed (bool): If True, the network will be a DiGraph, otherwise it will be a Graph. Defaults to True.
+    
+    Notes:
+        For "K Regular" algorithm the parameter k has to fulfill the condition: (k * n) % 2 == 0, where k is the final degree for each node and n is the total number of nodes [2]. 
+        Therefore if condition is not met, k will be incremented by a unit.
+
+    Returns:
+        Tuple[dict[str, float | int], dict[str, np.array]]: tuple of dictionaries(average scalar properties, average distributions moments)
+
+    References:
+        ..[1] Albert R., & Barabási A. L. Statistical mechanics of complex networks.(2002). Reviews of modern physics, Vol. 74(1), p.67. 
+        ..[2] Svante J., Tomasz L., & Andrzej R. Random Graphs. (2000). JOHN WILEY & SONS, INC. p.3.
+    """
+    if verbose != None:
+        current_level = struct_logger.getEffectiveLevel()
+        set_log_level(verbose)
+    
+    if callable(random_model):
+        struct_logger.info(f"Starting creation and characterization of {number_of_random_nets} random nets analogs to {net_id} with {random_model.__name__} function...")
+    else:
+        struct_logger.info(f"Starting creation and characterization of {number_of_random_nets} random nets analogs to {net_id} with {random_model} model...")
+
+    # Function to convert from an iGraph object to a networkX graph.
+    def conversion_ig_a_nx(n_nodes,ig_graph):
+        nx_graph = Graph()
+        nx_graph.add_nodes_from(range(n_nodes))
+        nx_graph.add_edges_from(ig_graph.get_edgelist())
+
+        return nx_graph
+
+    # Fuction to generate a list of edges from a given degree distribution and using them to create a Barabasi Albert graph
+    def barabasi_dist_generator(n_nodes,pk_dist):
+        edges = [pk_dist.rvs() for _ in range(n_nodes)]
+        ig_graph = ig.GraphBase.Barabasi(n = n_nodes,m = edges)
+
+        return ig_graph
+    
+    # Veryfing if model generator exists
+    if random_model not in MODELS and not callable(random_model):
+        struct_logger.warning(f"Model: {random_model} not recognized as an available model generator.")
+        return None
+    
+    # Veryfing if the G introduced is valid:
+    if not isinstance(G, (Graph, DiGraph)):
+
+        # If G is a file_path veryfing if path exists.
+        if isinstance(G,str):
+            try:
+                G = parse_network(file_path= G, comments= comments, delimiter= delimiter, directed= directed, net_file_format= nets_file_format)
+            except:
+                struct_logger.warning(f"Error computing graph in path {G}, please verify if file path.")
+                return None 
+        
+        else:
+            struct_logger.warning(f"G must be a networkX graph or digraph, or a file path, imposible to create random_networks.")
+            return None 
+    
+    # Veryfing if it is possible to generate an especific bunch of random networks.
+    if number_of_random_nets <= 0:
+        struct_logger.warning(f"Number of random nets generated must be a positive integrer bigger than 0, changing it to default (2).")
+        number_of_random_nets = 2
+    
+    # Veryfing that number of workers is bigger than 0
+    if workers <= 0:
+        struct_logger.warning(f"Number of workers must be a positive integrer bigger than 0, changing number of workers to default (2).")
+        workers = 2
+    
+    n_nodes = number_of_nodes(G)
+    n_edges = number_of_edges(G)
+
+    if callable(random_model):
+        struct_logger.debug(f"Veryfing that {net_id} analogs can be created by {random_model.__name__} function.")
+    else:
+        struct_logger.debug(f"Veryfing that {net_id} analogs can be created by {random_model} model.")
+    
+    if random_model == 'Erdos GNP':
+
+        # Veryfing if n_nodes are distict of 0 so it can be posible to calculate density of network (p used in model).
+        if n_nodes == 0:
+            struct_logger.warning(f"{net_id} cannot be created using {random_model}. Cannot determine a p from an empty graph.")
+            return None
+        
+        # Veryfing if graph is directed or not to calculate correctly the probability
+        if is_directed(G):
+            p = n_edges / (n_nodes**2)
+        else:
+            p =  n_edges/ (n_nodes ** 2 // 2) 
+
+        model_generator = ig.GraphBase.Erdos_Renyi
+        random_graph_parameters = {
+                'n' : n_nodes,
+                'p' : p,
+        }
+        model_name = "GNP"
+
+    elif random_model == 'Erdos GNM':
+        max_edges = (n_nodes * (n_nodes - 1)) // 2
+
+        # Veryfing that the number of edges introduced to the model are less than n * (n-1) // 2 (max edges in an undirected, no self-loops graph).
+        if n_edges > max_edges:
+            struct_logger.warning(f"{net_id} has more edges than the posible to be computed by {random_model} model. Creating network with {max_edges} edges.")
+            n_edges = max_edges
+        
+        model_generator = ig.GraphBase.Erdos_Renyi
+        random_graph_parameters = {
+                'n' : n_nodes,
+                'm' : n_edges,
+        }
+        model_name = "GNM"
+
+    elif random_model == 'K Regular':
+        
+        # Veryfing if n_nodes are distict of 0 so it can be posible to calculate average degree.
+        if n_nodes == 0:
+            struct_logger.warning(f"{net_id} cannot be created using {random_model}. Cannot determine a k from an empty graph.")
+            return None
+        
+        avg_degree = round((2 * n_edges) / n_nodes)
+
+        # Veryfing if the average degree corresponds to a complete graph with self-loops (k = n), if it does then k is going to be computed as n-1.
+        if avg_degree >= n_nodes:
+            struct_logger.warning(f"{net_id} used with {random_model} generator changed the value of k from {avg_degree} to {n_nodes - 1}. k mustn't be equal to n.")
+            avg_degree = n_nodes - 1
+         
+        if not (avg_degree * n_nodes) % 2 == 0:
+            # The average degree is increased by a single unit so the algorithm is able to resolve network creation.
+            struct_logger.warning(f"{net_id} used with {random_model} generator changed k from {avg_degree} to {avg_degree + 1} so k * n equals an even number.")
+            avg_degree += 1
+        
+        model_generator = ig.GraphBase.K_Regular
+        random_graph_parameters = {
+                'n' : n_nodes,
+                'k' : avg_degree,
+        }
+        model_name = 'KR'
+
+    elif random_model == 'Barabasi Albert':
+
+        if isinstance(ba_m, int):
+
+            # Veryfing that the m introduced is a positive integrer
+            if ba_m < 0:
+                struct_logger.warning(f"The m ({ba_m}) introduced for the Barabasi Albert is invalid, please introduce a positive integrer.")
+                return None
+            
+            model_generator = ig.GraphBase.Barabasi
+            random_graph_parameters = {
+                    'n' : n_nodes,
+                    'm' : ba_m,
+            }
+            model_name = f'BA-{ba_m}'
+        
+        else:
+
+            # Veryfing that the distribution introduced is valid
+            if ba_m not in BARABASI_M:
+                struct_logger.warning(f"The m ({ba_m}) introduced for the Barabasi Albert is invalid.")
+                return None
+            
+            # Veryfing if it possible to obtain a degree distribution from the graph.
+            if n_nodes == 0:
+                struct_logger.warning(f"{net_id} cannot be created by {random_model}-distribution model. Cannot determine degree distribution from an empty graph.")
+                return None
+            
+            # Veryfing if it possible to obtain a directed degree distribution from the graph.
+            if (ba_m == 'out degree' or ba_m == 'in degree') and not is_directed(G):
+                struct_logger.warning(f"Not posible to get out or in degree distribution, because {net_id} is undirected.")
+                return None
+            
+            model_generator = barabasi_dist_generator
+            if ba_m == "out degree":
+                degrees = np.array([degree for _, degree in G.out_degree()])
+                model_name = "BA-out"
+            elif ba_m == "in degree":
+                degrees = np.array([degree for _, degree in G.in_degree()])
+                model_name = "BA-in"
+            elif ba_m == "degree":
+                degrees = np.array([degree for _, degree in G.degree()])
+                model_name = "BA-degree"
+            xk, counts = np.unique(degrees, return_counts= True)
+            pk = counts * (1 / G.number_of_nodes())
+            pk_dist = rv_discrete(name= 'pk_dist', values= (xk, pk))
+            random_graph_parameters = {
+                    'n_nodes' : n_nodes,
+                    'pk_dist' : pk_dist
+            }
+
+    else:
+        # Verification to check if function model is valid
+        try:
+            G_test = random_model(**random_graph_parameters)
+        except:
+            struct_logger.warning(f"The function {random_model.__name__} or random_graph_parameters are incorrect or not valid.")
+            return None
+        if not isinstance(G_test, (Graph, DiGraph)) and not isinstance(G_test,ig.GraphBase):
+            struct_logger.warning(f"The function {random_model.__name__} is not valid, please return a networkX graph or digraph, or an igraph.")
+            return None
+        
+        model_generator = random_model
+        model_name = random_model.__name__
+    
+    name_scalars_array = {}
+    name_distributions_arrays = {}
+    
+    # Counting total number of batches necesary to use minimum space in memory (create only nets that are going to be characterized).
+    complete_batches = number_of_random_nets // workers
+    last_batch = number_of_random_nets % workers
+    
+    if last_batch:
+        total_batches = complete_batches + 1
+        struct_logger.debug(f"Dividing the total number of nets = {number_of_random_nets} into {complete_batches} batches of {workers} nets + one last batch of {last_batch} nets usign {model_name} model, created from: {net_id}...")
+    else:
+        total_batches = complete_batches
+        struct_logger.debug(f"Dividing the total number of nets = {number_of_random_nets} into {total_batches} batches of {workers} nets usign {model_name} model, created from: {net_id}...")
+    
+    struct_logger.warning("--------------------------------------------------------------------------------")
+    struct_logger.warning(f"Starting creation and characterization of {number_of_random_nets} networks usign {model_name} model, created from: {net_id}...")
+
+    # Creating the exact number of nets per batch and sending them to characterize:
+    for batch in range(total_batches):
+        inicial_net = batch * workers
+        if batch < complete_batches:
+            final_net = inicial_net + workers
+        else:
+            final_net = inicial_net + last_batch
+        
+        random_networks = {}
+
+        struct_logger.debug(f"Creating nets of batch no.{batch + 1} and characterizing them...")
+
+        # Creating nets necesary per batch using the introduced model
+        for i in range(inicial_net,final_net):
+            temp_g = model_generator(**random_graph_parameters)
+            if isinstance(temp_g,ig.GraphBase):
+                temp_g = conversion_ig_a_nx(n_nodes, temp_g)
+            random_networks[f'{i}_{model_name}_{net_id}'] = temp_g
+
+        # Sending batch to characterize 
+        temp_name_scalars_array, temp_name_distributions_arrays = compare_structure(
+                            networks= random_networks,
+                            norm= norm,
+                            keep_averages= keep_averages,
+                            selected_props= selected_props,
+                            workers= workers,
+                            return_prop_dicts= True,
+                            verbose= verbose,
+                            include_env= include_env
+        )
+
+        # Saving the characteristics of every net in every batch in 2 dictionaries one for the scalar properties and the other one for distributions
+        name_scalars_array.update(temp_name_scalars_array)
+        name_distributions_arrays.update(temp_name_distributions_arrays)
+    
+    del random_networks
+
+    scalars_avg_random_net = {}
+    moments_avg_random_net = {}
+
+    struct_logger.debug(f"Calculating  the average value of every scalar property ...")
+
+    # Determining averages for all scalar properties computed for each random network
+    properties = {}
+    for i,(temp_net_id, prop) in enumerate(name_scalars_array.items()):
+        for prop_name, value in prop.items():
+            if i == 0:
+                properties[prop_name] = []
+            properties[prop_name].append(value)
+    scalars_props_avg = {
+        prop_name : sum(values) / len(values)
+        for prop_name, values in properties.items()
+    }
+
+    del name_scalars_array
+
+    struct_logger.debug(f"Calculating the moments of each computed distribution...")
+
+    # Calculating distributions moments for each random network
+    name_moments_arrays = {}
+    for temp_net_id, prop  in name_distributions_arrays.items():
+            name_moments_arrays[temp_net_id] = {}
+            for prop_name, array in prop.items():
+                    name_moments_arrays[temp_net_id][prop_name] = compute_moments(array)
+    
+    del name_distributions_arrays
+    
+    struct_logger.debug(f"Calculating the average value of every distribution moment...")
+
+    # Generating the lists of every computed moment for each property
+    properties = {}
+    for i, (temp_net_id, prop)  in enumerate(name_moments_arrays.items()):
+        for prop_name, values in prop.items():
+            if i == 0:
+                properties[prop_name] = {
+                    'Average' : [],
+                    'Variation' : [],
+                    'Skewness' : [],
+                    'Kurtosis' : []
+                }
+            properties[prop_name]['Average'].append(values[0])
+            properties[prop_name]['Variation'].append(values[1])
+            properties[prop_name]['Skewness'].append(values[2])
+            properties[prop_name]['Kurtosis'].append(values[3])
+    
+    del name_moments_arrays
+
+    # Calculating the average of every computed moment for each property
+    moments_props_avg = {}
+    for prop_name, moments in properties.items():
+        moments_props_avg[prop_name] = []
+        for moment, values in moments.items():
+            moment_avg = sum(values) / len(values)
+            moments_props_avg[prop_name].append(moment_avg)
+    
+    # Saving the average of all scalar properties and distributions moments in a dictionaries with the format: {Avg_model_net : {property : value} }
+    scalars_avg_random_net.update({f'Avg_{model_name}_{net_id}': scalars_props_avg})
+    moments_avg_random_net.update({f'Avg_{model_name}_{net_id}': moments_props_avg})
+
+    if verbose != None:
+        set_log_level(current_level)
+
+    return scalars_avg_random_net, moments_avg_random_net              
+
+def characterize_models(
+    networks: dict | str,
+    norm: None | str | pd.Series,
+    compare_to_models: str | function | list = None,
+    n_random_models : int = 2,
+    random_graph_generator_params : dict = None,
+    ba_m : int | str | list = 2,
+    selected_props : str | list = 'all',
+    keep_averages: bool = True,
+    workers: int = 2,
+    verbose: str = None,
+    include_env: None | dict = None,
+    nets_file_format: str = 'edgelist',
+    comments: str = '#',
+    delimiter: str = '\t',
+    directed: bool = True,
+    ) -> Tuple[dict[str, float | int], dict[str, np.array]]:
+    """This functions calls avg_random_nets_per_net with distinct models and parameters.
+
+    Calls avg_random_nets_per_net with every model and conditions introduced for every net in a directory or dictionary of networks, and joins the result of every call in one dictionary.
+
+    Arguments:
+        networks (dict | str): _description_
+        norm (None | str | pd.Series): Normalization to apply. Defaults to None.
+            Valid values are 'network', 'biological' or None.
+        compare_to_models (str | function | list): List of or random graph generator model that is going to be used. Defaults to None.
+        n_random_models (int): Number of random graphs to generate per model and per net. Defaults to 2.
+        random_graph_generator_params (dict): Dictionary of parameter for random model generator if random_model is a fuction given by user. Defaults to None.
+        ba_m (int | str | list): Type of m (integrer or a degree distribution) that is going to be used in Barabasi Albert generator. Defaults to 2.
+            Valid values are "out degree", "in degree", "degree" or any positive integrer.
+        selected_props (str | list):  Properties to compute. Defaults to 'all'.
+        keep_averages (bool): Whether to keep the averages of the moments of the distributions. Defaults to True.
+        workers (int): Number of workers to use. Defaults to 2.
+                                IMPORTANT : Introducing a number of workers bigger than available is not going to make 
+                                            the function break, but it will make batch creation incorrect, so computing 
+                                            random models properties may be a little bit slower and consume more memory
+                                            than necesary.
+        verbose (str): The verbosity level of the logger.
+            View logging levels from Logging library.
+        include_env (None | dict): Dictionary with the environment variables to include. Defaults to None.
+        nets_file_format (str): format for the networks files to parse.
+        comments (str): Comment character in edge list file. Defaults to '#'.
+        delimiter (str): Delimiter character in edge list file. Defaults to '\t'.
+        directed (bool): If True, the network will be a DiGraph, otherwise it will be a Graph. Defaults to True.
+
+    Returns:
+        Tuple[dict[str, float | int], dict[str, np.array]]: tuple of dictionaries(average scalar properties, average distributions moments)
+                                                            containing the average value of scalar properties and distributions moments for
+                                                            every model and condition of every network introduced."""
+
+    if isinstance(networks,str):
+        sorted_files = sort_files(networks)
+        networks = {os.path.basename(net_path): net_path for net_path in sorted_files}
+
+    if not isinstance(compare_to_models, list):
+        compare_to_models = [compare_to_models]
+
+    if not isinstance(ba_m, list):
+        ba_m = [ba_m]
+
+    avg_nets_scalars_arrays = {}
+    avg_nets_moments_arrays = {}
+
+    for net_id, net in networks.items():
+        for model in compare_to_models:
+            if model == "Barabasi Albert":
+                for m in ba_m:
+                    temp_dicts =  avg_random_nets_per_net(
+                                                G= net,
+                                                net_id = net_id,
+                                                norm = norm,
+                                                random_model = model,
+                                                number_of_random_nets =  n_random_models,
+                                                random_graph_parameters = random_graph_generator_params,
+                                                ba_m = m,
+                                                selected_props = selected_props,
+                                                keep_averages = keep_averages,
+                                                workers=workers,
+                                                verbose= verbose,
+                                                include_env= include_env,
+                                                nets_file_format= nets_file_format,
+                                                comments = comments,
+                                                delimiter = delimiter,
+                                                directed = directed,
+                                                )
+                    if temp_dicts is not None:
+                        avg_nets_scalars_arrays.update(temp_dicts[0])
+                        avg_nets_moments_arrays.update(temp_dicts[1])
+            else:
+                temp_dicts =  avg_random_nets_per_net(
+                                            G= net,
+                                            net_id = net_id,
+                                            norm = norm,
+                                            random_model = model,
+                                            number_of_random_nets =  n_random_models,
+                                            random_graph_parameters = random_graph_generator_params,
+                                            selected_props = selected_props,
+                                            keep_averages = keep_averages,
+                                            workers=workers,
+                                            verbose= verbose,
+                                            include_env= include_env,
+                                            nets_file_format= nets_file_format,
+                                            comments = comments,
+                                            delimiter = delimiter,
+                                            directed = directed,
+                                            )
+                if temp_dicts is not None:
+                        avg_nets_scalars_arrays.update(temp_dicts[0])
+                        avg_nets_moments_arrays.update(temp_dicts[1])
+
+    return avg_nets_scalars_arrays, avg_nets_moments_arrays
 
 # Comparison of multiple networks
 def compare_structure(
@@ -1008,9 +1366,15 @@ def compare_structure(
     workers: str | int = "auto",
     include_env: None | dict = None,
     return_prop_dicts: bool = False,
-    association_metric: Callable = pearsonr,
+    association_metric: str | Callable = 'pearson',
+    metric: str = 'euclidean',
+    method: str = 'ward',
+    compare_to_models: str | list = None,
+    n_random_models : int = 2,
+    random_graph_generator_params : dict = None,
+    ba_m : int | str | list = 2,
     verbose: str = None,
-    erdos_renyi : int = 0,
+    nets_file_format: str = 'edgelist',
     comments : str = '#',
     delimiter : str = '\t',
     keep_averages: bool = True,
@@ -1018,43 +1382,8 @@ def compare_structure(
     features: pd.DataFrame = None,
     data_type: dict = None,
     title: str = None
-) -> Tuple[dict, dict] | plt.Figure:
-    """Module-level function to structurally compare multiple networks.
-
-    Returns a tuple of figures, one for the scalar properties and one for the distributions if return_prop_dicts is False.
-    Otherwise, it returns a tuple of dictionaries, one for the scalar properties and one for the distributions.
-
-    Arguments:
-        networks (dict | str): Dictionary of networks to compare | Path to directory containing multiple networks.
-                                IMPORTANT: it is more memory efficient to pass networks as a path rather than a dictionary.
-            {'net_id': DiGraph | Graph}
-        norm (str, optional): Normalization to apply. Defaults to None.
-            Valid values are 'network', 'biological' or None.
-        selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
-        workers (int, optional): Number of workers to use. Defaults to 'auto'.
-                                  IMPORTANT: if networks is a path, workers is also the max. number of networks loaded into
-                                             memory simultaneously at any given moment
-                                             Auto means number of cpu's - 1.
-        include_env (None | dict, optional): Dictionary with the environment variables to include. Defaults to None.
-        return_prop_dicts (bool, optional): Whether to return the properties as dictionaries. Defaults to False.
-            If False, the figures are shown.
-        association_metric (Callable, optional): Function to compute the association between the properties of the networks.
-            Defaults to pearsonr.
-        verbose (str, optional): The verbosity level of the logger. Defaults to None.
-            View logging levels from Logging library.
-        erdos_renyi (int, optional): Number of random graphs to generate with the same number of nodes and density as G. Defaults to 0.
-        comments (str, optional): Character used to indicate the start of a comment. Defaults to '#'.
-        delimiter (str, optional): String used to separate values. Defaults to '\t'.
-        keep_averages (bool, optional): Whether to keep the averages of the moments of the distributions. Defaults to True.
-        directed (bool, optional): Whether the networks are directed. Defaults to True.
-        features (pd.DataFrame, optional): DataFrame with the features of the networks. Defaults to None. Index must be network names.
-        data_type (dict, optional): Dictionary with the data type of each feature. Defaults to None.
-        title (str, optional): Title of the plot. Defaults to None.
-
-    Raises:
-        NormalizationError: Raised if the normalization is not valid.
-        ValueError: Raised if there is not enough data to compare.
-    """
+) -> Tuple[dict, dict] | Tuple[plt.Figure, pd.DataFrame]:
+    
     if verbose != None:
         current_level = struct_logger.getEffectiveLevel()
         set_log_level(verbose)
@@ -1067,146 +1396,129 @@ def compare_structure(
     # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
     child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
 
-    # networks is a dict
-    if isinstance(networks, dict):
-        
-        # handle workers
-        usable_workers = cpu_count() - 1
-        if workers == "auto" or workers > usable_workers:
-            struct_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
-            workers = __get_optimal_workers(
-                nets= networks,
-                directed= directed,
-                comments= comments,
-                delimiter= delimiter
-            )
-        warnings.resetwarnings()
-        
-        struct_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_workers} usable threads detected')
-        if len(networks) <= workers:
-            struct_logger.warning(f'Starting topological characterization of networks: {list(networks.keys())}...')
-            name_scalars_array, name_dist_arrays = __batch_processing(
-                networks= networks,
-                norm= norm,
-                selected_props= selected_props,
-                child_classes= child_classes,
-                verbose= verbose,
-                workers= workers,
-                keep_averages= keep_averages,
-                erdos_renyi= erdos_renyi,
-                include_env= include_env,
-            )
-        else:
-            name_scalars_array = {}
-            name_dist_arrays = {}
-            sub_dict = {}
-            complete_batches = len(networks) // workers
-            last_batch = len(networks) % workers
-            completed = 0
-            for net_id, net in networks.items():
-                sub_dict [net_id] = net
-                if len(networks) > workers and (len(sub_dict) == workers or (len(sub_dict) == last_batch and completed == complete_batches)):
-                        struct_logger.warning(f'Starting topological characterization of networks: {list(sub_dict.keys())}...')
-                        temp_name_scalars_array, temp_name_dist_arrays = __batch_processing(
-                        networks= sub_dict,
-                        norm= norm,
-                        selected_props= selected_props,
-                        child_classes= child_classes,
-                        verbose= verbose,
-                        workers= workers,
-                        keep_averages= keep_averages,
-                        erdos_renyi= erdos_renyi,
-                        include_env= include_env,
-                    )
-                        name_scalars_array.update(temp_name_scalars_array)
-                        name_dist_arrays.update(temp_name_dist_arrays)
-                        sub_dict = {}
-                        completed += 1
+    # handle workers
+    usable_workers = cpu_count() - 1
+    if workers == "auto" or workers > usable_workers:
+        struct_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
+        workers = __get_optimal_workers(
+            nets= networks,
+            directed= directed,
+            nets_file_format= nets_file_format,
+            comments= comments,
+            delimiter= delimiter
+        )
 
-    # networks is a directory path    
-    else:
-        # handle workers
-        usable_workers = cpu_count() - 1
-        if workers == "auto" or workers > usable_workers:
-            struct_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
-            workers = __get_optimal_workers(
-                nets= networks,
-                directed= directed,
-                comments= comments,
-                delimiter= delimiter
-            )
-        
+    # Processing of input networks
+    name_scalars_array = {}
+    name_dist_arrays = {}
+    # networks is a directory path, transforming into dict
+    if isinstance(networks, str):
         sorted_files = sort_files(networks)
-        name_scalars_array = {}
-        name_dist_arrays = {}
-        nets = {}
-        complete_batches = len(sorted_files) // workers
-        last_batch = len(sorted_files) % workers
-        completed = 0
-        for net_path in sorted_files:
-            net_id = os.path.basename(net_path)
-            nets[net_id] = parse_network(
-                file_path= net_path,
-                comments= comments,
-                delimiter= delimiter,
-                directed= directed,
-                use_position_as_score= False
-            )
-
-            # Number of inputed nets is > workers, batch processing
-            if len(sorted_files) > workers and (len(nets) == workers or (len(nets) == last_batch and completed == complete_batches)):
-                struct_logger.warning(f'Starting topological characterization of networks: {list(nets.keys())}...')
-                temp_name_scalars_array, temp_name_moments_arrays = __batch_processing(
-                    networks= nets,
-                    norm= norm,
-                    selected_props= selected_props,
-                    child_classes= child_classes,
-                    verbose= verbose,
-                    workers= workers,
-                    keep_averages= keep_averages,
-                    erdos_renyi= erdos_renyi,
-                    include_env= include_env,
+        networks = {os.path.basename(net_path): net_path for net_path in sorted_files}
+    
+    # Calculations for batch generation
+    net_ids = list(networks.keys())
+    complete_batches = len(net_ids) // workers
+    last_batch = len(net_ids) % workers
+    if last_batch:
+        total_batches = complete_batches + 1
+    else:
+        total_batches = complete_batches
+    
+    # Batch processing of input networks
+    for batch_number in range(total_batches):
+        temp_nets = {}
+        inicial_net = batch_number * workers
+        if batch_number < complete_batches:
+            final_net = inicial_net + workers
+        else:
+            final_net = inicial_net + last_batch
+        
+        struct_logger.debug(f"Creating nets of batch no.{batch_number + 1}/{total_batches} and characterizing them...")
+        # Batch generation
+        for i in range(inicial_net, final_net):
+            net_id = net_ids[i]
+            if isinstance(networks[net_id], str):
+                temp_nets[net_id] = parse_network(
+                    file_path= networks[net_id],
+                    net_file_format= nets_file_format,
+                    comments= comments,
+                    delimiter= delimiter,
+                    directed= directed,
+                    use_position_as_score= False
                 )
-                name_scalars_array.update(temp_name_scalars_array)
-                name_dist_arrays.update(temp_name_moments_arrays)
-                nets = {}
-                completed += 1
-        # Number of inputed nets is <= workers
-        if len(sorted_files) <= workers:
-            struct_logger.warning(f'Starting topological characterization of networks: {list(nets.keys())}...')
-            name_scalars_array, name_dist_arrays = __batch_processing(
-                networks= nets,
+            else:
+                temp_nets[net_id] = networks[net_id]
+        
+        # Topological caracterization of batch 
+        struct_logger.warning(f'Starting topological characterization of networks: {list(temp_nets.keys())}...')
+        temp_arrays = __batch_processing(
+                networks= temp_nets,
                 norm= norm,
                 selected_props= selected_props,
                 child_classes= child_classes,
                 verbose= verbose,
                 workers= workers,
                 keep_averages= keep_averages,
-                erdos_renyi= erdos_renyi,
                 include_env= include_env,
             )
- 
-    if return_prop_dicts:
-        struct_logger.warning(f'If average ERs were computed (enabled by erdos_renyi argument) for each inputed network, the returned distributions array is instead an array with the average distributions moments (Average, Variation, Skewness, Kurtosis).')
-        if verbose != None:
-            set_log_level(current_level)
-        return name_scalars_array, name_dist_arrays
-    
-    # TODO: Optimization:  only compute the common properties
+        name_scalars_array.update(temp_arrays[0])
+        name_dist_arrays.update(temp_arrays[1])
+        del temp_nets
+
+    # In case there are directed and undirected networks in input bunch
     name_scalars_array = common_props_dict(name_scalars_array)
 
-    struct_logger.info('Starting topological comparison and building symmetric heatmap...')
-
-    # Scalar properties
+    # Models generation 
+    if compare_to_models is not None:
+        avg_nets_scalars_arrays, avg_nets_moments_arrays = characterize_models(
+            networks=networks,
+            norm=norm,
+            compare_to_models= compare_to_models,
+            n_random_models= n_random_models,
+            random_graph_generator_params=random_graph_generator_params,
+            ba_m=ba_m,
+            selected_props=selected_props,
+            keep_averages=keep_averages,
+            workers=workers,
+            verbose=verbose,
+            include_env=include_env,
+            nets_file_format= nets_file_format,
+            comments=comments,
+            delimiter=delimiter,
+            directed=directed
+        )
+        avg_nets_scalars_arrays = common_props_dict(avg_nets_scalars_arrays)
+    
+    # Returning of props dict
+    if return_prop_dicts:
+        if verbose != None:
+                set_log_level(current_level)
+        if compare_to_models:
+            return name_scalars_array, name_dist_arrays, avg_nets_scalars_arrays, avg_nets_moments_arrays
+        else:
+            return name_scalars_array, name_dist_arrays
+        
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
-        df = association(name_scalars_array, corr_func=association_metric)
+        if compare_to_models:
+            abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
+            name_scalars_array.update(avg_nets_scalars_arrays)
+            name_scalars_array = common_props_dict(name_scalars_array)
+        
+        association_df = association(name_scalars_array, corr_func= association_metric)
+        
+        if compare_to_models:
+            association_df = filter_association_df_for_models(association_df, abbreviations)
+        
+        association_df = clean_names_association_df(association_df)
 
         if features is not None:
-            fig_scalar = create_symmetric_heatmap(df[df.columns].astype(float), title=title, features=features, data_type=data_type, verbose=verbose)
             # TODO: Why does it need to be converted to float?
+            # fig_scalar = create_symmetric_heatmap(association_df[association_df.columns].astype(float), method= method, title=title, features=features, data_type=data_type, verbose=verbose, compare_to_models= True if compare_to_models else False)
+            fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title=title, features=features, data_type=data_type, verbose=verbose, compare_to_models= True if compare_to_models else False)
         else:
-            fig_scalar = create_symmetric_heatmap(df[df.columns].astype(float), title=title, verbose= verbose)
-    
+            fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title=title, verbose= verbose, compare_to_models= True if compare_to_models else False)
+
     else:
         struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")
@@ -1214,8 +1526,9 @@ def compare_structure(
     if verbose != None:
         set_log_level(current_level)
     
-    return fig_scalar
+    return fig_scalar, association_df
 
+######################################################################
 def classify_networks(
         networks: dict[str, Graph] | str,
         norm: str | None = None,
