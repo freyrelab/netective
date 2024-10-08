@@ -321,9 +321,13 @@ def get_models_abbreviations(avg_random_scalars_array: dict):
         }
     abbreviations = {}
     for net_id, _ in avg_random_scalars_array.items():
-        model_abbreviation = re.findall(files_prefix, net_id)[0].split('_')[1]
-        if model_abbreviation not in abbreviations.keys():
-            abbreviations[model_abbreviation] = base_abbreviations[model_abbreviation] if model_abbreviation in base_abbreviations.keys() else model_abbreviation.replace('-', ' ')
+        try:
+            model_abbreviation = re.findall(files_prefix, net_id)[0].split('_')[1]
+            if model_abbreviation not in abbreviations.keys():
+                abbreviations[model_abbreviation] = base_abbreviations[model_abbreviation] if model_abbreviation in base_abbreviations.keys() else model_abbreviation.replace('-', ' ')
+        except IndexError:
+            # Detected file name that do not correspond to one of model analog
+            pass        
 
     return abbreviations
 
@@ -546,7 +550,7 @@ def common_props_dict(networks):
 
     return new
 
-def process_netective_properties_files(results_dir: str, corr_func: str= 'pearson', metric: str= 'euclidean', method: str= 'ward', compare_to_models: bool= None, features: pd.DataFrame= None, data_type: dict= None, title: str= None)-> matplotlib.figure.Figure:
+def process_netective_properties_files(results_dir: str, corr_func: str= 'pearson', metric: str= 'euclidean', method: str= 'ward', compare_to_models: bool= False, features: pd.DataFrame= None, data_type: dict= None, title: str= None)-> matplotlib.figure.Figure:
     """Utils fxn for processing output properties files created by Netective.
 
     By processing, it is understood comparing the input networks using a clustermap.
@@ -567,16 +571,17 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
     
     scalars_array = {}
     dist_array = {}
+    dist_moments_array = {}
     delimiters = {
         '.tsv' : '\t',
         '.csv' : ',',
         '.txt' : ' ',
     }
 
-    # Retrieve properties values
+    # Retrieve properties values for input networks (not model analogs)
     for dir, _, files in os.walk(results_dir):
         for f in files:
-            if f.find('_distributions_props') == -1 and f.find('_scalars_props') == -1:
+            if f.find('_distributions_props') == -1 and f.find('_scalars_props') == -1 and f.find('_moments_props') == -1:
                 utils_logger.warning(f'A file not created by Netective detected, cannot be processed. Skipping it: {f}')
                 continue
             temp_dict = {}
@@ -586,9 +591,12 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
             if f.find('scalars') != -1:
                 net_name = f.split('_props')[0].split('_scalars')[0].split('.')[0]
                 props_type = 'scalars'
-            else:
+            elif f.find('distributions') != -1:
                 net_name = f.split('_props')[0].split('_distributions')[0].split('.')[0]
                 props_type = 'distributions'
+            else:
+                net_name = f.split('_props')[0].split('_moments')[0].split('.')[0]
+                props_type = 'moments'
             
             # Read Netective props file
             temp_dict[net_name] = pd.read_csv(
@@ -602,8 +610,10 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
             # Update scalars and distributions arrays
             if props_type == 'scalars':
                 scalars_array.update(temp_dict)
-            else:
+            elif props_type == 'distributions':
                 dist_array.update(temp_dict)
+            else:
+                dist_moments_array.update(temp_dict)
     
     # Flatten scalars array
     for net_id, prop in scalars_array.items():
@@ -611,7 +621,7 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
             scalars_array[net_id][prop_id] = float(value[0])
     
     # Compute moments for node-level properties
-    dist_moments_array = {}
+    # dist_moments_array = {}
     for net_id, prop in dist_array.items():
         temp_dict = {}
         temp_dict[net_id] = {}
@@ -619,14 +629,22 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
             temp_dict[net_id][prop_id] = list(compute_moments(data= np.array(distribution)))
         dist_moments_array.update(temp_dict)
     
-    # Add distributions averages to scalars array
+    # Add distributions averages for input networks to scalars array
     for net_id, prop in dist_moments_array.items():
         for prop_id, moments in prop.items():
             scalars_array[net_id][f'Average {prop_id}'] = moments[0]
-    
+
     # Association DataFrame
+    scalars_array = common_props_dict(scalars_array)
     distances_df = association(scalars_array, corr_func)
-    association_df = clean_names_association_df(association_df)
+    if compare_to_models:
+        if not any('Avg' in key for key in scalars_array):
+            utils_logger.warning(f'compare_to_models param set, but no properties files detected for analog models detected in: {results_dir}')
+            compare_to_models = False
+        else:
+            abbreviations = get_models_abbreviations(scalars_array)
+            distances_df = filter_association_df_for_models(distances_df, abbreviations)
+    distances_df = clean_names_association_df(distances_df)
 
     # Comparison Heatmap
     comp_heatmap = create_comp_heatmap(
@@ -635,6 +653,7 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
         method= method,
         features= features,
         data_type= data_type,
+        compare_to_models= compare_to_models,
         title= title
     )
     

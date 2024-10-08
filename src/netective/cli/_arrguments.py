@@ -250,20 +250,33 @@ def _parse_arguments():
                   'ward'],
         required= False
     )
-        # Compare to models
     parser_b.add_argument(
-        '-c2m', '--comp2models',
+        '-im', '--incmodels',
         type= list_of_strings,
         default= None,
         help= 'which random network generators to use to create analogs to each input network for comparison to them. Accepted format: coma-separated string, written between "s. Admitted models are: Erdos GNP, Erdos GNM, K Regular and Barabasi Albert.',
         required= False
     )
-        # Number of random models
+        # Compare to analog random models
+    parser_b.add_argument(
+        '-c2m', '--comp2models',
+        action= 'store_true',
+        help= 'whether to create a comparison heatmap of input networks to model analogs. Default behavior is to create symmetric heatmap of all analyzed networks (input and analogs).',
+        required= False
+    )
+        # Number of analog random models
     parser_b.add_argument(
         '-nm', '--n_models',
         default = 2,
         type= int,
         help= 'number of analog networks from each random model to create for each input network.',
+        required= False
+    )
+        # Direction for random analog models
+    parser_b.add_argument(
+        '-dirm', '--directed_models',
+        action= 'store_true',
+        help= 'whether analog random models will be created using direction, if possible.',
         required= False
     )
 
@@ -322,9 +335,9 @@ def _parse_arguments():
     )
         # Whether to keep distribution averages in scalars arrays
     parser_b.add_argument(
-        '-ka', '--keep_averages',
-        action= 'store_true',
-        help= "whether to include distribution averages for global properties to scalar properties array.",
+        '-noa', '--no_dist_averages',
+        action= 'store_false',
+        help= "whether to exclude distribution averages for global properties to scalar properties array.",
         required= False
 
     )

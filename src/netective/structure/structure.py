@@ -881,6 +881,7 @@ def avg_random_nets_per_net(
     norm: None | str | pd.Series,
     random_model: str | function = None,
     number_of_random_nets: int =  2,
+    directed_models: bool = False,
     random_graph_parameters: dict = None,
     ba_m: str | int = 2,
     selected_props : str | list = 'all',
@@ -908,6 +909,7 @@ def avg_random_nets_per_net(
             If model required not available, user can introduce their own function generator with the condition it retuns an nx.Graph() or an ig.Graph(). 
             Choices are "Erdos GNP", "Erdos GNM", "K Regular", "Barabasi Albert". Defaults to None.
         number_of_random_nets (int): Number of random graphs to generate with some of G properties. Defaults to 2.
+        directed_models (bool): Whether analog models will be created using direction, if possible. Dafaults to False.
         random_graph_parameters (dict): If random_model is a fuction given by user, user must also give the parameter in a dictionary. Defaults to None.
         ba_m (str | int): Type of m (integrer or a degree distribution) that is going to be used in Barabasi Albert generator. Defaults to 2.
             Choices are "out degree", "in degree", "degree" or any positive integrer.
@@ -947,17 +949,17 @@ def avg_random_nets_per_net(
         struct_logger.info(f"Starting creation and characterization of {number_of_random_nets} random nets analogs to {net_id} with {random_model} model...")
 
     # Function to convert from an iGraph object to a networkX graph.
-    def conversion_ig_a_nx(n_nodes,ig_graph):
-        nx_graph = Graph()
+    def conversion_ig_to_nx(n_nodes, ig_graph, directed):
+        nx_graph = DiGraph() if directed else Graph()
         nx_graph.add_nodes_from(range(n_nodes))
         nx_graph.add_edges_from(ig_graph.get_edgelist())
 
         return nx_graph
 
     # Fuction to generate a list of edges from a given degree distribution and using them to create a Barabasi Albert graph
-    def barabasi_dist_generator(n_nodes,pk_dist):
+    def barabasi_dist_generator(n_nodes, pk_dist, directed):
         edges = [pk_dist.rvs() for _ in range(n_nodes)]
-        ig_graph = ig.GraphBase.Barabasi(n = n_nodes,m = edges)
+        ig_graph = ig.GraphBase.Barabasi(n = n_nodes, m = edges, directed = directed)
 
         return ig_graph
     
@@ -999,7 +1001,7 @@ def avg_random_nets_per_net(
     else:
         struct_logger.debug(f"Veryfing that {net_id} analogs can be created by {random_model} model.")
     
-    if random_model == 'Erdos GNP':
+    if random_model == 'Erdos GNP': # May include direction
 
         # Veryfing if n_nodes are distict of 0 so it can be posible to calculate density of network (p used in model).
         if n_nodes == 0:
@@ -1016,10 +1018,11 @@ def avg_random_nets_per_net(
         random_graph_parameters = {
                 'n' : n_nodes,
                 'p' : p,
+                'directed' : directed_models
         }
         model_name = "GNP"
 
-    elif random_model == 'Erdos GNM':
+    elif random_model == 'Erdos GNM': # May include direction
         max_edges = (n_nodes * (n_nodes - 1)) // 2
 
         # Veryfing that the number of edges introduced to the model are less than n * (n-1) // 2 (max edges in an undirected, no self-loops graph).
@@ -1031,10 +1034,11 @@ def avg_random_nets_per_net(
         random_graph_parameters = {
                 'n' : n_nodes,
                 'm' : n_edges,
+                'directed' : directed_models
         }
         model_name = "GNM"
 
-    elif random_model == 'K Regular':
+    elif random_model == 'K Regular': # May be directed
         
         # Veryfing if n_nodes are distict of 0 so it can be posible to calculate average degree.
         if n_nodes == 0:
@@ -1057,10 +1061,11 @@ def avg_random_nets_per_net(
         random_graph_parameters = {
                 'n' : n_nodes,
                 'k' : avg_degree,
+                'directed' : directed_models
         }
         model_name = 'KR'
 
-    elif random_model == 'Barabasi Albert':
+    elif random_model == 'Barabasi Albert': # May include direction
 
         if isinstance(ba_m, int):
 
@@ -1073,6 +1078,7 @@ def avg_random_nets_per_net(
             random_graph_parameters = {
                     'n' : n_nodes,
                     'm' : ba_m,
+                    'directed' : directed_models
             }
             model_name = f'BA-{ba_m}'
         
@@ -1108,7 +1114,8 @@ def avg_random_nets_per_net(
             pk_dist = rv_discrete(name= 'pk_dist', values= (xk, pk))
             random_graph_parameters = {
                     'n_nodes' : n_nodes,
-                    'pk_dist' : pk_dist
+                    'pk_dist' : pk_dist,
+                    'directed' : directed_models
             }
 
     else:
@@ -1158,7 +1165,7 @@ def avg_random_nets_per_net(
         for i in range(inicial_net,final_net):
             temp_g = model_generator(**random_graph_parameters)
             if isinstance(temp_g,ig.GraphBase):
-                temp_g = conversion_ig_a_nx(n_nodes, temp_g)
+                temp_g = conversion_ig_to_nx(n_nodes, temp_g, directed_models)
             random_networks[f'{i}_{model_name}_{net_id}'] = temp_g
 
         # Sending batch to characterize 
@@ -1170,7 +1177,8 @@ def avg_random_nets_per_net(
                             workers= workers,
                             return_prop_dicts= True,
                             verbose= verbose,
-                            include_env= include_env
+                            include_env= include_env,
+                            directed= directed_models
         )
 
         # Saving the characteristics of every net in every batch in 2 dictionaries one for the scalar properties and the other one for distributions
@@ -1249,8 +1257,9 @@ def avg_random_nets_per_net(
 def characterize_models(
     networks: dict | str,
     norm: None | str | pd.Series,
-    compare_to_models: str | function | list = None,
+    include_models: str | function | list = None,
     n_random_models : int = 2,
+    directed_models: bool = False,
     random_graph_generator_params : dict = None,
     ba_m : int | str | list = 2,
     selected_props : str | list = 'all',
@@ -1271,8 +1280,9 @@ def characterize_models(
         networks (dict | str): _description_
         norm (None | str | pd.Series): Normalization to apply. Defaults to None.
             Valid values are 'network', 'biological' or None.
-        compare_to_models (str | function | list): List of or random graph generator model that is going to be used. Defaults to None.
+        include_models (str | function | list): List of or random graph generator model that is going to be used. Defaults to None.
         n_random_models (int): Number of random graphs to generate per model and per net. Defaults to 2.
+        directed_models (bool): Whether analog models will be created using direction, if possible. Dafaults to False.
         random_graph_generator_params (dict): Dictionary of parameter for random model generator if random_model is a fuction given by user. Defaults to None.
         ba_m (int | str | list): Type of m (integrer or a degree distribution) that is going to be used in Barabasi Albert generator. Defaults to 2.
             Valid values are "out degree", "in degree", "degree" or any positive integrer.
@@ -1300,8 +1310,8 @@ def characterize_models(
         sorted_files = sort_files(networks)
         networks = {os.path.basename(net_path): net_path for net_path in sorted_files}
 
-    if not isinstance(compare_to_models, list):
-        compare_to_models = [compare_to_models]
+    if not isinstance(include_models, list):
+        include_models = [include_models]
 
     if not isinstance(ba_m, list):
         ba_m = [ba_m]
@@ -1310,7 +1320,7 @@ def characterize_models(
     avg_nets_moments_arrays = {}
 
     for net_id, net in networks.items():
-        for model in compare_to_models:
+        for model in include_models:
             if model == "Barabasi Albert":
                 for m in ba_m:
                     temp_dicts =  avg_random_nets_per_net(
@@ -1319,6 +1329,7 @@ def characterize_models(
                                                 norm = norm,
                                                 random_model = model,
                                                 number_of_random_nets =  n_random_models,
+                                                directed_models= directed_models,
                                                 random_graph_parameters = random_graph_generator_params,
                                                 ba_m = m,
                                                 selected_props = selected_props,
@@ -1341,6 +1352,7 @@ def characterize_models(
                                             norm = norm,
                                             random_model = model,
                                             number_of_random_nets =  n_random_models,
+                                            directed_models= directed_models,
                                             random_graph_parameters = random_graph_generator_params,
                                             selected_props = selected_props,
                                             keep_averages = keep_averages,
@@ -1369,8 +1381,10 @@ def compare_structure(
     association_metric: str | Callable = 'pearson',
     metric: str = 'euclidean',
     method: str = 'ward',
-    compare_to_models: str | list = None,
+    include_models: str | list = None,
+    compare_to_models: bool = False,
     n_random_models : int = 2,
+    directed_models : bool = False,
     random_graph_generator_params : dict = None,
     ba_m : int | str | list = 2,
     verbose: str = None,
@@ -1469,13 +1483,14 @@ def compare_structure(
     # In case there are directed and undirected networks in input bunch
     name_scalars_array = common_props_dict(name_scalars_array)
 
-    # Models generation 
-    if compare_to_models is not None:
+    # Analog models generation 
+    if include_models is not None:
         avg_nets_scalars_arrays, avg_nets_moments_arrays = characterize_models(
-            networks=networks,
-            norm=norm,
-            compare_to_models= compare_to_models,
+            networks= networks,
+            norm= norm,
+            include_models= include_models,
             n_random_models= n_random_models,
+            directed_models= directed_models,
             random_graph_generator_params=random_graph_generator_params,
             ba_m=ba_m,
             selected_props=selected_props,
@@ -1494,25 +1509,25 @@ def compare_structure(
     if return_prop_dicts:
         if verbose != None:
                 set_log_level(current_level)
-        if compare_to_models:
+        if include_models:
             return name_scalars_array, name_dist_arrays, avg_nets_scalars_arrays, avg_nets_moments_arrays
         else:
             return name_scalars_array, name_dist_arrays
         
     if len(name_scalars_array) > 0 and len(list(name_scalars_array.values())[0]) > 1:
-        if compare_to_models:
-            abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
+        if include_models:
             name_scalars_array.update(avg_nets_scalars_arrays)
             name_scalars_array = common_props_dict(name_scalars_array)
         
         association_df = association(name_scalars_array, corr_func= association_metric)
         
-        if compare_to_models:
+        if compare_to_models: # DF filtering required
+            abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
             association_df = filter_association_df_for_models(association_df, abbreviations)
         
         association_df = clean_names_association_df(association_df)
 
-        fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title= title, features= features, data_type= data_type, verbose= verbose, compare_to_models= True if compare_to_models else False)
+        fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title= title, features= features, data_type= data_type, verbose= verbose, compare_to_models= compare_to_models)
     else:
         struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")

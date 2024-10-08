@@ -150,10 +150,12 @@ def runmode2(args):
     association_metric = args.association
     metric = args.metric
     method = args.method
+    include_models = args.incmodels
     compare_to_models = args.comp2models
     n_random_models = args.n_models
+    directed_models = args.directed_models
     ba_m = args.m4ba
-    keep_averages = args.keep_averages
+    keep_averages = args.no_dist_averages
 
     if verbose is not None:
         set_log_level(cli_logger, verbose)
@@ -176,8 +178,8 @@ def runmode2(args):
     output = args.output
     title = args.title
 
-    if compare_to_models:
-        cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --comp2models {compare_to_models} --n_models {n_random_models} --m4ba {ba_m} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --title {title} --output {output}\n"
+    if include_models:
+        cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --incmodels {include_models} --comp2models {compare_to_models} --n_models {n_random_models} --directed_models {directed_models} --m4ba {ba_m} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --title {title} --output {output}\n"
     else:
         cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --title {title} --output {output}\n"
 
@@ -194,7 +196,7 @@ def runmode2(args):
     cli_logger.warning(f'Multiprocessing enabled in {workers} out of {usable_threads} usable threads detected')
     
     # Networks topological characterization
-    if compare_to_models:
+    if include_models:
         scalars_array, dist_array, avg_nets_scalars_arrays, avg_nets_moments_arrays = compare_structure(
             networks= nets_path, 
             norm= norm, 
@@ -202,8 +204,10 @@ def runmode2(args):
             selected_props= selected_props,
             association_metric= association_metric,
             method= method,
+            include_models= include_models,
             compare_to_models= compare_to_models,
             n_random_models= n_random_models,
+            directed_models= directed_models,
             ba_m= ba_m,
             verbose= verbose,
             return_prop_dicts= True,
@@ -253,7 +257,7 @@ def runmode2(args):
                 delimiter= delimiter,
                 cl= cl
             )
-        if compare_to_models:
+        if include_models:
             for net_id, props in avg_nets_scalars_arrays.items():
                 save_prop_dicts(
                     array= props,
@@ -276,20 +280,22 @@ def runmode2(args):
         scalars_array = common_props_dict(scalars_array)
         
         if len(scalars_array) > 0 and len(list(scalars_array.values())[0]) > 1:
-            if compare_to_models:
-                # Getting abbreviations for filtered names
-                abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
+            if include_models:
+                # In case there are random models that generate directed networks
                 avg_nets_scalars_arrays = common_props_dict(avg_nets_scalars_arrays)
+                
                 scalars_array.update(avg_nets_scalars_arrays)
                 scalars_array = common_props_dict(scalars_array)
             
             association_df = association(scalars_array, corr_func= association_metric)
             
             if compare_to_models:
+                # Getting abbreviations for filtered names
+                abbreviations = get_models_abbreviations(avg_nets_scalars_arrays)
                 association_df = filter_association_df_for_models(association_df, abbreviations)
             
             association_df = clean_names_association_df(association_df)
-            fig_scalars = create_comp_heatmap(association_df, metric= metric, method= method, title= title, verbose= verbose, compare_to_models= True if compare_to_models else False)
+            fig_scalars = create_comp_heatmap(association_df, metric= metric, method= method, title= title, verbose= verbose, compare_to_models= compare_to_models)
             save_figs(fig_scalars, output_dir= output)
             association_df.to_csv(concat_path(output, f'association_df.{exts[delimiter]}'), sep= delimiter)
         else:

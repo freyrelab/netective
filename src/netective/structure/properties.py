@@ -1870,7 +1870,7 @@ class UndirDensity(_Property):
             float: Density of the graph.
         """
         n_edges = self.G.number_of_edges()
-        self._raw_value = n_edges / self._n_nodes**2
+        self._raw_value = n_edges / (self._n_nodes * (self._n_nodes - 1))
         return self._raw_value
 
     @check_raw_value
