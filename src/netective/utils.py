@@ -20,12 +20,12 @@ import tracemalloc
 import warnings
 import numpy as np
 import pandas as pd
+import math as m
 import networkx as nx
 import igraph as ig
 from tqdm import tqdm
 import concurrent.futures
 from itertools import chain
-from sklearn.metrics.pairwise import cosine_similarity
 from collections import defaultdict
 # TODO Incluir las demas correlaciones admitidas (tiene que regresar tupla)
 from scipy.stats import pearsonr, spearmanr, kurtosis, skew
@@ -41,6 +41,11 @@ import matplotlib
 concat_path = os.path.join
 
 utils_logger = get_logger(__name__)
+
+def cosine_similarity(x, y):
+    if len(x) != len(y):
+        raise ValueError("both arrays must have the same length")
+    return m.fsum(x * y) / m.sqrt(m.fsum(x ** 2) * m.fsum(y ** 2))
 
 CORRELATIONS = {
     'pearson' : pearsonr,
@@ -277,10 +282,7 @@ def association(
 
             # Calculate Pearson correlation coefficient and p-value
             try:
-                if corr_func != cosine_similarity:
-                    result = corr_func(filtered_array1, filtered_array2)
-                else:
-                    result = corr_func(filtered_array1.reshape(1, -1), filtered_array2.reshape(1, -1))[0][0]
+                result = corr_func(filtered_array1, filtered_array2)
             except TypeError:
                 utils_logger.critical('Correlation function not accepted.')
 
