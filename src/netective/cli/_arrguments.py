@@ -285,7 +285,7 @@ def _parse_arguments():
         '-ba', '--m4ba',
         default= [2],
         type= mixed_list,
-        help= 'm to use in Barbasi Albert algorithm. It can either be positive integers or degree distributions from each input network. Accepted format: coma-separated string, written between "s. Admitted distributions: in degree, out-degree and undurected degree. String may include several positive integers aswell as any or all distributions.',
+        help= 'm to use in Barbasi Albert algorithm. It can either be positive integers or degree distributions from each input network. Accepted format: coma-separated string, written between "s. Admitted distributions: in degree, out degree and undirected degree. String may include several positive integers aswell as any or all available distributions.',
         required= False
     )
     

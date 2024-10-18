@@ -31,7 +31,7 @@ from collections import defaultdict
 from scipy.stats import pearsonr, spearmanr, kurtosis, skew
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
-from typing import Union, Callable, Iterable
+from typing import Union, Callable, Iterable, Tuple
 
 from netective.logging_info import get_logger, set_log_level
 from netective.structure.dataviz import create_comp_heatmap
@@ -149,21 +149,28 @@ def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph):
         raise TypeError(f"G must have at least one edge. It has {G.size()} edges.")
     return G
 
-def parse_network(
-    file_path, comments="#", delimiter="\t", directed=True, score=False, use_position_as_score=False, net_file_format= 'edgelist'
-) -> Union(nx.DiGraph, nx.Graph):
-    """
-    Parse a network file and return a networkx.DiGraph or networkx.Graph depending on the directed parameter.
+def parse_network(file_path: str, comments:str= "#", delimiter:str="\t", directed:bool= True, score:bool= False, use_position_as_score:bool= False, net_file_format:str= 'edgelist') -> Union[nx.DiGraph, nx.Graph]:
+    """Useful fxn for parsing a network file
 
-    Args:
-        file_path (str): Path to the network file.
-        comments (str): Comment character.
-        delimiter (str): Delimiter character.
-        directed (bool): If True, the network will be a DiGraph, otherwise it will be a Graph.
-        score (bool): If True, the network will use the third column of the file as the score of the edge.
-        use_position_as_score (bool): If True, the position of the edge in the file will be used as the score of the edge.
-        net_file_format (str): format to read network from file. Accepted formats are: edgelist, graphml, adj list and multiline adj list.
-    """
+    Fxn for parsing a network file, robust for several common file formats. It is also robust to ranking of edges when providing an edgelist with scores.
+
+    Arguments:
+        file_path (str): path to the network file.
+        comments (str): comment character. Defaults to "#".
+        delimiter (str): delimiter character. Defaults to "\t".
+        directed (bool): whether the network will be created with nx.Graph or nx.DiGraph. Defaults to True.
+        score (bool): if True, the network will use the third column of the file as the score of the edge. Defaults to False.
+        use_position_as_score (bool): if True, the position of the edge in the file will be used as the score of the edge.. Defaults to False.
+        net_file_format (str): format to read network from file. Accepted formats are: edgelist, graphml, adj list and multiline adj list. Defaults to 'edgelist'.
+
+    Raises:
+        ValueError: _description_
+        ValueError: _description_
+        NullGraphError: _description_
+
+    Returns:
+        Union[nx.DiGraph, nx.Graph]: networkx object."""
+
     if score and use_position_as_score:
         utils_logger.critical("score and use_position_as_score cannot be True at the same time.")
         raise ValueError("score and use_position_as_score cannot be True at the same time.")
@@ -219,7 +226,7 @@ def parse_network(
 
 # Comparison Fxn
 def association(
-    dict_data: dict[str, dict[str, float]], corr_func: str | Callable(Iterable, Iterable) = 'pearson',
+    dict_data: dict[str, dict[str, float]], corr_func: str | Callable[Iterable, Iterable] = 'pearson',
 ) -> pd.DataFrame:
     """Computes correlation between elements in a dictionary
 
@@ -310,7 +317,15 @@ def association(
     return dist_df
 
 # Obtaining models abbreviations for filtering
-def get_models_abbreviations(avg_random_scalars_array: dict):
+def get_models_abbreviations(avg_random_scalars_array: dict)-> dict:
+    """Useful fxn to determine which random analog models were successfully created and return their abbreviations for plotting
+
+    Arguments:
+        avg_random_scalars_array (dict): dictionary of all average analog random models created succesfully.
+
+    Returns:
+        dict: dictionary with abbreviations tu use."""
+
     # Gets files extensions (dictionary keys extensions)
     files_prefix = r'Avg_[^_]+_'
     base_abbreviations = {
@@ -334,22 +349,35 @@ def get_models_abbreviations(avg_random_scalars_array: dict):
     return abbreviations
 
 # Filtering of association df to compare to models fxn
-def filter_association_df_for_models(association_mtrx: pd.DataFrame, abbreviations: dict):
+def filter_association_df_for_models(distances_df: pd.DataFrame, abbreviations: dict)-> pd.DataFrame:
+    """Useful fxn for reshaping a squared distances DataFrame in a specific way
+
+    When the user sets the compare_to_models param to True, the squared distances DataFrame has to be filtered to represent only
+    distances of each input network to each analog random model determined by the user. Many distance values (input networks to
+    each other, models to each other, input networks to other input network's analog model) will be lost after calling this fxn.
+
+
+    Arguments:
+        distances_df (pd.DataFrame): squared distances DataFrame containing input networks and analog random models.
+        abbreviations (dict): dictionary containing set abbreviations for random models. Changes every run and depends on implemented random models.
+
+    Returns:
+        pd.DataFrame: filtered distances DataFrame of each input network to it(s) analog random models."""
+    
     files_prefix = r'Avg_[^_]+_'
     # Final fig names and values for plotting
     filtered_association = {
         v : [] for k, v in abbreviations.items()
     }
     filtered_association['input networks'] = []
-    for index_name in association_mtrx.index:
+    for index_name in distances_df.index:
         if index_name.find('Avg') == -1:
             filtered_columns = [
                 col
-                for col in association_mtrx.columns
+                for col in distances_df.columns
                 if index_name == re.sub(files_prefix, '', col)
             ]
-            row_values = association_mtrx.loc[index_name, filtered_columns]
-            # filtered_association['input networks'].append(index_name.replace('.txt', '').replace('_', ' '))
+            row_values = distances_df.loc[index_name, filtered_columns]
             filtered_association['input networks'].append(index_name)
             for column, value in row_values.items():
                 if column != index_name:
@@ -357,8 +385,15 @@ def filter_association_df_for_models(association_mtrx: pd.DataFrame, abbreviatio
             
     return pd.DataFrame({k : v for k, v in filtered_association.items() if v}, index= filtered_association['input networks']).drop('input networks', axis= 1)
 
-def clean_names_association_df(df):
-    # Auxiliar fxn to remove potential file extensions and replace _ for blank spaces
+def clean_names_association_df(df: pd.DataFrame)-> pd.DataFrame:
+    """Useful fxn to remove potential file extensions and replace _ for blank spaces
+
+    Arguments:
+        df (pd.DataFrame): original names DataFrame.
+
+    Returns:
+        pd.DataFrame: DataFrame with pretty names."""
+    
     def clean_name(name):
         # Remove file extensions (.txt, .tsv, .csv, etc.)
         name = re.sub(r'\.(txt|tsv|csv|xlsx|xls|json|parquet|adjlist|graphml)$', '', name)
@@ -552,24 +587,26 @@ def common_props_dict(networks):
 
     return new
 
-def process_netective_properties_files(results_dir: str, corr_func: str= 'pearson', metric: str= 'euclidean', method: str= 'ward', compare_to_models: bool= False, features: pd.DataFrame= None, data_type: dict= None, title: str= None)-> matplotlib.figure.Figure:
+def process_netective_properties_files(results_dir: str, return_props_dict= False, corr_func: str= 'pearson', metric: str= 'euclidean', method: str= 'ward', add_averages: bool= False, compare_to_models: bool= False, features: pd.DataFrame= None, data_type: dict= None, title: str= None)-> Union[dict, Tuple[matplotlib.figure.Figure, pd.DataFrame]]:
     """Utils fxn for processing output properties files created by Netective.
 
     By processing, it is understood comparing the input networks using a clustermap.
 
     Arguments:
         results_dir (str): directory path with output properties files created by Netective.
+        return_props_dict (bool): whether to return scalars properties arrays for input networks (and) random analog models in directory.
         corr_func (str): correlation metric to use to correlate properties' arrays between networks. Defaults to 'pearson'.
         metric (str): distance metric to use . Defaults to 'euclidean'.
         method (str): method to use for clustering. Defaults to "ward".
-        compare_to_models (bool): whether the heatmap is comparing input networks to model analogs. Defaults to None.
+        add_averages (bool): whether to include averages from distribution or distribution moments files to scalars arrays. Defaults to False.
+        compare_to_models (bool): whether the heatmap is comparing input networks to model analogs. Defaults to False.
         features (pd.DataFrame): input features dataframe. Defaults to None.
         data_type (dict): data type of each feature. Defaults to None.
         verbose (str): verbosity level of the logger. Defaults to None.
         title (str): title of the heatmap. Defaults to None.
 
     Returns:
-        matplotlib.figure.Figure: figure containing the heatmap."""
+        Union[dict, Tuple[matplotlib.figure.Figure, pd.DataFrame]]: dict with scalar properties arrays or figure containing the heatmap and distances dataframe."""
     
     scalars_array = {}
     dist_array = {}
@@ -623,7 +660,6 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
             scalars_array[net_id][prop_id] = float(value[0])
     
     # Compute moments for node-level properties
-    # dist_moments_array = {}
     for net_id, prop in dist_array.items():
         temp_dict = {}
         temp_dict[net_id] = {}
@@ -631,11 +667,15 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
             temp_dict[net_id][prop_id] = list(compute_moments(data= np.array(distribution)))
         dist_moments_array.update(temp_dict)
     
-    # Add distributions averages for input networks to scalars array
-    for net_id, prop in dist_moments_array.items():
-        for prop_id, moments in prop.items():
-            scalars_array[net_id][f'Average {prop_id}'] = moments[0]
+    if add_averages:
+        # Add distributions averages for input networks to scalars array
+        for net_id, prop in dist_moments_array.items():
+            for prop_id, moments in prop.items():
+                scalars_array[net_id][f'Average {prop_id}'] = moments[0]
 
+    if return_props_dict:
+        return scalars_array
+    
     # Association DataFrame
     scalars_array = common_props_dict(scalars_array)
     distances_df = association(scalars_array, corr_func)
@@ -659,7 +699,7 @@ def process_netective_properties_files(results_dir: str, corr_func: str= 'pearso
         title= title
     )
     
-    return comp_heatmap
+    return comp_heatmap, distances_df
 
 # Paths objects
 class ShortestDistances:

@@ -13,13 +13,12 @@ import pandas as pd
 import logging
 import igraph as ig
 import matplotlib.pyplot as plt
-from typing import Tuple
 from itertools import chain
 from networkx import Graph, DiGraph, number_of_nodes, number_of_edges, is_directed
 from scipy.stats import pearsonr, rv_discrete
 from collections import defaultdict
 from multiprocessing import cpu_count
-from typing import Callable
+from typing import Callable, Tuple, Union
 import uuid
 from netective.structure import properties
 from netective.utils import (
@@ -46,6 +45,7 @@ from netective.structure.dataviz import plot_scalars, create_comp_heatmap, plot_
 
 # Constants
 NORM_OPTIONS = [None, "network", "biological"]
+CORRELATION_OPTIONS = ['pearson', 'spearman', 'cosine']
 PARENT_CLASS = properties._Property
 MOTIFS = 16
 DIRECTED = 8
@@ -1373,11 +1373,13 @@ def characterize_models(
 # Comparison of multiple networks
 def compare_structure(
     networks: dict | str,
+    directed: bool = True,
     norm: str | None = None,
     selected_props: str | list = "all",
     workers: str | int = "auto",
     include_env: None | dict = None,
     return_prop_dicts: bool = False,
+    keep_averages: bool = True,
     association_metric: str | Callable = 'pearson',
     metric: str = 'euclidean',
     method: str = 'ward',
@@ -1391,12 +1393,53 @@ def compare_structure(
     nets_file_format: str = 'edgelist',
     comments : str = '#',
     delimiter : str = '\t',
-    keep_averages: bool = True,
-    directed: bool = True,
     features: pd.DataFrame = None,
     data_type: dict = None,
     title: str = None
-) -> Tuple[dict, dict] | Tuple[plt.Figure, pd.DataFrame]:
+) -> Union[Tuple[dict, dict], Tuple[dict, dict, dict, dict], Tuple[plt.Figure, pd.DataFrame]]:
+    """Structural characterization-based networks' comparison
+
+    _extended summary_[#_unique ID_]_
+
+    .. math:: _LaTeX formula_
+
+    Arguments:
+        networks (dict | str): _description_
+        directed (bool): _description_. Defaults to True.
+        norm (str | None): _description_. Defaults to None.
+        selected_props (str | list): _description_. Defaults to "all".
+        workers (str | int): _description_. Defaults to "auto".
+        include_env (None | dict): _description_. Defaults to None.
+        return_prop_dicts (bool): _description_. Defaults to False.
+        keep_averages (bool): _description_. Defaults to True.
+        association_metric (str | Callable): _description_. Defaults to 'pearson'.
+        metric (str): _description_. Defaults to 'euclidean'.
+        method (str): _description_. Defaults to 'ward'.
+        include_models (str | list): _description_. Defaults to None.
+        compare_to_models (bool): _description_. Defaults to False.
+        n_random_models (int): _description_. Defaults to 2.
+        directed_models (bool): _description_. Defaults to False.
+        random_graph_generator_params (dict): _description_. Defaults to None.
+        ba_m (int | str | list): _description_. Defaults to 2.
+        verbose (str): _description_. Defaults to None.
+        nets_file_format (str): _description_. Defaults to 'edgelist'.
+        comments (str): _description_. Defaults to '#'.
+        delimiter (str): _description_. Defaults to '\t'.
+        features (pd.DataFrame): _description_. Defaults to None.
+        data_type (dict): _description_. Defaults to None.
+        title (str): _description_. Defaults to None.
+
+    Raises:
+        properties.NormalizationError: _description_
+        ValueError: _description_
+
+    Returns:
+        Union[Tuple[dict, dict], Tuple[dict, dict, dict, dict], Tuple[plt.Figure, pd.DataFrame]]: _description_
+
+    References:
+        .. [#_unique ID_] *_pubmed abbr journal title_* _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
+        .. [#_unique ID_] _first-author first-name last-name_ *_book title_* (_year_) ISBN:_ISBN_ _http link_
+        .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
     
     if verbose != None:
         current_level = struct_logger.getEffectiveLevel()
@@ -1405,6 +1448,10 @@ def compare_structure(
     if norm not in NORM_OPTIONS:
         struct_logger.critical("Normalization not valid")
         raise properties.NormalizationError("Normalization not valid")
+    
+    if association_metric not in CORRELATION_OPTIONS:
+        struct_logger.warning(f'Correlation metric: {association_metric}, not valid. Setting default pearson correlation coefficient.')
+        association_metric = 'pearson'
 
     # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
     # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
@@ -1425,7 +1472,7 @@ def compare_structure(
     # Processing of input networks
     name_scalars_array = {}
     name_dist_arrays = {}
-    # networks is a directory path, transforming into dict
+    # networks is a directory path, transforming into dict, NOT parsing networks yet
     if isinstance(networks, str):
         sorted_files = sort_files(networks)
         networks = {os.path.basename(net_path): net_path for net_path in sorted_files}
@@ -1557,8 +1604,8 @@ def classify_networks(
         workers: str | int = "auto",
         get_clusters_kargs: dict = None,
 ) -> dict:
-    """
-    Module-level function to classify multiple networks.
+    """Module-level function to classify multiple networks.
+    
     Returns groups of networks with similar properties.
 
     Arguments:

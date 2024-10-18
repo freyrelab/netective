@@ -231,7 +231,7 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
         # Convert color mappings to DataFrame for row_colors
         row_colors = pd.DataFrame(color_mappings)
         # Generate clustermap
-        g = sns.clustermap(distances_df, row_linkage= row_linkage, row_colors= row_colors, col_cluster= False if compare_to_models else True, cmap= color_map, yticklabels= True, xticklabels= False if title else True, figsize= (8, 8), vmax= 1, annot= True if distances_df.shape[0] < 10 else False, fmt= '.2f')
+        g = sns.clustermap(distances_df, row_linkage= row_linkage, row_colors= row_colors, col_cluster= False if compare_to_models else True, cmap= color_map, yticklabels= True, xticklabels= False if title else True, figsize= (8, 8), annot= True if distances_df.shape[0] < 10 else False, fmt= '.2f')
         
         # Add colorbars for numerical columns
         heatmap_bbox = g.ax_heatmap.get_position()
@@ -287,7 +287,7 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
                 distances_df,
                 row_linkage= row_linkage,
                 cmap= color_map,
-                vmax= 1,
+                # vmax= 1,
                 annot= True if distances_df.shape[0] < 10 else False,
                 fmt= '.2f',
                 cbar= True,
