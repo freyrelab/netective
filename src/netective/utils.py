@@ -673,11 +673,11 @@ def process_netective_properties_files(results_dir: str, return_props_dict= Fals
             for prop_id, moments in prop.items():
                 scalars_array[net_id][f'Average {prop_id}'] = moments[0]
 
+    scalars_array = common_props_dict(scalars_array)
     if return_props_dict:
         return scalars_array
     
     # Association DataFrame
-    scalars_array = common_props_dict(scalars_array)
     distances_df = association(scalars_array, corr_func)
     if compare_to_models:
         if not any('Avg' in key for key in scalars_array):
