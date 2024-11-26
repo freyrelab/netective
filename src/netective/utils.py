@@ -34,7 +34,7 @@ from scipy.cluster.hierarchy import linkage, fcluster
 from typing import Union, Callable, Iterable, Tuple
 
 from netective.logging_info import get_logger, set_log_level
-from netective.structure.dataviz import create_comp_heatmap
+from netective.structure.dataviz import create_comp_heatmap, create_scalar_dist_plot
 
 import matplotlib
 
@@ -139,7 +139,7 @@ def sort_files(path: str):
     
     return files_paths
 
-def validate_network(G: nx.DiGraph | nx.Graph) -> Union(nx.DiGraph, nx.Graph):
+def validate_network(G: nx.DiGraph | nx.Graph) -> Union[nx.DiGraph, nx.Graph]:
     """Validates the network and returns a DiGraph or Graph object."""
     if not isinstance(G, (nx.Graph, nx.DiGraph)):
         utils_logger.critical("G must be a DiGraph or a Graph")
@@ -348,6 +348,91 @@ def get_models_abbreviations(avg_random_scalars_array: dict)-> dict:
 
     return abbreviations
 
+
+# Creation and Filtering of necesary data to plot scalar properties distribution
+def get_scalar_props_df(scalars_array: dict, ignore_models: bool = False, compare_to_models: bool = False, averages: bool = False) -> pd.DataFrame:
+    """Creates a Dataframe of the scalar properties distribution
+    
+    Creates 1 of 4 distinct shape of Dataframes using a dict with all scalar props per net extracted by 
+    netective.utils.process_netective_properties_files . The returned Dataframe serves as the input for 
+    netective.dataviz.create_scalar_props_plot .
+    
+    Shapes of Dataframes returned:
+        - Complete: (Default behavior) Returns a Dataframe with all scalar properties values of all nets including 
+                    (if part of scalars_array) the random models props. In this type of Dataframe
+                    index = Properties name and columns = Net ID. 
+        - Filtered: Same style format as complete but excluding random models.
+        - Groups:   Creates a long-Dataframe in which 1st column indicates to which group the net belongs 
+                    to (whether they are Input nets or belong to a random model), the second column indicates
+                    the scalar property and the third column stores the value of that prop.
+        - Averages: Creates a Dataframe in which each columns belongs to an especific group 
+                    (whether they are Input nets or belong to a random model) and the values in each cell are 
+                    the average of all nets in each group for that respective property.
+
+    Arguments:
+        scalars_array (dict): dict with all scalar props per net extracted by netective.utils.process_netective_properties_files
+        ignore_models (bool): Whether to create Filtered Dataframe or Complete Dataframe. Defaults to False.
+        compare_to_models (bool): Whether to create Groups Dataframe. Defaults to False.
+        averages (bool): Whether to create averages Dataframe. Defaults to False.
+
+    Notes:
+        Mutually exclusive params set to True (returns None):
+            - compare_to_models and averages 
+
+    Returns:
+        Union[pd.DataFrame, None]: Returns 1 of the 4 types of Dataframes described above depending on the selected parameters or 
+                                   None when mutually exclusive params detected."""
+    
+    # Checks mutually exclusive params
+    if compare_to_models and averages:
+        utils_logger.warning('Cannot create a Dataframe with mutually exclusive params detected: compare_to_models and averages')
+        return None
+    
+    # Creates Complete or Filtered Dataframe
+    if not compare_to_models and not averages:
+        if ignore_models: 
+            return clean_names_association_df(pd.DataFrame({net_id : props for net_id, props in scalars_array.items() if net_id.find('Avg_') == -1}))
+        return clean_names_association_df(pd.DataFrame(scalars_array))
+    
+    # Divides networks into groups (whether they are Input nets or belong to a random model)
+    models_abbreviation = get_models_abbreviations(scalars_array)
+    groups = {}
+    for net_id in scalars_array:
+        groups[net_id] = {}
+        if net_id.find('Avg_') != -1:
+            model = net_id.split('_')[1]
+            groups[net_id]['group'] = models_abbreviation[model]
+        else:
+            groups[net_id]['group'] = 'Input'
+
+    # Creates Groups Dataframe
+    if compare_to_models and not averages:
+        return pd.concat([pd.DataFrame(scalars_array).T,pd.DataFrame(groups).T], axis=1).melt(id_vars='group', var_name='property', value_name='value')
+
+    # Creates Averages Dataframe
+
+    group_names = set(groups[net_id]['group'] for net_id in groups)   
+    group_values = {group : {} for group in group_names}
+    group_averages = {group : {} for group in group_names}
+
+    # Get list of values per prop per group.
+    for net_id, props in scalars_array.items():
+        for prop_id, value in props.items():
+            if prop_id not in group_values[groups[net_id]['group']].keys():
+                group_values[groups[net_id]['group']][prop_id] = []
+            group_values[groups[net_id]['group']][prop_id].append(value)
+
+    # Calculates the average of each props values for every group
+    group_averages = {
+    group : {
+            prop_id : np.mean(values)
+            for prop_id, values in props.items()
+        }
+        for group, props in group_values.items()
+        }
+
+    return pd.DataFrame(group_averages)
+
 # Filtering of association df to compare to models fxn
 def filter_association_df_for_models(distances_df: pd.DataFrame, abbreviations: dict)-> pd.DataFrame:
     """Useful fxn for reshaping a squared distances DataFrame in a specific way
@@ -384,6 +469,33 @@ def filter_association_df_for_models(distances_df: pd.DataFrame, abbreviations: 
                     filtered_association[abbreviations[column.split('_')[1]]].append(value)
             
     return pd.DataFrame({k : v for k, v in filtered_association.items() if v}, index= filtered_association['input networks']).drop('input networks', axis= 1)
+
+def filter_properties(props_dict: dict, selected_props: list | str = 'all', conserve_props: bool = True) -> dict:
+    """Navigates through the input dictionary and either keeps or deletes the selected properties
+
+    Arguments:
+        props_dict (dict): Dictionary to filter.
+        selected_props (list | str): List of properties to filter. Defaults to 'all'.
+        conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
+
+    Returns:
+        dict: Dictionary with all props, selected props or without selected props"""
+    
+    if selected_props == 'all':
+        return props_dict
+    
+    final_props_dict = {}
+
+    for net_id, props in props_dict.items():
+        if conserve_props:
+            temp = {prop: props[prop] for prop in selected_props}
+        else:
+            temp = props_dict[net_id].copy()
+            for prop in selected_props:
+                temp.pop(prop) 
+        final_props_dict.update({net_id: temp})
+
+    return final_props_dict
 
 def clean_names_association_df(df: pd.DataFrame)-> pd.DataFrame:
     """Useful fxn to remove potential file extensions and replace _ for blank spaces
@@ -587,26 +699,68 @@ def common_props_dict(networks):
 
     return new
 
-def process_netective_properties_files(results_dir: str, return_props_dict= False, corr_func: str= 'pearson', metric: str= 'euclidean', method: str= 'ward', add_averages: bool= False, compare_to_models: bool= False, features: pd.DataFrame= None, data_type: dict= None, title: str= None)-> Union[dict, Tuple[matplotlib.figure.Figure, pd.DataFrame]]:
+def process_netective_properties_files(
+        results_dir: str, 
+        return_props_dict: bool = False, 
+        selected_props: list | str = 'all',
+        conserve_props: bool = True,
+        ignore_models: bool = False, 
+        corr_func: str = 'pearson', 
+        metric: str = 'euclidean', 
+        method: str = 'ward', 
+        add_averages: bool = False, 
+        compare_to_models: bool = False, 
+        features: pd.DataFrame = None, 
+        data_type: dict = None,
+        title: str = None,
+        add_scalar_plot: bool = False, 
+        scalar_plot_averages: bool = False,
+        scalar_plot_scale: str = 'linear', 
+        scalar_plot_add_box_plot: bool = False,
+        scalar_plot_title: str = None,
+        verbose: str = None)-> Union[dict, Tuple[matplotlib.figure.Figure, pd.DataFrame, matplotlib.figure.Figure]]:
     """Utils fxn for processing output properties files created by Netective.
 
-    By processing, it is understood comparing the input networks using a clustermap.
+    By processing, it is understood to compare the input networks using a cluster map and plot their properties distribution.
 
     Arguments:
         results_dir (str): directory path with output properties files created by Netective.
-        return_props_dict (bool): whether to return scalars properties arrays for input networks (and) random analog models in directory.
+        return_props_dict (bool): whether to return scalar properties arrays for input networks (and) random analog models in directory.
+        selected_props (list | str): List of properties to filter. Defaults to 'all'.
+        conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
+        ignore_models (bool): Whether to include models . Defaults to False.
         corr_func (str): correlation metric to use to correlate properties' arrays between networks. Defaults to 'pearson'.
         metric (str): distance metric to use . Defaults to 'euclidean'.
         method (str): method to use for clustering. Defaults to "ward".
         add_averages (bool): whether to include averages from distribution or distribution moments files to scalars arrays. Defaults to False.
         compare_to_models (bool): whether the heatmap is comparing input networks to model analogs. Defaults to False.
-        features (pd.DataFrame): input features dataframe. Defaults to None.
+        features (pd.DataFrame): input features Dataframe. Defaults to None.
         data_type (dict): data type of each feature. Defaults to None.
-        verbose (str): verbosity level of the logger. Defaults to None.
         title (str): title of the heatmap. Defaults to None.
+        add_scalar_plot (bool): Whether to include scalar distribution plot. Defaults to False.
+        scalar_plot_averages (bool): (scalar_plot) Whether to create averages Dataframe. Defaults to False.
+        scalar_plot_scale (str): Y-axis scale, either 'linear','log' or other (check matplotlib documentation
+                               https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.set_yscale.html#matplotlib.axes.Axes.set_yscale). Defaults to 'linear'.
+        scalar_plot_add_box_plot (bool): If True, adds a box plot overlay on top of the scatter plot for each property. Defaults to False.
+        scalar_plot_title (str): title of the scalars properties distribution plot. Defaults to None.
+        verbose (str): verbosity level of the logger. Defaults to None. 
+
+    Notes:
+        When compare_to_models and averages are set to TRUE, a scalar plot of the average value 
+        of each property distribution divided by group will be created. When the average is set 
+        to default all GroupWise distributions will be plotted. 
 
     Returns:
-        Union[dict, Tuple[matplotlib.figure.Figure, pd.DataFrame]]: dict with scalar properties arrays or figure containing the heatmap and distances dataframe."""
+        Union[dict, Tuple[matplotlib.figure.Figure, pd.DataFrame, matplotlib.figure.Figure]]: One of the following outputs:
+                                                                                                    - dict with scalar properties arrays
+                                                                                                    - figure containing the heatmap and distances Dataframe
+                                                                                                    - figure containing the heatmap, distances Dataframe and scalar."""
+    
+    # Set logger 
+    if verbose != None:
+        current_level = utils_logger.getEffectiveLevel()
+        set_log_level(utils_logger, verbose)
+
     
     scalars_array = {}
     dist_array = {}
@@ -616,6 +770,8 @@ def process_netective_properties_files(results_dir: str, return_props_dict= Fals
         '.csv' : ',',
         '.txt' : ' ',
     }
+
+    utils_logger.info('Creating dictionary from results_dir')
 
     # Retrieve properties values for input networks (not model analogs)
     for dir, _, files in os.walk(results_dir):
@@ -667,17 +823,29 @@ def process_netective_properties_files(results_dir: str, return_props_dict= Fals
             temp_dict[net_id][prop_id] = list(compute_moments(data= np.array(distribution)))
         dist_moments_array.update(temp_dict)
     
-    if add_averages:
+    if add_averages:    
+        utils_logger.info('Including averages of distributions properties to scalar properties array ')
         # Add distributions averages for input networks to scalars array
         for net_id, prop in dist_moments_array.items():
             for prop_id, moments in prop.items():
                 scalars_array[net_id][f'Average {prop_id}'] = moments[0]
 
+    # Filter networks models
+    if ignore_models:
+        utils_logger.info('Removing Models froms scalar properties array')
+        scalars_array = {net_id : props for net_id, props in scalars_array.items() if net_id.find('Avg_') == -1}
+
+    # Get common props between networks
     scalars_array = common_props_dict(scalars_array)
+
+    # Filter dictionary to conserve selected props
+    scalars_array = filter_properties(scalars_array,selected_props,conserve_props)
+
     if return_props_dict:
         return scalars_array
-    
-    # Association DataFrame
+
+    # Creates Association Dataframe
+    utils_logger.info('Creating assosiation dataframe')
     distances_df = association(scalars_array, corr_func)
     if compare_to_models:
         if not any('Avg' in key for key in scalars_array):
@@ -698,8 +866,30 @@ def process_netective_properties_files(results_dir: str, return_props_dict= Fals
         compare_to_models= compare_to_models,
         title= title
     )
+
+    results = comp_heatmap, distances_df
+
+    # Creates scalars distributions plot 
+    if add_scalar_plot:
+        utils_logger.info('Creating Dataframe for Scalar plot')
+        # Creates specific dataframe for scalar_plot
+        if compare_to_models and scalar_plot_averages:
+            scalars_df = get_scalar_props_df(scalars_array,averages=True)
+        elif compare_to_models:
+            scalars_df =  get_scalar_props_df(scalars_array,compare_to_models=True)
+        else:
+            scalars_df =  get_scalar_props_df(scalars_array,averages=scalar_plot_averages) 
+        # Create plot
+        scalar_plot = create_scalar_dist_plot(scalars_df,scalar_plot_scale,scalar_plot_add_box_plot,title)
+
+        results = comp_heatmap, distances_df, scalar_plot
+
+    if verbose != None:
+        set_log_level(utils_logger, current_level)
     
-    return comp_heatmap, distances_df
+    return results
+    
+
 
 # Paths objects
 class ShortestDistances:
