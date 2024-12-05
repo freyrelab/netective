@@ -435,13 +435,17 @@ class Structure:
                 graph_copy = remove_self_loops(graph_copy)
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
+            struct_logger.debug('Gettting aditional params...')
             if get_paths:
+                struct_logger.debug('Creating <ShortestPaths> object...')
                 net_shortest_paths = ShortestPaths(graph_copy)
+                struct_logger.debug('Creating <ShortesDistances> object...')
                 net_shortest_distances = ShortestDistances(graph_copy)
                 # Input requires paths objects besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
                 if get_motifs: # Input requires motifs object besides the modified graph
+                    struct_logger.debug('Creating <3motifs> object...')
                     motifs_obj = count_3motifs(graph_copy)
                     graphs[mask] = (graph_copy, motifs_obj)
                 else: # Input requires only the modified graph
@@ -472,13 +476,17 @@ class Structure:
                 graph_copy = remove_self_loops(graph_copy)
             if get_giant_component:
                 graph_copy = giant_component(graph_copy)
+            struct_logger.debug('Gettting aditional params...')
             if get_paths:
+                struct_logger.debug('Creating <ShortestPaths> object...')
                 net_shortest_paths = ShortestPaths(graph_copy)
+                struct_logger.debug('Creating <ShortesDistances> object...')
                 net_shortest_distances = ShortestDistances(graph_copy)
                 # Input requires paths objects and motifs object besides the modified graph
                 graphs[mask] = (graph_copy, net_shortest_paths, net_shortest_distances)
             else:
                 if get_motifs: # Input requires motifs object besides the modified graph
+                    struct_logger.debug('Creating <3motifs> object...')
                     motifs_obj = count_3motifs(graph_copy)
                     graphs[mask] = (graph_copy, motifs_obj)
                 else: # Input requires only the modified graph

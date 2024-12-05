@@ -433,7 +433,7 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
 
         # Add legends for categorical columns
         current_y_position = heatmap_bbox.height
-        start_x_position = 0.1 * (colorbar_counter + 1) + 1
+        start_x_position = 0.1 * (colorbar_counter + 0.2) + 1
         legend_counter = 0
         legend_height = 0
         for col, mapping in color_mappings.items():
