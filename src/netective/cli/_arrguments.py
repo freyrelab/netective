@@ -2,6 +2,7 @@ __all__ = ['_parse_arguments']
 import os
 import argparse
 from multiprocessing import cpu_count
+import textwrap
 
 def _parse_arguments():
 
@@ -11,7 +12,6 @@ def _parse_arguments():
     def mixed_list(arg):
         return [x.strip() if not x.strip().isdigit() else int(x.strip()) for x in arg.split(',')]
 
-    
     def restricted_float(x):
         try:
             x = float(x)
@@ -40,19 +40,67 @@ def _parse_arguments():
         return x
 
     parser = argparse.ArgumentParser(
-        description="Assess the topology of a network. If more than one network is given (directory with multiple networks), a comparison between them based on their topology is done.",
-        formatter_class= argparse.ArgumentDefaultsHelpFormatter
+        description="""\
+        ( ◣_◢ )
+        Welcome to Netective!
+        Computational tool for network similarity analysis. Netective is capable of performing
+        a comprehensive structural characterization of unweighted graphs from all domains, directed and/or undirected.
+        Netective can then compare an unlimited number of networks through said structural characterization, as well as
+        classifying them into clusters using two possible criterions.
+        Netective can also perform an optimized statistical benchmarking of network inferences based on a Gold Standard.
+
+        Netective was developed and is maintained by the team at FreyreLab, Center for Genomic Sciences, Autonomous University of Mexico.     
+                                                -      -.
+                                             -###      -###-
+                                          +######      -######-
+                                      .##########      -#########+
+                                   .#############      -#############.
+                                -################      -################.
+                               ##################      -##################
+                               ##################      -##################
+                      .#-      ##################      -##################
+                   -####-      ##################      -##################
+                -#######-      ##################      -##################
+             ###########-      ##################      -##################
+          ##############-      ###############+.         -################
+      .#################-      ############+                .#############
+      ##################-      #########+                       +#########
+      ##################-      ######-           .#####            #######
+      ##################-      ###.           -###########.           +###
+      ##################-      .           +#################-           .
+      ##################-               ########################+
+      ##################.            ##############################+
+      ###############-            +###################################+
+      ############.                  ##############################+
+      #########            +            +#######################-
+      #####+            +#####+.           -#################.           .
+      ##-            +###########+.           .###########.           -###
+                 -+##################-           .#####            +######
+               .------------------------                        .--------- 
+                                                                                     
+                         -#                     .#   .#-
+      .  ...     .--.   -##-   .---      ---.  .##-.  .  ..     .   .--.
+      ##.  ##   #+  -#   ##   #+  .#-  +#.  +-  +#.  .#+  #-  .#-  ##  .#.
+      #+   +#  ###+++#-  ##  .##+++## .##       -#   .#+  .#. +#  +##+++#+
+      #+   +#  -#-       ##   #+       ##   .-  -#   .#+   -###   .#+
+      #+   +#   .####-   +##-  +#+#+    +###+   .##+ .#+    ##.    .+#+#-                                                                                                                                                              
+        """,
+        formatter_class= argparse.RawDescriptionHelpFormatter
     )
     # Sub-Arguments
     subparsers = parser.add_subparsers(
         title='Runmodes',
-        description='Valid runmodes',
+        description="""\
+        Netective has four main runmodes, each with different and specific arguments.
+        Please consult each runmode's help manual before running any of them.
+        Enjoy Netective!
+        """,
         required=True
     )
     
     #########################################################################################################################
     # create the parser for the "characterize" command
-    parser_a = subparsers.add_parser('characterize', help='characterization of inputed network through structural properties.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_a = subparsers.add_parser('characterize', help='characterization of inputed network/s through structural properties.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_a.add_argument(
         '--runmode',
         type= int,
@@ -359,8 +407,8 @@ def _parse_arguments():
     )
 
     ####################################################################################################################
-    # create the parser for the "assess" command
-    parser_c = subparsers.add_parser('assess', help='statistical evaluation of inferences based on a Gold Standard.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # create the parser for the "benchmark" command
+    parser_c = subparsers.add_parser('benchmark', help='statistical benchmarking of inferences based on a Gold Standard.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser_c.add_argument(
         '--runmode',
         type= int,
@@ -448,75 +496,151 @@ def _parse_arguments():
     parser_c.add_argument(
         '-o','--output',
         type= valid_path,
-        default= None,
+        default= os.getcwd(),
         help= "path to output directory, default for results printed to std.out.",
         required= False
     )
 
     ##############################################################################################################################
+    # IMPORTANT Because a different formatter class is employed for subparser_d, DEFAULTS NEED TO BE ADDED MANUALLY TO HELP MESSAGES
     # create the parser for the "classify" command
-    parser_d = subparsers.add_parser('classify', help='classification of networks into clusters and evaluation of said classification.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser_d = subparsers.add_parser('classify', help='classification of networks into clusters and evaluation of said classification.', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser_d.add_argument(
         '--runmode',
         type= int,
         help=argparse.SUPPRESS,
         default= 4
     )
+        # Required named arguments (also mutually exclusive)
+    # Usar textwrap para formatear la descripción del grupo
+    group_description = ('''\
+        ----------------------------------------------------------------------------------------------------------------
+        This argument group includes the input for classify.
+        There are three possible use cases:
+                                        
+            1. A distance dataframe has already been computed.
+            2. Netective was previously run and a directory with the properties files exists.
+            3. Properties computation is required.
+        
+        These are therefore mutually exclusive arguments.
+        ''')
+    requiredNamed = parser_d.add_argument_group('required named arguments', group_description)
+    req_mut_exclusive = requiredNamed.add_mutually_exclusive_group(required= True)
+        # Pre-computed distance dataframe
+    req_mut_exclusive.add_argument(
+        '-ddf', '--distance_dataframe',
+        type= valid_path,
+        help= 'path to file with distance dataframe pre-computed. IMPORTANT: if distance dataframe is provided, no results directory or networks directory can apply. Format has to be a dataframe where the first column serves as index and the first row serves as header. Delimiter and comments are specified with args.'
+    )
+        # Results of Netective pre-computed properties
+    req_mut_exclusive.add_argument(
+        '-rd', '--results_dir',
+        type= valid_path,
+        help= "directory path to files. ONLY if Netective's properties computation has already been performed. IMPORTANT: if results directory is provided, no distance dataframe or networks directory can apply."
+    )
+        # Networks directory files
+    req_mut_exclusive.add_argument(
+        '-nets', '--networks_dir',
+        type= valid_path,
+        help= 'directory path to files. ONLY if properties computation has not been performed yet. IMPORTANT: if networks directory is provided, no distance dataframe or results directory can apply.'
+    )
+
         # Norm
     parser_d.add_argument(
         '-n','--normalization',
         default= None,
-        help= "normalization method for structural properties.",
+        help= "normalization method for structural properties. (default: None)",
         choices= ['network', 'biological'],
         required= False
     )
+        # Direction
     parser_d.add_argument(
         '-dir', '--directed',
         action= 'store_true',
-        help= 'whether the gold standard and inferences are directed or not.',
+        help= 'whether the gold standard and inferences are directed or not. (default: False)',
         required= False
     )
-        # Mutually exclusive arguments
-    mut_exclusive = parser_d.add_mutually_exclusive_group(required=False)
+        # Selected props
+    parser_d.add_argument(
+        '-p', '--selected_props',
+        type= list_of_strings,
+        default= ['Average Local Efficiency',
+            'Radius',
+            'Center',
+            'Periphery',
+            # 'Complex Feed-Forward Circuits',
+            # 'Feed-Forward Circuits',
+            'Max Degree',
+            # 'Gini Index',
+            'Global Efficiency',
+            'Undirected Gini Index',
+            'Entropy of Degree Distribution',
+            # 'Self-Loops'
+            ],
+        required= False,
+        help= "list of selected properties used for analysis, defaults to selected properties for best classification. Accepted format: coma-separated string, written between 's. (default: ['Average Local Efficiency', 'Radius', 'Center', 'Periphery', 'Complex Feed-Forward Circuits', 'Feed-Forward Circuits', 'Max Degree', 'Gini Index', 'Global Efficiency', 'Undirected Gini Index', 'Entropy of Degree Distribution', 'Self-Loops'])"
+    )
+        # Workers
+    parser_d.add_argument(
+        '-w','--workers',
+        type= valid_workers,
+        default= '2',
+        help= "number of workers to use for parallelization of properties characterization, default is minimal parallelization. IMPORTANT: it is also the max number of networks loaded simultaneously into memory at the same time at any given moment. IMPORTANT: auto for automatical detection of usable threads. Only applies if directory has more than one readable network. (default: 2)",
+        required= False
+    )
+        # Keep averages
+    parser_d.add_argument(
+        '-avg', '--add_averages',
+        action= 'store_true',
+        help= 'whether to include the averages of local properties in the global properties array. (default: False)',
+        required= False
+    )
+        # Association metric
+    parser_d.add_argument(
+        '-ass', '--association_metric',
+        type= str,
+        choices= ['pearson', 'spearman', 'cosine'],
+        help= "correlation metric for distance calculation. (default: 'pearson')",
+        required= False,
+        default= 'pearson'
+    )
+        # Not required mutually exclusive arguments
+    group_description = ('''\
+        ----------------------------------------------------------------------------------------------------------------
+        This argument group includes arguments for forming flat clusters.
+        There are several possible criterions, here we consider two:
+                                        
+            - max number of clusters: "Finds a minimum threshold r so that the cophenetic distance between any two original observations in the same flat cluster
+                                        is no more than r and no more than t flat clusters are formed."
+            - threshold distance: "Forms flat clusters so that the original observations in each flat cluster have no greater a cophenetic distance than t"
+        
+        These are therefore mutually exclusive arguments.
+        See scipy.cluster.hierarchy.fcluster() for more info.
+        ''')
+    not_req_mut_group = parser_d.add_argument_group('not required mutually exclusive arguments', group_description)
+    not_req_mut_exclusive = not_req_mut_group.add_mutually_exclusive_group(required=False)
         # Clusters
-    mut_exclusive.add_argument(
+    not_req_mut_exclusive.add_argument(
         '-cl','--clusters',
         default= None,
         type= int,
-        help= "max number of clusters to classify networks into. IMPORTANT: if number of clusters is given, then no threshold for distance can apply.",
+        help= "max number of clusters to classify networks into. IMPORTANT: if number of clusters is given, then no threshold for distance can apply. (default: None)",
         required= False
     )
         # Threshold distance
-    mut_exclusive.add_argument(
+    not_req_mut_exclusive.add_argument(
         '-t','--threshold',
         default= 0.7,
         type= restricted_float,
-        help= "t distance for clustering, threshold to apply when forming flat clusters. IMPORTANT: if a threshold is given, no max number of clusters can apply.",
-        required= False
-    )
-        # Clustering method
-    parser_d.add_argument(
-        '-m','--method',
-        default= 'ward',
-        type= str,
-        metavar= 'https://docs.scipy.org/doc/scipy/reference/generated/scipy.cluster.hierarchy.linkage.html',
-        help= "linkage method to use for calculating clusters. See scipy.clusters.hierarchy.linkage() for more info.",
-        choices= ['single', 
-                  'complete', 
-                  'average', 
-                  'weighted', 
-                  'centroid', 
-                  'median', 
-                  'ward'],
+        help= "t distance for clustering, threshold to apply when forming flat clusters. IMPORTANT: if a threshold is given, no max number of clusters can apply. (default: 0.7)",
         required= False
     )
         # Distance metric
     parser_d.add_argument(
         '-mtr','--metric',
         default= 'euclidean',
-        metavar= 'https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.pdist.html#scipy.spatial.distance.pdist',
         type= str,
-        help= 'distance metric to use. See scipy.spatial.distance.pdist() for more info.',
+        help= "distance metric to use. See scipy.spatial.distance.pdist() for more info. (default: 'euclidean')",
         choices= ['braycurtis', 
                   'canberra', 
                   'chebyshev', 
@@ -541,61 +665,52 @@ def _parse_arguments():
                   'yule'],
         required= False
     )
-        # Selected props
+        # Clustering method
     parser_d.add_argument(
-        '-p', '--selected_props',
-        type= list_of_strings,
-        default= ['Average Local Efficiency',
-            'Radius',
-            'Center',
-            'Periphery',
-            'Complex Feed-Forward Circuits',
-            'Feed-Forward Circuits',
-            'Max Degree',
-            'Gini Index',
-            'Global Efficiency',
-            'Undirected Gini Index',
-            'Entropy of Degree Distribution',
-            'Self-Loops'],
-        required= False,
-        help= 'list of selected properties used for analysis, defaults to selected properties for best classification. Accepted format: coma-separated string, written between "s.',
-    )
-        # Workers
-    parser_d.add_argument(
-        '-w','--workers',
-        type= valid_workers,
-        default= '2',
-        help= "number of workers to use for parallelization of properties characterization, default is minimal parallelization. IMPORTANT: it is also the max number of networks loaded simultaneously into memory at the same time at any given moment. IMPORTANT: auto for automatical detection of usable threads. Only applies if directory has more than one readable network.",
+        '-m','--method',
+        default= 'ward',
+        type= str,
+        help= "linkage method to use for calculating clusters. See scipy.clusters.hierarchy.linkage() for more info. (default: 'ward')",
+        choices= ['single', 
+                  'complete', 
+                  'average', 
+                  'weighted', 
+                  'centroid', 
+                  'median', 
+                  'ward'],
         required= False
     )
-        # Return props dict
+        # Map IDs
     parser_d.add_argument(
-        '-k', '--keep_props',
-        help= argparse.SUPPRESS,
-        default= True
+        '-mids', '--map_ids',
+        action= 'store_true',
+        help= 'whether to return the clusters as dictionaries to map IDs of members. (default: False)',
+        required= False
     )
         # Verbose
     parser_d.add_argument(
         '-v','--verbose',
         type= str,
         default= 'WARNING',
-        help= "level of verbose to handle progress of process. Check logging levels for more information.",
+        help= "level of verbose to handle progress of process. Check logging levels for more information. (default: 'WARNING')",
         choices= ['DEBUG', 'INFO','WARNING', 'ERROR', 'CRITICAL'],
         required= False
     )
-        # Erdos Renyi
+        # Nets files format
     parser_d.add_argument(
-        '-er','--erdos_renyi',
-        type= int,
-        default= 0,
-        help= argparse.SUPPRESS
+        '-nff', '--net_f_format',
+        type= str,
+        help= "nets files format to parse. (default: 'edgelist')",
+        choices= ['edgelist', 'graphml', 'adj list', 'multiline adj list'],
+        required= False,
+        default= 'edgelist'
     )
         # Comments character in networks files
     parser_d.add_argument(
         '-c','--comments',
         type= str,
         default= "#",
-        help= "character used to indicate comments in the network files.",
+        help= "character used to indicate comments in the network files. (default: '#')",
         required= False
     )
         # Delimiter to parse networks
@@ -603,23 +718,16 @@ def _parse_arguments():
         '-d','--delimiter',
         type= str,
         default= '\t',
-        help= "character used to separate columns in the network files.",
+        help= r"character used to separate columns in the network files. Also referred to character used as delimiter if a distance dataframe is provided. (default: '\t')",
         required= False
     )
         # Path to dump outputs
     parser_d.add_argument(
         '-o','--output',
         type= valid_path,
-        default= None,
-        help= "path to output directory, default for results printed to std.out.",
+        default= os.getcwd(),
+        help= f"path to output directory. (default: {os.getcwd()})",
         required= False
-    )
-    requiredNamed = parser_d.add_argument_group("required named arguments")
-    requiredNamed.add_argument(
-        '-i','--input',
-        type= valid_path,
-        help= "path to folder containing network files.",
-        required= True,
     )
     
     args = parser.parse_args()

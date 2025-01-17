@@ -3,13 +3,12 @@ import numpy as np
 from multiprocessing import cpu_count
 
 from netective.cli._arrguments import _parse_arguments
-from netective.utils import save_prop_dicts, save_figs, common_props_dict, association, get_clusters, parse_network, clean_names_association_df, get_models_abbreviations, filter_association_df_for_models
+from netective.utils import save_prop_dicts, save_figs, common_props_dict, association, parse_network, clean_names_association_df, get_models_abbreviations, filter_association_df_for_models
 from netective.structure.dataviz import create_comp_heatmap, plot_distributions, plot_scalars
-from netective import compare_structure, characterize_network, benchmarking
+from netective import compare_structure, characterize_network, benchmarking, classify_networks
 from netective.structure.structure import __get_optimal_workers
 
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from netective.logging_info import get_logger, set_log_level
 
@@ -56,7 +55,7 @@ def runmode1(args):
     delimiter = args.delimiter
     output = args.output
 
-    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --dir {dir} --workers {workers} --selected_props {selected_props} --verbose {verbose} --nets_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --output {output}\n"
+    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --dir {dir} --workers {workers} --selected_props {selected_props} --verbose {verbose} --nets_f_format {nets_file_format} --comments {comments} --delimiter {delimiter!r} --output {output}\n"
 
     if os.path.isdir(nets_path):
         if workers == 'auto':
@@ -179,9 +178,9 @@ def runmode2(args):
     title = args.title
 
     if include_models:
-        cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --incmodels {include_models} --comp2models {compare_to_models} --n_models {n_random_models} --directed_models {directed_models} --m4ba {ba_m} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --title {title} --output {output}\n"
+        cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --incmodels {include_models} --comp2models {compare_to_models} --n_models {n_random_models} --directed_models {directed_models} --m4ba {ba_m} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {delimiter!r} --title {title} --output {output}\n"
     else:
-        cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {repr(delimiter)} --title {title} --output {output}\n"
+        cl = f"{comments}command: netective {RUNMODES[args.runmode]} --path {nets_path} --norm {norm} --directed {dir} --selected_props {selected_props} --association {association_metric} --metric {metric} --method {method} --workers {workers} --verbose {verbose} --net_f_format {nets_file_format} --comments {comments} --delimiter {delimiter!r} --title {title} --output {output}\n"
 
     if workers == 'auto':
         cli_logger.warning('Getting optimal number of workers based on available memory and inputed networks sizes...')
@@ -317,7 +316,7 @@ def runmode3(args):
     comments = args.comments
     delimiter = args.delimiter
 
-    cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_coords_dicts {keep_auc_coords_dicts} --cutoff {cutoff} --score {score} --self_loops {self_loops} --baseline {baseline} --verbose {verbose} --output {output} --delimiter {repr(delimiter)} --comments {comments}'
+    cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_coords_dicts {keep_auc_coords_dicts} --cutoff {cutoff} --score {score} --self_loops {self_loops} --baseline {baseline} --verbose {verbose} --output {output} --delimiter {delimiter!r} --comments {comments}\n'
     if keep_auc_coords_dicts: # Keeping dictionaries with aupr and auroc values
         aupr_scores, auroc_scores, coords = benchmarking(
             networks= inferences,
@@ -351,22 +350,22 @@ def runmode3(args):
             sen_f = open(sen_output_file, 'w')
             fpr_f = open(fpr_output_file, 'w')
 
-            aupr_f.write(f'{cl}\n{comments}AUPR Scores\n{comments}Network{delimiter}Score')
-            auroc_f.write(f'{cl}\n{comments}AUROC Scores\n{comments}Network{delimiter}Score')
-            pre_f.write(f'{cl}\n{comments}Precision datapoints for every inference\n')
-            sen_f.write(f'{cl}\n{comments}Sensistivity datapoints for every inference\n')
-            fpr_f.write(f'{cl}\n{comments}False positive rate datapoints for every inference\n')
+            aupr_f.write(f'{cl}{comments}AUPR Scores\n{comments}Network{delimiter}Score')
+            auroc_f.write(f'{cl}{comments}AUROC Scores\n{comments}Network{delimiter}Score')
+            pre_f.write(f'{cl}{comments}Precision datapoints for every inference\n')
+            sen_f.write(f'{cl}{comments}Sensistivity datapoints for every inference\n')
+            fpr_f.write(f'{cl}{comments}False positive rate datapoints for every inference\n')
             
             for _, value in coords.items():
                 for i, dist in enumerate(value):
                     if i == 0:
-                        pre_f.write(np.array2string(dist, separator= delimiter).replace('\n', '').replace('[','').replace(']',''))
+                        pre_f.write(np.array2string(dist, separator= delimiter, threshold= len(dist)).replace('\n', '').replace('[','').replace(']',''))
                         pre_f.write('\n')
                     elif i == 1:
-                        sen_f.write(np.array2string(dist, separator= delimiter).replace('\n', '').replace('[','').replace(']',''))
+                        sen_f.write(np.array2string(dist, separator= delimiter, threshold= len(dist)).replace('\n', '').replace('[','').replace(']',''))
                         sen_f.write('\n')
                     else:
-                        fpr_f.write(np.array2string(dist, separator= delimiter).replace('\n', '').replace('[','').replace(']',''))
+                        fpr_f.write(np.array2string(dist, separator= delimiter, threshold= len(dist)).replace('\n', '').replace('[','').replace(']',''))
                         fpr_f.write('\n')
 
         else:
@@ -419,48 +418,68 @@ def runmode3(args):
         fig_roc_curves.get_figure().savefig(fname= concat_path(output, f'roc_curves.png'), bbox_inches= 'tight', dpi= 300)
 
 def runmode4(args):
-    dir = args.directed
-    method = args.method
+    # Required args
+    distance_df_path = args.distance_dataframe
+    results_dir = args.results_dir
+    networks_dir = args.networks_dir
+    # Optional args
+    norm = args.normalization
+    directed = args.directed
+    selected_props = args.selected_props
+    workers = args.workers
+    add_averages = args.add_averages
+    association_metric = args.association_metric
+    clust_num = args.clusters
+    threshold = args.threshold if clust_num is None else None
     metric = args.metric
-    clusters_num = args.clusters
+    method = args.method
+    map_ids = args.map_ids
+    verbose = args.verbose
+    net_file_format = args.net_f_format
+    comments = args.comments
+    delimiter = args.delimiter
     output = args.output
-    threshold = args.threshold if clusters_num is None else None
-    cl = f"{args.comments}command: netective {RUNMODES[args.runmode]} --path {args.input} --norm {args.normalization} --directed {dir} --selected_props {args.selected_props} --clusters {clusters_num} --threshold {threshold} --method {method} --metric {metric} --workers {args.workers} --verbose {args.verbose} --comments {args.comments} --delimiter {repr(args.delimiter)} --output {output}"
-    # Structural comparison
-    scalars = runmode2(args)
-    cli_logger.info('Starting classification of networks into clusters...')
-    merged_df = pd.DataFrame.from_dict(scalars).T
-    merged_df.dropna(axis=1, inplace=True, how='any')
-    clusters = get_clusters(
-        merged_df.T.corr(),
-        map_ids= True,
-        ch_method= method,
-        ch_metric= metric,
-        clust_num= clusters_num,
-        threshold= threshold
-    )
-    if output is not None:
-            if not os.path.isdir(output):
-                cli_logger.warning(f'Invalid output {output}, setting current directory instead')
-                output = os.getcwd()
-            exts = {",": "csv", "\t": "tsv"}
-            ext = exts.get(args.delimiter, "txt")
-            output_file = concat_path(output, f"networks_classification.{ext}")
-            f = open(output_file, 'w')
-            f.write(f'{cl}\n{args.comments}Network{args.delimiter}Cluster')
+    cl = f"{comments}command: netective {RUNMODES[args.runmode]} --distance_dataframe {distance_df_path} --results_dir {results_dir} --networks_dir {networks_dir} --normalization {norm} --directed {directed} --selected_props {selected_props} --workers {workers} --add_averages {add_averages} --association_metric {association_metric} --clusters {clust_num} --threshold {threshold} --metric {metric} --method {method} --map_ids {map_ids} --verbose {verbose} --net_f_format {net_file_format} --comments {comments} --delimiter {delimiter!r} --output {output}\n"
+    
+    if distance_df_path:
+        distance_df = pd.read_csv(distance_df_path, comment= comments, delimiter= delimiter, index_col= 0, header= 0)
     else:
-        print(f'Network{args.delimiter}Cluster')
+        distance_df = None
+    clusters = classify_networks(
+        networks= networks_dir,
+        results_dir= results_dir,
+        distance_df= distance_df,
+        norm= norm,
+        directed= directed,
+        selected_props= selected_props,
+        workers= workers,
+        add_averages= add_averages,
+        association_metric= association_metric,
+        clust_num= clust_num,
+        threshold= threshold,
+        metric= metric,
+        method= method,
+        map_ids= True,
+        verbose= verbose,
+        nets_file_format= net_file_format,
+        comments= comments,
+        delimiter= delimiter
+    )
+    # File creation
+    if not os.path.isdir(output):
+        cli_logger.warning(f'Invalid output {output}, setting current directory instead')
+        output = os.getcwd()
+    exts = {",": "csv", "\t": "tsv"}
+    ext = exts.get(args.delimiter, "txt")
+    output_file = concat_path(output, f"networks_classification.{ext}")
+    cli_logger.info(f'Writing output file with results: {output_file}')
+    f = open(output_file, 'w')
+    f.write(f'{cl}Network{args.delimiter}Cluster')
     
     for clust, nets in clusters.items():
         for net in nets:
-            if output is not None:
-                f.write(f'\n{net}{args.delimiter}{clust}')
-            else:
-                print(f'{net}{args.delimiter}{clust}')
-    try:
-        f.close()
-    except UnboundLocalError:
-        pass
+            f.write(f'\n{net}{args.delimiter}{clust}')
+    f.close()
 
 def main():
     ## parse arguments

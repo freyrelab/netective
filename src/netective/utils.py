@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import matplotlib.figure
-
 """Utility functions for the netective package."""
-
 # __all__ = [
 #     "concat_path",
 #     "run_parallel",
@@ -27,7 +24,6 @@ from tqdm import tqdm
 import concurrent.futures
 from itertools import chain
 from collections import defaultdict
-# TODO Incluir las demas correlaciones admitidas (tiene que regresar tupla)
 from scipy.stats import pearsonr, spearmanr, kurtosis, skew
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -37,6 +33,7 @@ from netective.logging_info import get_logger, set_log_level
 from netective.structure.dataviz import create_comp_heatmap, create_scalar_dist_plot
 
 import matplotlib
+import matplotlib.figure
 
 concat_path = os.path.join
 
@@ -56,7 +53,6 @@ CORRELATIONS = {
 class NullGraphError(Exception):
     """Exception raised for null graph."""
     pass
-
 
 def run_parallel(f, my_iter, workers, verbose: str = None):
 
@@ -226,7 +222,7 @@ def parse_network(file_path: str, comments:str= "#", delimiter:str="\t", directe
 
 # Comparison Fxn
 def association(
-    dict_data: dict[str, dict[str, float]], corr_func: str | Callable[Iterable, Iterable] = 'pearson',
+    dict_data: dict[str, dict[str, float]], corr_func: str = 'pearson',
 ) -> pd.DataFrame:
     """Computes correlation between elements in a dictionary
 
@@ -240,7 +236,7 @@ def association(
 
     Arguments:
         dict_data (dict[str, dict[str, float]]): dictionary with keys as IDs for each element and values as np.arrays with data.
-        corr_func (str | Callable): correlation function desired for analysis. Defaults to 'pearson'.
+        corr_func (str): correlation function desired for analysis. Defaults to 'pearson'.
 
     Raises:
         ValueError: invalid correlation.
@@ -260,8 +256,8 @@ def association(
 
     # Correlation fxn
     if corr_func not in CORRELATIONS.keys():
-        utils_logger.critical(f"Correlation function not admitted. Admitted options: {CORRELATIONS.keys()}")
-        raise ValueError(f"Correlation function not admitted. Admitted options: {CORRELATIONS.keys()}")
+        utils_logger.warning(f"Correlation metric not admitted: {corr_func}. Setting default metric: pearson")
+        corr_func = 'pearson'
     corr_func = CORRELATIONS[corr_func]
 
     # Get the keys (name_dists) from the dictionary
@@ -270,13 +266,17 @@ def association(
     # Initialize an empty DataFrame to store the correlation coefficients
     corr_df = pd.DataFrame(index=name_dists, columns=name_dists)
 
-    # Calculate the pairwise correlation
+    # Calculate the pairwise correlation (only calculates superior triangle, but fills both triangles)
+    utils_logger.info("Calculating pairwise correlation of input networks' global properties array...")
     for i in range(len(name_dists)):
-        for j in range(i, len(name_dists)):
+        for j in range(i+1, len(name_dists)):
+            # Getting array's names and arrays themselves
             name_dist1 = name_dists[i]
             name_dist2 = name_dists[j]
             array1 = np.asarray(list(dict_data[name_dist1].values()))
             array2 = np.asarray(list(dict_data[name_dist2].values()))
+            
+            # Filtering arrays in case a property (or more) returned inf value
             try:
                 mask = np.isfinite(array1) & np.isfinite(array2)
             except ValueError:
@@ -287,32 +287,24 @@ def association(
             filtered_array1 = array1[mask]
             filtered_array2 = array2[mask]
 
-            # Calculate Pearson correlation coefficient and p-value
-            try:
-                result = corr_func(filtered_array1, filtered_array2)
-            except TypeError:
-                utils_logger.critical('Correlation function not accepted.')
-
-            accepted_types = [(float, Iterable), float]
-
-            if not isinstance(result, accepted_types[0]) and not isinstance(result, accepted_types[1]):
-                utils_logger.critical(
-                    f"Return Type must be {accepted_types}"
-                )
-                raise TypeError(f"Correlation function not admitted, Return Type must be {accepted_types}")
-
-            if not isinstance(result, float):
-                corr_coef = result[0]
-            else:
+            # Calculating correlation coefficient (and p-value if aplicable)
+            result = corr_func(filtered_array1, filtered_array2)
+            if isinstance(result, float):
                 corr_coef = result
+            else:
+                corr_coef = result[0]
 
-            # Store the correlation coefficient in the DataFrame
+            # Storing the correlation coefficient in the DataFrame
             corr_df.loc[name_dist1, name_dist2] = corr_coef
             corr_df.loc[name_dist2, name_dist1] = corr_coef
 
-    # Calculation of distance ref.
+    # Calculation of distance matrix ref.
     dist_df = abs(1 - abs(corr_df))
     dist_df = round(dist_df.applymap(np.sqrt), 5)
+
+    # Filling diagonal with 0s (distance to yourself is 0)
+    for i in range(len(name_dists)):
+        dist_df.iloc[i,i] = 0
 
     return dist_df
 
@@ -347,7 +339,6 @@ def get_models_abbreviations(avg_random_scalars_array: dict)-> dict:
             pass        
 
     return abbreviations
-
 
 # Creation and Filtering of necesary data to plot scalar properties distribution
 def get_scalar_props_df(scalars_array: dict, ignore_models: bool = False, compare_to_models: bool = False, averages: bool = False) -> pd.DataFrame:
@@ -554,12 +545,12 @@ def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
 
 def get_clusters(
-    corr_df, clust_num: int = None, threshold: float = 0.7, ch_method: str = "ward", ch_metric: str = "euclidean", map_ids=True, fcluster_kwargs: dict = None
+    distance_df: pd.DataFrame, clust_num: int = None, threshold: float = 0.7, metric: str = "euclidean", method: str = 'ward', map_ids=True, fcluster_kwargs: dict = None
 ):
     """Get clusters from a correlation matrix.
 
     Args:
-        corr_df (pandas.DataFrame): A correlation matrix.
+        distance_df (pd.DataFrame)
         clust_num (int, optional): The number of clusters to be obtained. None to automatically obtain the number of clusters.
         ch_method (str, optional): The linkage method to be used. Dafaults to 'ward'.
         ch_metric (str, optional): The distance metric to be used. Defaults to 'euclidean'.
@@ -574,25 +565,31 @@ def get_clusters(
     Note:
         The distance matrix is computed as 1 - |corr_df|
     """
-    corr_df = np.abs(corr_df.astype("float"))
-    # corr_df = corr_df.fillna(0)
-    corr_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-    dist_mtrx = round(1 - abs(corr_df), 4)
+    utils_logger.info('Calculating clusters from distance dataframe...')
+    utils_logger.info(f'Using method: {method} and metric: {metric}')
+
+    utils_logger.debug('Creating squareform distance matrix')
     try:
-        square_matrix = squareform(dist_mtrx)
+        square_matrix = squareform(distance_df)
     except ValueError:
-        # warnings.warn(f"NaNs found in the correlation matrix. Unable to compute clusters.")
         utils_logger.critical(f"NaNs found in the correlation matrix. Unable to compute clusters.")
         raise ValueError(f"NaNs found in the correlation matrix. Unable to compute clusters.")
-    linkage_mtrx = linkage(square_matrix, method=ch_method, metric=ch_metric)
-    index = list(corr_df.index)
+    
+    utils_logger.debug('Calculating linkage matrix')
+    linkage_mtrx = linkage(square_matrix, method= method, metric= metric)
+    index = list(distance_df.index)
+
     if clust_num is not None:
+        utils_logger.warning(f'Clustering criterion: maxclust, with a maximum number of clusters: {clust_num}')
         cluster_vector = fcluster(linkage_mtrx, t= clust_num, criterion= "maxclust")
     elif threshold is not None:
+        utils_logger.warning(f'Clustering criterion: distance, with a threshold: {threshold}')
         cluster_vector = fcluster(linkage_mtrx, t= threshold, criterion= "distance")
     else:
+        utils_logger.debug('Calculating clusters with keyword args')
         cluster_vector = fcluster(linkage_mtrx, **fcluster_kwargs)
-    
+
+    utils_logger.debug('Mapping IDs of networks to clusters formed')
     clusters = {i: [] for i in cluster_vector}
     {clusters[cluster_vector[i]].append(index[i]) for i in range(len(cluster_vector))}
 
@@ -634,7 +631,6 @@ def save_prop_dicts(
     Returns:
         None.
     """
-
     exts = {",": "csv", "\t": "tsv"}
     ext = exts.get(delimiter, "txt")
 
@@ -681,13 +677,11 @@ def save_figs(
 
 def common_props_dict(networks):
     new = defaultdict(lambda:defaultdict())
-
     for i, (net_id, props) in enumerate(networks.items()):
         if i == 0:
             common = set(props.keys())
         else:
             common.intersection_update(set(props.keys()))
-
     new = {
         net_id : {
             prop_name : value 
@@ -728,7 +722,7 @@ def process_netective_properties_files(
         return_props_dict (bool): whether to return scalar properties arrays for input networks (and) random analog models in directory.
         selected_props (list | str): List of properties to filter. Defaults to 'all'.
         conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
-        ignore_models (bool): Whether to include models . Defaults to False.
+        ignore_models (bool): Whether to include models. Defaults to False.
         corr_func (str): correlation metric to use to correlate properties' arrays between networks. Defaults to 'pearson'.
         metric (str): distance metric to use . Defaults to 'euclidean'.
         method (str): method to use for clustering. Defaults to "ward".
@@ -755,7 +749,6 @@ def process_netective_properties_files(
                                                                                                     - dict with scalar properties arrays
                                                                                                     - figure containing the heatmap and distances Dataframe
                                                                                                     - figure containing the heatmap, distances Dataframe and scalar."""
-    
     # Set logger 
     if verbose != None:
         current_level = utils_logger.getEffectiveLevel()
@@ -772,7 +765,6 @@ def process_netective_properties_files(
     }
 
     utils_logger.info('Creating dictionary from results_dir')
-
     # Retrieve properties values for input networks (not model analogs)
     for dir, _, files in os.walk(results_dir):
         for f in files:
@@ -810,11 +802,13 @@ def process_netective_properties_files(
             else:
                 dist_moments_array.update(temp_dict)
     
+    utils_logger.debug('Flattening scalars array')
     # Flatten scalars array
     for net_id, prop in scalars_array.items():
         for prop_id, value in prop.items():
             scalars_array[net_id][prop_id] = float(value[0])
     
+    utils_logger.debug('Computing distribution moments')
     # Compute moments for node-level properties
     for net_id, prop in dist_array.items():
         temp_dict = {}
@@ -823,8 +817,8 @@ def process_netective_properties_files(
             temp_dict[net_id][prop_id] = list(compute_moments(data= np.array(distribution)))
         dist_moments_array.update(temp_dict)
     
-    if add_averages:    
-        utils_logger.info('Including averages of distributions properties to scalar properties array ')
+    if add_averages:  
+        utils_logger.warning('Including averages of distributions properties to scalar properties array ')
         # Add distributions averages for input networks to scalars array
         for net_id, prop in dist_moments_array.items():
             for prop_id, moments in prop.items():
@@ -832,20 +826,21 @@ def process_netective_properties_files(
 
     # Filter networks models
     if ignore_models:
-        utils_logger.info('Removing Models froms scalar properties array')
+        utils_logger.warning('Removing Models froms scalar properties array')
         scalars_array = {net_id : props for net_id, props in scalars_array.items() if net_id.find('Avg_') == -1}
 
     # Get common props between networks
+    utils_logger.debug('Getting common props between networks')
     scalars_array = common_props_dict(scalars_array)
 
     # Filter dictionary to conserve selected props
+    utils_logger.debug('Filtering scalars dict to conserve only selected props')
     scalars_array = filter_properties(scalars_array,selected_props,conserve_props)
 
     if return_props_dict:
         return scalars_array
 
     # Creates Association Dataframe
-    utils_logger.info('Creating assosiation dataframe')
     distances_df = association(scalars_array, corr_func)
     if compare_to_models:
         if not any('Avg' in key for key in scalars_array):
@@ -871,16 +866,16 @@ def process_netective_properties_files(
 
     # Creates scalars distributions plot 
     if add_scalar_plot:
-        utils_logger.info('Creating Dataframe for Scalar plot')
+        utils_logger.info('Creating dataframe for Scalar plot')
         # Creates specific dataframe for scalar_plot
         if compare_to_models and scalar_plot_averages:
-            scalars_df = get_scalar_props_df(scalars_array,averages=True)
+            scalars_df = get_scalar_props_df(scalars_array, averages=True)
         elif compare_to_models:
-            scalars_df =  get_scalar_props_df(scalars_array,compare_to_models=True)
+            scalars_df =  get_scalar_props_df(scalars_array, compare_to_models=True)
         else:
-            scalars_df =  get_scalar_props_df(scalars_array,averages=scalar_plot_averages) 
+            scalars_df =  get_scalar_props_df(scalars_array, averages=scalar_plot_averages) 
         # Create plot
-        scalar_plot = create_scalar_dist_plot(scalars_df,scalar_plot_scale,scalar_plot_add_box_plot,title)
+        scalar_plot = create_scalar_dist_plot(scalars_df, scalar_plot_scale, scalar_plot_add_box_plot, scalar_plot_title)
 
         results = comp_heatmap, distances_df, scalar_plot
 
@@ -888,13 +883,10 @@ def process_netective_properties_files(
         set_log_level(utils_logger, current_level)
     
     return results
-    
-
 
 # Paths objects
 class ShortestDistances:
     """Summary."""
-
     def __init__(self, G):
         """Summary."""
         if G.is_directed():
@@ -967,7 +959,6 @@ class ShortestDistances:
 
 class ShortestPaths:
     """Summary."""
-
     def __init__(self, G):
         """Summary."""
         if G.is_directed():
@@ -984,12 +975,12 @@ class ShortestPaths:
         self.__id2name = {i.index: i["name"] for i in self.__G.vs}
         self.__name2id = {v: self.__G.vs.find(name=v).index for v in G.nodes()}
 
-    # def shortest_paths(self, v, u=None):
-    #     """Summary."""
-    #     if u is not None:
-    #         u = [self.__name2id[i] for i in u] if is_iterable(u) else self.__name2id[u]
-    #     paths = self.__G.get_all_shortest_paths(self.__name2id[v], to=u, weights=None, mode="out")
-    #     return tuple((tuple((self.__id2name[v] for v in p)) for p in paths if len(p) > 1))
+    def shortest_paths(self, v, u=None):
+        """Summary."""
+        if u is not None:
+            u = [self.__name2id[i] for i in u] if is_iterable(u) else self.__name2id[u]
+        paths = self.__G.get_all_shortest_paths(self.__name2id[v], to=u, weights=None, mode="out")
+        return tuple((tuple((self.__id2name[v] for v in p)) for p in paths if len(p) > 1))
 
     def betweenness(self, vertices=None, cutoff=None, sources=None, targets=None):
         """Summary."""
@@ -1031,7 +1022,6 @@ class Efficiency:
     Reference:
         Vito Latora and Massimo Marchiori. Efficient behavior of small-world networks. *Physical Review Letters* 87.19 (2001): 198701. http://dx.doi.org/10.1103/PhysRevLett.87.198701
     """
-
     def __init__(self, G, shortest_distances=None):
         """Summary."""
         if G.is_directed():

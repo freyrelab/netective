@@ -38,7 +38,8 @@ from netective.utils import (
     get_allocated_memory,
     filter_association_df_for_models,
     get_models_abbreviations,
-    clean_names_association_df
+    clean_names_association_df,
+    process_netective_properties_files
 )
 from netective.logging_info import get_logger
 from netective.structure.dataviz import plot_scalars, create_comp_heatmap, plot_distributions
@@ -1295,7 +1296,7 @@ def characterize_models(
         ba_m (int | str | list): Type of m (integrer or a degree distribution) that is going to be used in Barabasi Albert generator. Defaults to 2.
             Valid values are "out degree", "in degree", "degree" or any positive integrer.
         selected_props (str | list):  Properties to compute. Defaults to 'all'.
-        keep_averages (bool): Whether to keep the averages of the moments of the distributions. Defaults to True.
+        keep_averages (bool): Whether to include the averages of local properties in the global properties array. Defaults to True.
         workers (int): Number of workers to use. Defaults to 2.
                                 IMPORTANT : Introducing a number of workers bigger than available is not going to make 
                                             the function break, but it will make batch creation incorrect, so computing 
@@ -1594,8 +1595,11 @@ def compare_structure(
 
 ######################################################################
 def classify_networks(
-        networks: dict[str, Graph] | str,
+        networks: dict[str, Graph] | str = None,
+        results_dir: str = None,
+        distance_df: pd.DataFrame = None,
         norm: str | None = None,
+        directed: bool = True,
         selected_props: str | list = ['Average Local Efficiency',
             'Radius',
             'Center',
@@ -1610,14 +1614,26 @@ def classify_networks(
             'Self-Loops'
         ],
         workers: str | int = "auto",
-        get_clusters_kargs: dict = None,
+        include_env: None | dict = None,
+        add_averages: bool = True,
+        association_metric: str = 'pearson',
+        clust_num: int = None,
+        threshold: float = None,
+        metric: str = 'euclidean',
+        method: str = 'ward',
+        map_ids: bool = True,
+        fcluster_kwargs: dict = None,
+        verbose: str = None,
+        nets_file_format: str = 'edgelist',
+        comments : str = '#',
+        delimiter : str = '\t',
 ) -> dict:
     """Module-level function to classify multiple networks.
     
     Returns groups of networks with similar properties.
 
     Arguments:
-        networks (dict | str): Dictionary of networks to compare.
+        networks (dict | str): Dictionary of networks to compare or directory path to files.
             {'net_id': DiGraph | Graph}
         norm (str, optional): Normalization to apply. Defaults to None.
             Valid values are 'network', 'biological' or None.
@@ -1633,21 +1649,65 @@ def classify_networks(
     Returns:
         dict: Dictionary with the id of the cluster and the networks that belong to it.
     """
-
-    scalar, _ = compare_structure(
-        networks,
-        norm= norm,
-        selected_props= selected_props,
-        workers= workers,
-        return_prop_dicts= True,
-    )
-
-    merged_df = pd.DataFrame.from_dict(scalar).T
-    merged_df.dropna(axis=1, inplace=True, how='any')
-
-    if get_clusters_kargs is not None:
-        clusters = get_clusters(merged_df.T.corr(), map_ids=True, **get_clusters_kargs)
+    if distance_df is None:
+        distance_df = pd.DataFrame()
+    
+    if not networks and not results_dir and distance_df.empty:
+        struct_logger.critical('Either a directory/dictionary with networks, or a results directory with properties files created by Netective, or a distance dataframe created by Netective must be passed to classify networks.')
+        raise ValueError('Either a directory/dictionary with networks, or a results directory with properties files created by Netective, or a distance dataframe created by Netective must be passed to classify networks.')
+    
+    if networks:
+        struct_logger.warning('INPUT DETECTED: networks directory. Therefore entire structural characterization needs to be computed first.')
+    elif results_dir:
+        struct_logger.warning("INPUT DETECTED: Netective's results directory. Therefore only files processing and association need to be computed.")
     else:
-        clusters = get_clusters(merged_df.T.corr(), map_ids=True)
+        struct_logger.warning('INPUT DETECTED: distance dataframe. Therefore classification will be computed directly.')
+    
+    # Calculating properties arrays if necesary
+    if not distance_df.empty: # In case a distance_df is already passed, no need to do anything else
+        pass
+    elif results_dir: # Scenario where structural characterization has already been computed
+        scalars_array = process_netective_properties_files(
+            results_dir= results_dir,
+            return_props_dict= True,
+            selected_props= selected_props,
+            conserve_props= True,
+            add_averages= add_averages,
+            verbose= verbose
+        )
+    elif networks: # Worst case scenario, entire structural characterization needs to be computed
+        scalars_array, _ = compare_structure(
+            networks= networks,
+            directed= directed,
+            norm= norm,
+            selected_props= selected_props,
+            workers= workers,
+            include_env= include_env,
+            return_prop_dicts= True,
+            keep_averages= add_averages,
+            verbose= verbose,
+            nets_file_format= nets_file_format,
+            comments= comments,
+            delimiter= delimiter
+        )
+    else: # Error, no input found
+        struct_logger.critical('No input found. Please provide either a pre-computed distance dataframe, directory path with Netective pre-computed properties files or directory path with network files to run classification.')
+        raise AttributeError('No input found. Please provide either a pre-computed distance dataframe, directory path with Netective pre-computed properties files or directory path with network files to run classification.')
+    
+    # Calculate distance dataframe if necessary
+    if distance_df.empty:
+        if len(scalars_array) > 0 and len(list(scalars_array.values())[0]) > 1:
+            distance_df = association(scalars_array, corr_func= association_metric)
+            distance_df = clean_names_association_df(distance_df)
+
+    clusters = get_clusters(
+        distance_df= distance_df,
+        clust_num= clust_num,
+        threshold= threshold,
+        metric= metric,
+        method= method,
+        map_ids= map_ids,
+        fcluster_kwargs= fcluster_kwargs
+    )
 
     return clusters
