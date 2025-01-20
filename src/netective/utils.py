@@ -477,14 +477,28 @@ def filter_properties(props_dict: dict, selected_props: list | str = 'all', cons
     
     final_props_dict = {}
 
-    for net_id, props in props_dict.items():
-        if conserve_props:
-            temp = {prop: props[prop] for prop in selected_props}
-        else:
-            temp = props_dict[net_id].copy()
-            for prop in selected_props:
-                temp.pop(prop) 
-        final_props_dict.update({net_id: temp})
+    # Get all available properties
+    all_props = next(iter(props_dict.values())).keys()
+
+    # Filter out invalid properties from selected_props
+    valid_props = list(selected_props & all_props)
+    invalid_props = list(selected_props - all_props)
+
+    if invalid_props:
+            utils_logger.warning(f'These properties were not computed and will be ignored: {invalid_props}')
+    
+    if not valid_props:
+        utils_logger.warning(f'Selected props list is empty. Returning dictionaries with all properties')
+        return props_dict
+    
+    # Filter properties based on the conserve_props flag
+    final_props_dict = {
+        net_id: (
+            {prop: props[prop] for prop in valid_props} if conserve_props
+            else {prop: value for prop, value in props.items() if prop not in valid_props}
+        )
+        for net_id, props in props_dict.items()
+    }
 
     return final_props_dict
 
