@@ -49,7 +49,7 @@ def _parse_arguments():
         classifying them into clusters using two possible criterions.
         Netective can also perform an optimized statistical benchmarking of network inferences based on a Gold Standard.
 
-        Netective was developed and is maintained by the team at FreyreLab, Center for Genomic Sciences, Autonomous University of Mexico.     
+        Netective was developed and is maintained by the team at FreyreLab, Center for Genomic Sciences, National Autonomous University of Mexico (UNAM).     
                                                 -      -.
                                              -###      -###-
                                           +######      -######-
@@ -429,6 +429,12 @@ def _parse_arguments():
         required= True,
     )
     parser_c.add_argument(
+        '-dir', '--directed',
+        action= 'store_true',
+        help= 'whether gold standard and inferences are directed or not.',
+        required= False
+    )
+    parser_c.add_argument(
         '-g', '--greater_is_better',
         action= 'store_true',
         help= 'whether the inference score is better when it is higher or lower. If greater_is_better is not declared, the lower the score the better the inference.',
@@ -444,13 +450,25 @@ def _parse_arguments():
         '-coff','--cutoff',
         default= False,
         type= restricted_float,
-        help= "Cutoff to use to compute the evaluation metrics. If False, the evaluation metrics are computed for every score in the inference.",
+        help= "cutoff to use to compute the evaluation metrics. If False, the evaluation metrics are computed for every score in the inference.",
         required= False
     )
     parser_c.add_argument(
-        '-dir', '--directed',
+        '-ocoff', '--optimal_cutoff',
         action= 'store_true',
-        help= 'whether gold standard and inferences are directed or not.',
+        help= 'whether to include the calculation of the optimal cutoff for each inference, either as an additional plot or included in the stats summary file. IMPORTANT: this stat is not included by default because it requires THE CALCULATION OF THE F1 SCORE FOR EACH DIFFERENT SCORE IN THE INFERENCE.',
+        required= False
+    )
+    parser_c.add_argument(
+        '-f1', '--f1_score',
+        action= 'store_true',
+        help= 'whether to plot the F1 score for each inference.',
+        required= False
+    )
+    parser_c.add_argument(
+        '-mcc', '--matthews_corr_coeff',
+        action= 'store_true',
+        help= 'whether to plot the Matthews Correlation Coefficient for each inference.',
         required= False
     )
     parser_c.add_argument(
@@ -568,14 +586,14 @@ def _parse_arguments():
             'Radius',
             'Center',
             'Periphery',
-            # 'Complex Feed-Forward Circuits',
-            # 'Feed-Forward Circuits',
+            'Complex Feed-Forward Circuits',
+            'Feed-Forward Circuits',
             'Max Degree',
-            # 'Gini Index',
+            'Gini Index',
             'Global Efficiency',
             'Undirected Gini Index',
             'Entropy of Degree Distribution',
-            # 'Self-Loops'
+            'Self-Loops'
             ],
         required= False,
         help= "list of selected properties used for analysis, defaults to selected properties for best classification. Accepted format: coma-separated string, written between 's. (default: ['Average Local Efficiency', 'Radius', 'Center', 'Periphery', 'Complex Feed-Forward Circuits', 'Feed-Forward Circuits', 'Max Degree', 'Gini Index', 'Global Efficiency', 'Undirected Gini Index', 'Entropy of Degree Distribution', 'Self-Loops'])"

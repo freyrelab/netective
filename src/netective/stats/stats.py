@@ -160,13 +160,16 @@ def benchmarking(
     greater_score_is_better: bool = True,
     allow_self_loops: bool = False,
     cutoff: float | False = False,
+    optimal_cutoff: bool = False,
+    f1_score: bool = False,
+    mcc: bool = False,
     return_auc_coords_dicts: bool = False,
     comments : str = '#',
     delimiter : str = '\t',
     score : bool = True,
     verbose: str = None,
     baseline: bool = True,
-) -> None:
+) -> tuple | dict:
     """Perform a statistical analysis of the inference networks.
     
     Args:
@@ -193,7 +196,6 @@ def benchmarking(
             If None, the verbosity level is set to WARNING. Options are: DEBUG, INFO, WARNING, ERROR, CRITICAL.
         baseline (bool): Whether to include a baseline inference in the benchmark.
 
-        
     Returns:
         If return_auc_coords_dicts is True, a tuple containing the AUPRs, AUROCs, and (precision, recall, and FPR) for every inference in the benchmark.
         If return_auc_coords_dicts is False, a tuple containing the figure axis for the AUPR and AUROC plots.
@@ -245,22 +247,27 @@ def benchmarking(
         greater_score_is_better=greater_score_is_better,
         allow_self_loops=allow_self_loops,
         cutoff=cutoff,
+        include_optimal_cutoff= optimal_cutoff,
         baseline=baseline,
     )
 
-
     if return_auc_coords_dicts:
         stats_logger.info('Calculating AUPR, AUROC and coordinates...')
-        return_set = benchmark.aupr(), benchmark.auroc()
-        return_set += (benchmark.coordinates(),)
+        return_set = benchmark.aupr(), benchmark.auroc(), benchmark.coordinates(), benchmark.summarize()
     
     else:
+        return_set = {}
         stats_logger.info('Plotting AUPR and AUROC curves...')
-        fig_aupr = benchmark.plot_aupr()
-        fig_pr_curves = benchmark.plot_precision_recall_curves()
-        fig_auroc = benchmark.plot_auroc()
-        fig_roc_curves = benchmark.plot_roc_curves()
-        return_set = fig_aupr, fig_pr_curves, fig_auroc, fig_roc_curves
+        return_set['aupr'] = benchmark.plot_aupr()
+        return_set['pr curves'] = benchmark.plot_precision_recall_curves()
+        return_set['auroc'] = benchmark.plot_auroc()
+        return_set['roc curves'] = benchmark.plot_roc_curves()
+        if optimal_cutoff:
+            return_set['optimal cutoffs'] = benchmark.plot_optimal_cutoffs()
+        if f1_score:
+            return_set['f1 scores'] = benchmark.plot_f1_score()
+        if mcc:
+            return_set['mcc'] = benchmark.plot_mcc()
 
     if verbose is not None:
         set_log_level(stats_logger, current_level)
@@ -276,6 +283,7 @@ class Benchmark:
         greater_score_is_better: bool = True,
         allow_self_loops: bool = False,
         cutoff: float | False = False,
+        include_optimal_cutoff: bool = False,
         baseline: bool = True,
     ):
         """
@@ -311,6 +319,7 @@ class Benchmark:
             )
             for net_id, inf in zip(inferences.keys(), inference_edges)
         }
+        self.__include_optimal_cutoff = include_optimal_cutoff
 
     @property
     def nis_instances(self) -> dict[str, LinkEval]:
@@ -475,8 +484,8 @@ class Benchmark:
         """Returns the coordinates for the precision, recall and FPR for every inference in the benchmark."""
         return {net_id: nis.coordinates(cutoff) for net_id, nis in self.nis_instances.items()}
     
-    def sumarize(self) -> DataFrame:
-        """Sumarizes the evaluation metrics for every inference in the benchmark.
+    def summarize(self) -> DataFrame:
+        """Summarizes the evaluation metrics for every inference in the benchmark.
 
         Returns:
         -------
@@ -484,16 +493,27 @@ class Benchmark:
             DataFrame containing the evaluation metrics for every inference in the benchmark.
         """
         stats_logger.info('Creating stats summary...')
-        summary = {
-            net_id: {
-                "AUPR": nis.area_under_precision_recall_curve(),
-                "AUROC": nis.area_under_roc_curve(),
-                "F1 score": nis.f1_score(),
-                "MCC": nis.mcc(),
-                "Optimal cutoff": nis.optimal_cutoff(),
+        if self.__include_optimal_cutoff:
+            summary = {
+                net_id: {
+                    "AUPR": nis.area_under_precision_recall_curve(),
+                    "AUROC": nis.area_under_roc_curve(),
+                    "F1 score": nis.f1_score(),
+                    "MCC": nis.mcc(),
+                    "Optimal cutoff": nis.optimal_cutoff(),
+                }
+                for net_id, nis in self.nis_instances.items()
             }
-            for net_id, nis in self.nis_instances.items()
-        }
+        else:
+            summary = {
+                net_id: {
+                    "AUPR": nis.area_under_precision_recall_curve(),
+                    "AUROC": nis.area_under_roc_curve(),
+                    "F1 score": nis.f1_score(),
+                    "MCC": nis.mcc(),
+                }
+                for net_id, nis in self.nis_instances.items()
+            }
         return DataFrame(summary).T
 
 
@@ -694,7 +714,7 @@ class LinkEval:
             warn("The gold standard edges have a score attribute. It might be a prediction.")
 
     def __get_tp_fp(self, gs_edges: set, inference_edges: set):
-        stats_logger.debug(f'Calculating true positives and false positives for: {self.inference_id}')
+        stats_logger.debug(f'Calculating true positives and false positives for: {self.__inference_id}')
         # Getting complete set of predicted edges
         all_predicted_edges = set()
         for edges in inference_edges:
@@ -716,7 +736,7 @@ class LinkEval:
 
         # Predicted Positives Edges array & true positives and false positives calculations
         tp_fp = []
-        stats_logger.debug(f'{self.inference_id} has a total of {len(inference_edges)} scores after trimming.')
+        stats_logger.debug(f'{self.__inference_id} has a total of {len(inference_edges)} scores after trimming.')
         predicted_positives_bin = bitarray(len(universe))
         for i, bunch_edges in enumerate(inference_edges):
             stats_logger.debug(f"Creating {i + 1}/{len(inference_edges)} binary array and calculating this score's true positives and false positives...")
@@ -773,7 +793,7 @@ class LinkEval:
             stats_logger.warning("The evaluation metrics have already been computed for this cutoff. Returning cached values.")
             return self.precision_dist, self.sensitivity_dist, self.fpr_dist
         
-        stats_logger.debug(f'Computing pr and roc datapoints for: {self.inference_id}')
+        stats_logger.debug(f'Computing pr and roc datapoints for: {self.__inference_id}')
         stats_logger.debug(f'Trimming predicted edges according to cutoff established ({cutoff}) and greater_is_better argument ({self.greater_is_better})')
         if self.greater_is_better:
             inference_edges = [
@@ -963,8 +983,7 @@ class LinkEval:
             Set of edges predicted by the inference for the given cutoff.
         """
         stats_logger.debug(f'Trimming predicted edges according to cutoff established ({cutoff}) and greater_is_better argument ({self.greater_is_better})')
-        if cutoff is None:
-            raise ValueError("A cutoff must be provided.")
+        cutoff = self.__validate_cutoff(cutoff)
         if self.greater_is_better:
             return set().union(*[edges for score, edges in self.inference_edges if score >= cutoff])
         else:
@@ -1007,7 +1026,7 @@ class LinkEval:
             Precision for the given cutoff.
         """
         cutoff = self.__validate_cutoff(cutoff)
-        stats_logger(f'Calculating precision for cutoff: {cutoff}')
+        stats_logger.info(f'Calculating precision for cutoff: {cutoff}')
         
         if cutoff == self.cutoff and self.__precision_dist is not None:
             precision = self.__precision_dist[-2]
@@ -1086,8 +1105,10 @@ class LinkEval:
         recall = self.recall(cutoff=cutoff)
         if precision+recall == 0:
             return 0
-        else:
+        elif self.__inference_id != 'Baseline':
             return 2 * (precision * recall) / (precision + recall)
+        else:
+            return np.nan
     
     def mcc(self, cutoff:None|float=None) -> float:
         """Computes the Matthews correlation coefficient for a given cutoff.
@@ -1113,8 +1134,8 @@ class LinkEval:
 
         if not true_positives:
             return 0
-        print(true_positives, true_negatives, false_positives, false_negatives)
-        return (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt(float((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives)))
+        else:
+            return (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt(float((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives)))
     
     def __compute_f1_score_dist(self) -> np.ndarray:
         """Computes the F1 score for every score in the inference.
@@ -1131,7 +1152,7 @@ class LinkEval:
         return f1_score_dist
     
     def optimal_cutoff(self) -> float:
-        """Computes the optimal cutoff for the inference, that required to maximize the F1 score.
+        """Computes the optimal cutoff for the inference, that is required to maximize the F1 score.
 
         Returns:
         optimal_cutoff: float
@@ -1139,7 +1160,10 @@ class LinkEval:
         """
         stats_logger.info('Calculating optimal cutoff for the inference. Requires to maximize F1 score.')
         self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
-        return max(self.__f1_score_dist, key=self.__f1_score_dist.get)
+        if self.__inference_id != 'Baseline':
+            return max(self.__f1_score_dist, key=self.__f1_score_dist.get)
+        else:
+            return np.nan
     
     def optimal_cutoff_plot(self, ax=None, x_log=False):
         """Plots the precision and the recall values for every score in the inference, showing the optimal cutoff.

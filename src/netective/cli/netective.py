@@ -308,6 +308,9 @@ def runmode3(args):
     greater_is_better = args.greater_is_better
     keep_auc_coords_dicts = args.keep_auc_coords_dicts
     cutoff = args.cutoff
+    optimal_cutoff = args.optimal_cutoff
+    f1_score = args.f1_score
+    mcc = args.matthews_corr_coeff
     score = args.score
     baseline = args.baseline
     self_loops = args.self_loops
@@ -316,15 +319,16 @@ def runmode3(args):
     comments = args.comments
     delimiter = args.delimiter
 
-    cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_coords_dicts {keep_auc_coords_dicts} --cutoff {cutoff} --score {score} --self_loops {self_loops} --baseline {baseline} --verbose {verbose} --output {output} --delimiter {delimiter!r} --comments {comments}\n'
+    cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_coords_dicts {keep_auc_coords_dicts} --cutoff {cutoff} --optimal_cutoff {optimal_cutoff} --f1_score {f1_score} --matthews_corr_coeff {mcc} --score {score} --self_loops {self_loops} --baseline {baseline} --verbose {verbose} --output {output} --delimiter {delimiter!r} --comments {comments}\n'
     if keep_auc_coords_dicts: # Keeping dictionaries with aupr and auroc values
-        aupr_scores, auroc_scores, coords = benchmarking(
+        aupr_scores, auroc_scores, coords, summary = benchmarking(
             networks= inferences,
             gold_standard= gs,
             directed= directed,
             greater_score_is_better= greater_is_better,
             allow_self_loops= self_loops,
             cutoff= cutoff,
+            optimal_cutoff= optimal_cutoff,
             baseline= baseline,
             return_auc_coords_dicts= True,
             comments= comments,
@@ -343,18 +347,22 @@ def runmode3(args):
             pre_output_file = concat_path(output, f'precision.{ext}')
             sen_output_file = concat_path(output, f'sensitivity.{ext}')
             fpr_output_file = concat_path(output, f'fpr.{ext}')
+            stats_summary_file = concat_path(output, f'stats_summary.{ext}')
 
             aupr_f = open(aupr_output_file, 'w')
             auroc_f = open(auroc_output_file, 'w')
             pre_f = open(pre_output_file, 'w')
             sen_f = open(sen_output_file, 'w')
             fpr_f = open(fpr_output_file, 'w')
+            stats_summary_f = open(stats_summary_file, 'w')
 
             aupr_f.write(f'{cl}{comments}AUPR Scores\n{comments}Network{delimiter}Score')
             auroc_f.write(f'{cl}{comments}AUROC Scores\n{comments}Network{delimiter}Score')
             pre_f.write(f'{cl}{comments}Precision datapoints for every inference\n')
             sen_f.write(f'{cl}{comments}Sensistivity datapoints for every inference\n')
             fpr_f.write(f'{cl}{comments}False positive rate datapoints for every inference\n')
+            stats_summary_f.write(f'{cl}{comments}Stats summary for every inference\n')
+            stats_summary_f.close()
             
             for _, value in coords.items():
                 for i, dist in enumerate(value):
@@ -367,7 +375,13 @@ def runmode3(args):
                     else:
                         fpr_f.write(np.array2string(dist, separator= delimiter, threshold= len(dist)).replace('\n', '').replace('[','').replace(']',''))
                         fpr_f.write('\n')
-
+            
+            summary.to_csv(
+                path_or_buf= stats_summary_file,
+                sep= delimiter,
+                na_rep= 'NaN',
+                mode= 'a'
+            )
         else:
             print(f'\t\tAUPR Scores\nNetwork{args.delimiter}Score')
         
@@ -394,13 +408,16 @@ def runmode3(args):
             pass
       
     else:
-        fig_aupr, fig_pr_curves, fig_auroc, fig_roc_curves = benchmarking(
+        figs = benchmarking(
             networks= inferences,
             gold_standard= gs,
             directed= directed,
             greater_score_is_better= greater_is_better,
             allow_self_loops= self_loops,
             cutoff= cutoff,
+            optimal_cutoff= optimal_cutoff,
+            f1_score= f1_score,
+            mcc= mcc,
             baseline= baseline,
             return_auc_coords_dicts= False,
             comments= comments,
@@ -409,13 +426,16 @@ def runmode3(args):
             verbose= verbose
         )
 
-        if output is None:
-            cli_logger.warning(f'No output directory stated, setting current directory as output directory.')
-            output = os.getcwd()
-        fig_aupr.get_figure().savefig(fname= concat_path(output, f'aupr.png'), bbox_inches= 'tight', dpi= 300)
-        fig_pr_curves.get_figure().savefig(fname= concat_path(output, f'pr_curves.png'), bbox_inches= 'tight', dpi= 300)
-        fig_auroc.get_figure().savefig(fname= concat_path(output, f'auroc.png'), bbox_inches= 'tight', dpi= 300)
-        fig_roc_curves.get_figure().savefig(fname= concat_path(output, f'roc_curves.png'), bbox_inches= 'tight', dpi= 300)
+        figs['aupr'].get_figure().savefig(fname= concat_path(output, f'aupr.png'), bbox_inches= 'tight', dpi= 300)
+        figs['pr curves'].get_figure().savefig(fname= concat_path(output, f'pr_curves.png'), bbox_inches= 'tight', dpi= 300)
+        figs['auroc'].get_figure().savefig(fname= concat_path(output, f'auroc.png'), bbox_inches= 'tight', dpi= 300)
+        figs['roc curves'].get_figure().savefig(fname= concat_path(output, f'roc_curves.png'), bbox_inches= 'tight', dpi= 300)
+        if optimal_cutoff:
+            figs['optimal cutoffs'].get_figure().savefig(fname= concat_path(output, f'optimal_cutoffs.png'), bbox_inches= 'tight', dpi= 300)
+        if f1_score:
+            figs['f1 scores'].get_figure().savefig(fname= concat_path(output, f'f1_scores.png'), bbox_inches= 'tight', dpi= 300)
+        if mcc:
+            figs['mcc'].get_figure().savefig(fname= concat_path(output, f'mcc.png'), bbox_inches= 'tight', dpi= 300)
 
 def runmode4(args):
     # Required args
