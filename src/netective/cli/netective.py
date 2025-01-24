@@ -302,8 +302,10 @@ def runmode2(args):
             raise ValueError("Not enough data to compare.")
 
 def runmode3(args):
+    # Required args
     gs = args.gold_standard
     inferences = args.inferences
+    # Optional args
     directed = args.directed
     greater_is_better = args.greater_is_better
     keep_auc_coords_dicts = args.keep_auc_coords_dicts
@@ -318,124 +320,106 @@ def runmode3(args):
     output = args.output
     comments = args.comments
     delimiter = args.delimiter
-
     cl = f'{comments}command: netective {RUNMODES[args.runmode]} --gold_standard {gs} --inferences {inferences} --directed {directed} --greater_is_better {greater_is_better} --keep_auc_coords_dicts {keep_auc_coords_dicts} --cutoff {cutoff} --optimal_cutoff {optimal_cutoff} --f1_score {f1_score} --matthews_corr_coeff {mcc} --score {score} --self_loops {self_loops} --baseline {baseline} --verbose {verbose} --output {output} --delimiter {delimiter!r} --comments {comments}\n'
-    if keep_auc_coords_dicts: # Keeping dictionaries with aupr and auroc values
-        aupr_scores, auroc_scores, coords, summary = benchmarking(
-            networks= inferences,
-            gold_standard= gs,
-            directed= directed,
-            greater_score_is_better= greater_is_better,
-            allow_self_loops= self_loops,
-            cutoff= cutoff,
-            optimal_cutoff= optimal_cutoff,
-            baseline= baseline,
-            return_auc_coords_dicts= True,
-            comments= comments,
-            delimiter= delimiter,
-            score= score,
-            verbose= verbose
-        )
-        if output is not None:
-            if not os.path.isdir(output):
-                cli_logger.warning(f'Invalid output {output}, setting current directory instead')
-                output = os.getcwd()
-            exts = {",": "csv", "\t": "tsv"}
-            ext = exts.get(args.delimiter, "txt")
-            aupr_output_file = concat_path(output, f"aupr_scores.{ext}")
-            auroc_output_file = concat_path(output, f"auroc_scores.{ext}")
-            pre_output_file = concat_path(output, f'precision.{ext}')
-            sen_output_file = concat_path(output, f'sensitivity.{ext}')
-            fpr_output_file = concat_path(output, f'fpr.{ext}')
-            stats_summary_file = concat_path(output, f'stats_summary.{ext}')
 
-            aupr_f = open(aupr_output_file, 'w')
-            auroc_f = open(auroc_output_file, 'w')
-            pre_f = open(pre_output_file, 'w')
-            sen_f = open(sen_output_file, 'w')
-            fpr_f = open(fpr_output_file, 'w')
-            stats_summary_f = open(stats_summary_file, 'w')
+    # Benchmarking call
+    output_results = benchmarking(
+        networks= inferences,
+        gold_standard= gs,
+        directed= directed,
+        greater_score_is_better= greater_is_better,
+        allow_self_loops= self_loops,
+        cutoff= cutoff,
+        optimal_cutoff= optimal_cutoff,
+        f1_score= f1_score,
+        mcc= mcc,
+        baseline= baseline,
+        return_auc_coords_dicts= keep_auc_coords_dicts,
+        comments= comments,
+        delimiter= delimiter,
+        score= score,
+        verbose= verbose
+    )
 
-            aupr_f.write(f'{cl}{comments}AUPR Scores\n{comments}Network{delimiter}Score')
-            auroc_f.write(f'{cl}{comments}AUROC Scores\n{comments}Network{delimiter}Score')
-            pre_f.write(f'{cl}{comments}Precision datapoints for every inference\n')
-            sen_f.write(f'{cl}{comments}Sensistivity datapoints for every inference\n')
-            fpr_f.write(f'{cl}{comments}False positive rate datapoints for every inference\n')
-            stats_summary_f.write(f'{cl}{comments}Stats summary for every inference\n')
-            stats_summary_f.close()
-            
-            for _, value in coords.items():
-                for i, dist in enumerate(value):
-                    if i == 0:
-                        pre_f.write(np.array2string(dist, separator= delimiter, threshold= len(dist)).replace('\n', '').replace('[','').replace(']',''))
-                        pre_f.write('\n')
-                    elif i == 1:
-                        sen_f.write(np.array2string(dist, separator= delimiter, threshold= len(dist)).replace('\n', '').replace('[','').replace(']',''))
-                        sen_f.write('\n')
-                    else:
-                        fpr_f.write(np.array2string(dist, separator= delimiter, threshold= len(dist)).replace('\n', '').replace('[','').replace(']',''))
-                        fpr_f.write('\n')
-            
-            summary.to_csv(
-                path_or_buf= stats_summary_file,
-                sep= delimiter,
-                na_rep= 'NaN',
-                mode= 'a'
-            )
-        else:
-            print(f'\t\tAUPR Scores\nNetwork{args.delimiter}Score')
+    # Managing outputs
+    if keep_auc_coords_dicts: # Desired ouput: text files
+        aupr_scores = output_results[0]
+        auroc_scores = output_results[1]
+        coords = output_results[2]
+        summary = output_results[3]
         
+        # Validating output dir and file extensions
+        if not os.path.isdir(output):
+            cli_logger.warning(f'Invalid output {output}, setting current directory instead')
+            output = os.getcwd()
+        exts = {",": "csv", "\t": "tsv"}
+        ext = exts.get(args.delimiter, "txt")
+
+        # AUC files (PR and ROC)
+        aupr_output_file = concat_path(output, f"aupr_scores.{ext}")
+        auroc_output_file = concat_path(output, f"auroc_scores.{ext}")
+        aupr_f = open(aupr_output_file, 'w')
+        auroc_f = open(auroc_output_file, 'w')
+        aupr_f.write(f'{cl}{comments}AUPR Scores\nNetwork{delimiter}Score')
+        auroc_f.write(f'{cl}{comments}AUROC Scores\nNetwork{delimiter}Score')
         for net, value in aupr_scores.items():
-            if output is not None:
-                aupr_f.write(f'\n{net}{delimiter}{value}')
-            else:
-                print(f'{net}{delimiter}{value}')
-        for i,(net, value) in enumerate(auroc_scores.items()):
-            if output is not None:
-                auroc_f.write(f'\n{net}{delimiter}{value}')
-            else:
-                if i == 0:
-                    print(f'\n\t\tAUROC Scores\nNetwork{delimiter}Score')
-                print(f'{net}{delimiter}{value}')
-        try:
-            aupr_f.close()
-            auroc_f.close()
-            sen_f.close()
-            pre_f.close()
-            fpr_f.close()
+            aupr_f.write(f'\n{net}{delimiter}{value}')
+        for net, value in auroc_scores.items():
+            auroc_f.write(f'\n{net}{delimiter}{value}')
+        aupr_f.close()
+        auroc_f.close()
 
-        except UnboundLocalError:
-            pass
-      
-    else:
-        figs = benchmarking(
-            networks= inferences,
-            gold_standard= gs,
-            directed= directed,
-            greater_score_is_better= greater_is_better,
-            allow_self_loops= self_loops,
-            cutoff= cutoff,
-            optimal_cutoff= optimal_cutoff,
-            f1_score= f1_score,
-            mcc= mcc,
-            baseline= baseline,
-            return_auc_coords_dicts= False,
-            comments= comments,
-            delimiter= delimiter,
-            score= score,
-            verbose= verbose
+        # Datapoints files (precision, sensitivity and fpr)
+        pre_output_file = concat_path(output, f'precision.{ext}')
+        sen_output_file = concat_path(output, f'sensitivity.{ext}')
+        fpr_output_file = concat_path(output, f'fpr.{ext}')
+        pre_f = open(pre_output_file, 'w')
+        sen_f = open(sen_output_file, 'w')
+        fpr_f = open(fpr_output_file, 'w')
+        pre_f.write(f'{cl}{comments}Precision datapoints for every inference\n')
+        sen_f.write(f'{cl}{comments}Sensitivity datapoints for every inference\n')
+        fpr_f.write(f'{cl}{comments}False positive rate datapoints for every inference\n')
+        for net_name, value in coords.items():
+            pre_f.write(f'>>>{net_name} precision datapoints\n')
+            sen_f.write(f'>>>{net_name} sensitivity datapoints\n')
+            fpr_f.write(f'>>>{net_name} false positive rate datapoints\n')
+            for i, coords_array in enumerate(value):
+                for value in coords_array:
+                    if i == 0:
+                        pre_f.write(f'{value}{delimiter}')
+                    elif i == 1:
+                        sen_f.write(f'{value}{delimiter}')
+                    else:
+                        fpr_f.write(f'{value}{delimiter}')
+            pre_f.write('\n')
+            sen_f.write('\n')
+            fpr_f.write('\n')
+        sen_f.close()
+        pre_f.close()
+        fpr_f.close()
+
+        # Stats summary file 
+        stats_summary_file = concat_path(output, f'stats_summary.{ext}')
+        stats_summary_f = open(stats_summary_file, 'w')
+        stats_summary_f.write(f'{cl}{comments}Stats summary for every inference\n')
+        stats_summary_f.close()
+        summary.to_csv(
+            path_or_buf= stats_summary_file,
+            sep= delimiter,
+            na_rep= 'NaN',
+            mode= 'a'
         )
-
-        figs['aupr'].get_figure().savefig(fname= concat_path(output, f'aupr.png'), bbox_inches= 'tight', dpi= 300)
-        figs['pr curves'].get_figure().savefig(fname= concat_path(output, f'pr_curves.png'), bbox_inches= 'tight', dpi= 300)
-        figs['auroc'].get_figure().savefig(fname= concat_path(output, f'auroc.png'), bbox_inches= 'tight', dpi= 300)
-        figs['roc curves'].get_figure().savefig(fname= concat_path(output, f'roc_curves.png'), bbox_inches= 'tight', dpi= 300)
+    else: # Desired ouput: plotting
+        output_results['aupr'].get_figure().savefig(fname= concat_path(output, f'aupr.png'), bbox_inches= 'tight', dpi= 300)
+        output_results['pr curves'].get_figure().savefig(fname= concat_path(output, f'pr_curves.png'), bbox_inches= 'tight', dpi= 300)
+        output_results['auroc'].get_figure().savefig(fname= concat_path(output, f'auroc.png'), bbox_inches= 'tight', dpi= 300)
+        output_results['roc curves'].get_figure().savefig(fname= concat_path(output, f'roc_curves.png'), bbox_inches= 'tight', dpi= 300)
         if optimal_cutoff:
-            figs['optimal cutoffs'].get_figure().savefig(fname= concat_path(output, f'optimal_cutoffs.png'), bbox_inches= 'tight', dpi= 300)
+            output_results['optimal cutoffs'].get_figure().savefig(fname= concat_path(output, f'optimal_cutoffs.png'), bbox_inches= 'tight', dpi= 300)
         if f1_score:
-            figs['f1 scores'].get_figure().savefig(fname= concat_path(output, f'f1_scores.png'), bbox_inches= 'tight', dpi= 300)
+            output_results['f1 scores'].get_figure().savefig(fname= concat_path(output, f'f1_scores.png'), bbox_inches= 'tight', dpi= 300)
         if mcc:
-            figs['mcc'].get_figure().savefig(fname= concat_path(output, f'mcc.png'), bbox_inches= 'tight', dpi= 300)
+            output_results['mcc'].get_figure().savefig(fname= concat_path(output, f'mcc.png'), bbox_inches= 'tight', dpi= 300)
 
 def runmode4(args):
     # Required args

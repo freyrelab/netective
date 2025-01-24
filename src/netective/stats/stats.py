@@ -1132,10 +1132,10 @@ class LinkEval:
         false_negatives = self.size_gold_standard - true_positives
         true_negatives = self.size_negatives - false_positives
 
-        if not true_positives:
-            return 0
-        else:
+        if self.__inference_id != 'Baseline':
             return (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt(float((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives)))
+        else:
+            return np.nan
     
     def __compute_f1_score_dist(self) -> np.ndarray:
         """Computes the F1 score for every score in the inference.
