@@ -253,7 +253,10 @@ def benchmarking(
 
     if return_auc_coords_dicts:
         stats_logger.info('Calculating AUPR, AUROC and coordinates...')
-        return_set = benchmark.aupr(), benchmark.auroc(), benchmark.coordinates(), benchmark.summarize()
+        if optimal_cutoff:
+            return_set = benchmark.aupr(), benchmark.auroc(), benchmark.coordinates(), benchmark.f1_score_dists(), benchmark.summarize()
+        else:
+            return_set = benchmark.aupr(), benchmark.auroc(), benchmark.coordinates(), benchmark.summarize()
     
     else:
         return_set = {}
@@ -483,6 +486,10 @@ class Benchmark:
     def coordinates(self, cutoff=None) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """Returns the coordinates for the precision, recall and FPR for every inference in the benchmark."""
         return {net_id: nis.coordinates(cutoff) for net_id, nis in self.nis_instances.items()}
+    
+    def f1_score_dists(self)-> dict[str, dict[float, float]]:
+        """Returns the F1 distribution for every inference in the benchmark."""
+        return {net_id: nis.compute_f1_score_dist() for net_id, nis in self.nis_instances.items()}
     
     def summarize(self) -> DataFrame:
         """Summarizes the evaluation metrics for every inference in the benchmark.
@@ -1137,19 +1144,22 @@ class LinkEval:
         else:
             return np.nan
     
-    def __compute_f1_score_dist(self) -> np.ndarray:
+    def compute_f1_score_dist(self) -> np.ndarray:
         """Computes the F1 score for every score in the inference.
 
         Returns:
         f1_score_dist: dict[float, float]
             Dictionary containing the F1 score for every score in the inference.
         """
-        stats_logger.info('Calculating F1 score for every score in the inference...')
-        f1_score_dist = {}
-        for score, _ in self.inference_edges:
-            f1_score_dist[score] = self.f1_score(cutoff=score)
-        self.__f1_score_dist = f1_score_dist
-        return f1_score_dist
+        if self.__f1_score_dist is None:
+            stats_logger.info('Calculating F1 score for every score in the inference...')
+            f1_score_dist = {}
+            for score, _ in self.inference_edges:
+                f1_score_dist[score] = self.f1_score(cutoff=score)
+            self.__f1_score_dist = f1_score_dist
+            return f1_score_dist
+        else:
+            return self.__f1_score_dist
     
     def optimal_cutoff(self) -> float:
         """Computes the optimal cutoff for the inference, that is required to maximize the F1 score.
@@ -1159,7 +1169,7 @@ class LinkEval:
             Optimal cutoff for the inference.
         """
         stats_logger.info('Calculating optimal cutoff for the inference. Requires to maximize F1 score.')
-        self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
+        self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.compute_f1_score_dist()
         if self.__inference_id != 'Baseline':
             return max(self.__f1_score_dist, key=self.__f1_score_dist.get)
         else:
@@ -1178,7 +1188,7 @@ class LinkEval:
         ax: matplotlib.axes.Axes
             Axes object containing the plot.
         """
-        self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
+        self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.compute_f1_score_dist()
         optimal_cutoff = self.optimal_cutoff()
         precision_dist, sensitivity_dist, _ = self.__compute_roc_pr_datapoints() # use the default cutoff to get the cached values
         ax = _build_ax(ax, xlim=(min(self.__f1_score_dist), max(self.__f1_score_dist)), figsize=(4, 2))

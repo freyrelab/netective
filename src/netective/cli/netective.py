@@ -346,7 +346,11 @@ def runmode3(args):
         aupr_scores = output_results[0]
         auroc_scores = output_results[1]
         coords = output_results[2]
-        summary = output_results[3]
+        if optimal_cutoff:
+            f1_scores_dist = output_results[3]
+            summary = output_results[4]
+        else:
+            summary = output_results[3]
         
         # Validating output dir and file extensions
         if not os.path.isdir(output):
@@ -409,6 +413,24 @@ def runmode3(args):
             na_rep= 'NaN',
             mode= 'a'
         )
+
+        # F1 scores distributions file
+        if optimal_cutoff: 
+            f1_scores_file = concat_path(output, f'f1_scores_distributions.{ext}')
+            f1_scores_f = open(f1_scores_file, 'w')
+            f1_scores_f.write(f'{cl}{comments}F1 scores distribution for every inference\n')
+            for net_name, scores_dist in f1_scores_dist.items():
+                if net_name != 'Baseline':
+                    f1_scores_f.write(f'>>>{net_name} inference scores\n')
+                    for score in scores_dist.keys():
+                        f1_scores_f.write(f'{score}{delimiter}')
+                    f1_scores_f.write('\n')
+                    f1_scores_f.write(f'>>>{net_name} F1 scores\n')
+                    for f1_score in scores_dist.values():
+                        f1_scores_f.write(f'{f1_score}{delimiter}')
+                    f1_scores_f.write('\n')
+            f1_scores_f.close()
+
     else: # Desired ouput: plotting
         output_results['aupr'].get_figure().savefig(fname= concat_path(output, f'aupr.png'), bbox_inches= 'tight', dpi= 300)
         output_results['pr curves'].get_figure().savefig(fname= concat_path(output, f'pr_curves.png'), bbox_inches= 'tight', dpi= 300)
