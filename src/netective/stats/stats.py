@@ -41,14 +41,22 @@ def _build_ax(ax=None, ylim=(0, 1), xlim=(0, 1), figsize=(2, 2)):
     return ax
 
 def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool) -> set[tuple[str, str]]:
-    """Returns the universe of potential edges between genes in the gold standard.
+    """Returns the universe of potential edges between genes in the Gold Standard
 
-    The universe in compute following the rules:
-    - If the inference is directed and self-loops are allowed, the universe is the cartesian product of the gold standard geneset.
-    - If the inference is directed and self-loops are not allowed, the universe is the permutations of the gold standard geneset.
-    - If the inference is undirected and self-loops are allowed, the universe is the combinations with replacement of the gold standard geneset.
-    - If the inference is undirected and self-loops are not allowed, the universe is the combinations without replacement of the gold standard geneset.
-    """
+    The universe is compute following the rules:
+        - If the inference is directed and self-loops are allowed, the universe is the cartesian product of the gold standard geneset.
+        - If the inference is directed and self-loops are not allowed, the universe is the permutations of the gold standard geneset.
+        - If the inference is undirected and self-loops are allowed, the universe is the combinations with replacement of the gold standard geneset.
+        - If the inference is undirected and self-loops are not allowed, the universe is the combinations without replacement of the gold standard geneset.
+    See Combinatory iterators from itertools https://docs.python.org/3/library/itertools.html for info
+
+    Arguments:
+        gold_standard_geneset (set): set of unique genes present in the Gold Standard
+        directed (bool): whether or not benchmarking will consider direction of interactions
+        allow_self_loops (bool): whether or not benchmarking will allow self-regulations
+
+    Returns:
+        set[tuple[str, str]]: potential edges computed for benchmarking"""
     stats_logger.debug('Establishing universe from Gold Standard...')
     if directed and allow_self_loops:
         return set(product(gold_standard_geneset, repeat=2))
@@ -61,7 +69,7 @@ def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool
 
 
 def _anonymize_inference_edges(inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed):
-        stats_logger.debug('Anonymizing inference edges...')
+        stats_logger.info('Anonymizing inference edges')
         inference_edges = defaultdict(list)
         for u, v, data in inference.edges(data=True):
             # self-loops are already handled in __init__
@@ -75,7 +83,6 @@ def _anonymize_inference_edges(inference, gold_standard_geneset, greater_score_i
                     for score, edges in inference_edges.items()
                 }
         
-        # TODO: UX: The user may want to know the fraction of the inference used for the evaluation
         inference_edges = sorted(
             [
                 [score, {edge_to_id[edge] for edge in edges}]
@@ -115,14 +122,12 @@ def _anonymize_edges(
     size_universe: int
         Size of the universe of potential edges.
     """
-    stats_logger.debug('Anonymizing GS edges...')
+    stats_logger.info('Anonymizing GS edges')
     directed = gold_standard.is_directed()
     gold_standard_edges = set(gold_standard.edges(data=False))
     gold_standard_geneset = set(gold_standard.nodes(data=False))
     universe = _universe(gold_standard_geneset, directed, allow_self_loops)
     size_universe = len(universe)
-
-    
 
     if not directed:
         # If the inference is not directed, we use frozensets to ignore gene order in the edges
@@ -147,11 +152,9 @@ def _anonymize_edges(
     del universe
     del edge_to_id  # TODO: UX: user may want to keep this mapping
     del gold_standard_geneset
-    # call garbage collector
     gc.collect()
 
     return gold_standard_edges, inference_edges, size_universe
-
 
 def benchmarking(
     networks: dict | str,
@@ -207,7 +210,6 @@ def benchmarking(
 
     stats_logger.info('Beginning benchmarking of inference(s)')
 
-
     if isinstance(networks, str):
 
         # valid networks dir and gold standard path
@@ -247,16 +249,12 @@ def benchmarking(
         greater_score_is_better=greater_score_is_better,
         allow_self_loops=allow_self_loops,
         cutoff=cutoff,
-        include_optimal_cutoff= optimal_cutoff,
         baseline=baseline,
     )
 
     if return_auc_coords_dicts:
-        stats_logger.info('Calculating AUPR, AUROC and coordinates...')
-        if optimal_cutoff:
-            return_set = benchmark.aupr(), benchmark.auroc(), benchmark.coordinates(), benchmark.f1_score_dists(), benchmark.summarize()
-        else:
-            return_set = benchmark.aupr(), benchmark.auroc(), benchmark.coordinates(), benchmark.summarize()
+        stats_logger.info('Calculating AUPR, AUROC, coordinates and F1 score distributions')
+        return_set = benchmark.aupr(), benchmark.auroc(), benchmark.coordinates(), benchmark.f1_score_dists(), benchmark.mcc_dists(), benchmark.accuracy_dists(), benchmark.summarize()
     
     else:
         return_set = {}
@@ -277,7 +275,6 @@ def benchmarking(
 
     return return_set
 
-
 class Benchmark:
     def __init__(
         self,
@@ -286,18 +283,32 @@ class Benchmark:
         greater_score_is_better: bool = True,
         allow_self_loops: bool = False,
         cutoff: float | False = False,
-        include_optimal_cutoff: bool = False,
         baseline: bool = True,
     ):
-        """
-        """
+        """_summary_
+
+        _extended summary_[#_unique ID_]_
+
+        .. math:: _LaTeX formula_
+
+        Arguments:
+            gold_standard (Graph | DiGraph): _description_
+            inferences (dict[str, Graph  |  DiGraph]): _description_
+            greater_score_is_better (bool): _description_. Defaults to True.
+            allow_self_loops (bool): _description_. Defaults to False.
+            cutoff (float | False): _description_. Defaults to False.
+            include_optimal_cutoff (bool): _description_. Defaults to False.
+            baseline (bool): _description_. Defaults to True.
+
+        References:
+            .. [#_unique ID_] *_pubmed abbr journal title_* _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
+            .. [#_unique ID_] _first-author first-name last-name_ *_book title_* (_year_) ISBN:_ISBN_ _http link_
+            .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
         self.__repr_str = f"Benchmark({gold_standard}, {inferences}, greater_is_better={greater_score_is_better}, allow_self_loops={allow_self_loops}, cutoff={cutoff})"
         
-        if baseline:
-            # include empty inference
+        if baseline: # include empty inference
             inferences = {**inferences, "Baseline": DiGraph() if gold_standard.is_directed() else Graph()}
 
-        # remove self-loops if allow_self_loops is False
         if not allow_self_loops:
             stats_logger.debug('Removing self-loops from GS and inferences...')
             gold_standard = remove_self_loops(gold_standard)
@@ -322,7 +333,6 @@ class Benchmark:
             )
             for net_id, inf in zip(inferences.keys(), inference_edges)
         }
-        self.__include_optimal_cutoff = include_optimal_cutoff
 
     @property
     def nis_instances(self) -> dict[str, LinkEval]:
@@ -447,31 +457,31 @@ class Benchmark:
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
     
-    def best_aupr(self) -> tuple(str, float):
+    def best_aupr(self) -> tuple[str, float]:
         """Returns the inference with the best AUPR and its value."""
         return max([(net_id, nis.area_under_precision_recall_curve()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
-    def best_auroc(self) -> tuple(str, float):
+    def best_auroc(self) -> tuple[str, float]:
         """Returns the inference with the best AUROC and its value."""
         return max([(net_id, nis.area_under_roc_curve()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
 
-    def best_f1_score(self) -> tuple(str, float):
+    def best_f1_score(self) -> tuple[str, float]:
         """Returns the inference with the best F1 score and its value."""
         return max([(net_id, nis.f1_score()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
-    def best_accuracy(self) -> tuple(str, float):
+    def best_accuracy(self) -> tuple[str, float]:
         """Returns the inference with the best accuracy and its value."""
         return max([(net_id, nis.accuracy()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
-    def best_recall(self) -> tuple(str, float):
+    def best_recall(self) -> tuple[str, float]:
         """Returns the inference with the best recall and its value."""
         return max([(net_id, nis.recall()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
-    def best_precision(self) -> tuple(str, float):
+    def best_precision(self) -> tuple[str, float]:
         """Returns the inference with the best precision and its value."""
         return max([(net_id, nis.precision()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
-    def best_mcc(self) -> tuple(str, float):
+    def best_mcc(self) -> tuple[str, float]:
         """Returns the inference with the best MCC and its value."""
         return max([(net_id, nis.mcc()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
@@ -491,6 +501,14 @@ class Benchmark:
         """Returns the F1 distribution for every inference in the benchmark."""
         return {net_id: nis.compute_f1_score_dist() for net_id, nis in self.nis_instances.items()}
     
+    def mcc_dists(self) -> dict[str, dict[float, float]]:
+        """Returns the MCC distribution for every inference in the benchmark."""
+        return {net_id: nis.score_mcc_dist for net_id, nis in self.nis_instances.items()}
+    
+    def accuracy_dists(self) -> dict[str, dict[float, float]]:
+        """Returns the accuracy distribution for every inference in the benchmark."""
+        return {net_id: nis.score_accuracy_dist for net_id, nis in self.nis_instances.items()}
+    
     def summarize(self) -> DataFrame:
         """Summarizes the evaluation metrics for every inference in the benchmark.
 
@@ -500,40 +518,29 @@ class Benchmark:
             DataFrame containing the evaluation metrics for every inference in the benchmark.
         """
         stats_logger.info('Creating stats summary...')
-        if self.__include_optimal_cutoff:
-            summary = {
-                net_id: {
-                    "AUPR": nis.area_under_precision_recall_curve(),
-                    "AUROC": nis.area_under_roc_curve(),
-                    "F1 score": nis.f1_score(),
-                    "MCC": nis.mcc(),
-                    "Optimal cutoff": nis.optimal_cutoff(),
-                }
-                for net_id, nis in self.nis_instances.items()
+        summary = {
+            net_id: {
+                "AUPR": nis.area_under_precision_recall_curve(),
+                "AUROC": nis.area_under_roc_curve(),
+                "F1 score": nis.f1_score() if nis.inference_id != 'Baseline' else np.nan,
+                "MCC": nis.mcc() if nis.inference_id != 'Baseline' else np.nan,
+                "Optimal cutoff": nis.optimal_cutoff() if nis.inference_id != 'Baseline' else np.nan,
+                "Accuracy": nis.accuracy() if nis.inference_id != 'Baseline' else np.nan
             }
-        else:
-            summary = {
-                net_id: {
-                    "AUPR": nis.area_under_precision_recall_curve(),
-                    "AUROC": nis.area_under_roc_curve(),
-                    "F1 score": nis.f1_score(),
-                    "MCC": nis.mcc(),
-                }
-                for net_id, nis in self.nis_instances.items()
-            }
+            for net_id, nis in self.nis_instances.items()
+        }
         return DataFrame(summary).T
-
 
 class LinkEval:
     def __init__(
         self,
         gold_standard: Graph | DiGraph = None,
         inference: Graph | DiGraph = None,
-        greater_score_is_better: bool = None,
-        allow_self_loops: bool = None,
+        greater_score_is_better: bool = True,
+        allow_self_loops: bool = False,
         cutoff: float | False = False,
         gold_standard_edges: set = None,
-        inference_edges: list = None,
+        inference_edges: dict = None,
         size_universe: int = None,
         inference_id: str = None
     ):
@@ -599,7 +606,7 @@ class LinkEval:
 
             self.__repr = f"LinkEval(gold_standard={self.__gold_standard}, inference={self.__inference}, greater_is_better={self.__greater_is_better}, directed={self.__directed})"
 
-        
+        stats_logger.info('Establishing Gold Standard size, Negatives size and Precision baseline')
         self.__size_gold_standard = len(self.__gold_standard_edges)
         self.__size_negatives = self.__size_universe - self.__size_gold_standard
         # At the last step, every edge is considered as a positive by inference
@@ -609,17 +616,26 @@ class LinkEval:
                 stats_logger.warning('No cutoff provided, establishing one based on greater_is_better argument...')
                 self.__cutoff = min([score for score, _ in self.inference_edges]) if self.greater_is_better else max([score for score, _ in self.inference_edges])
             except ValueError:
-                stats_logger.warning("The inference is empty. Setting the cutoff to None.")
-                self.__cutoff = None
+                if inference_id == 'Baseline': # Empty inference is only considered for Baselines
+                    stats_logger.warning(f"The inference: {inference_id} is empty. No F1 scores, optimal cutoff or Matthews Correlation Coefficient will be computed.")
+                    self.__cutoff = None
+                else: # Gold Standard input is probably wrong for input inference, or viceversa
+                    stats_logger.critical(f'The inference {inference_id} is empty. This could be caused because Gold Standard does not match inference in origin. Netective eliminates edges from the inference if nodes not present in the Gold Standard are detected.')
+                    raise ValueError(f'The inference {inference_id} is empty. This could be caused because Gold Standard does not match inference in origin. Netective eliminates edges from the inference if nodes not present in the Gold Standard are detected.')
         else:
             self.__cutoff = cutoff
 
         # Define evaluation
         # Used as flags to know if the curves data points have been computed
         self.__fpr_dist = None
+        self.__score_fpr_dist = None
         self.__precision_dist = None
+        self.__score_pre_dist = None
         self.__sensitivity_dist = None
+        self.__score_sensi_dist = None
         self.__f1_score_dist = None
+        self.__mcc_dist = None
+        self.__accuracy_dist = None
 
     def __repr__(self) -> str:
         return self.__repr
@@ -635,74 +651,209 @@ class LinkEval:
         """Return the less restrictive score used to compute the evaluation metrics."""
         return self.__cutoff
 
+    # TODO is it really necessary to delete cache?
     @cutoff.setter
     def cutoff(self, cutoff: float | None):
         stats_logger.warning('New cutoff established. Cache of previous datapoints cleared.')
         self.__cutoff = cutoff
         # Reset the cache
         self.__precision_dist = None
+        self.__score_pre_dist = None
         self.__sensitivity_dist = None
+        self.__score_sensi_dist = None
         self.__fpr_dist = None
+        self.__score_fpr_dist = None 
         self.__f1_score_dist = None
+        self.__mcc_dist = None
+        self.__accuracy_dist = None
 
     @property
     def precision_dist(self) -> np.ndarray:
-        return self.__precision_dist
+        """Returns precision datappoints
 
+        Returns:
+            np.ndarray: precision datapoints for pr curve"""
+        return self.__precision_dist
+    
+    @property
+    def score_precision_dist(self) -> dict:
+        """Returns precision distribution for every score in the inference
+
+        Returns:
+            dict: dictionary with scores as keys and precision for that score as less restrictive cutoff as values"""
+        return self.__score_pre_dist
+    
     @property
     def sensitivity_dist(self) -> np.ndarray:
+        """Returns sensitivity (recall) datapoints
+
+        Returns:
+            np.ndarray: sensitivity datapoints for pr and roc curves"""
         return self.__sensitivity_dist
+    
+    @property
+    def score_sensitivity_dist(self) -> dict:
+        """Returns sensitivity (recall) distribution for every score in the inference
+        
+        Returns:
+            dict: dictionary with scores as keys and sensitivity for that score as less restrictive cutoff as values"""
+        return self.__score_sensi_dist
 
     @property
     def fpr_dist(self) -> np.ndarray:
+        """Returns false positive rate datapoints
+
+        Returns:
+            np.ndarray: false positive rate for roc curve"""
         return self.__fpr_dist
+    
+    @property
+    def score_fpr_dist(self) -> dict:
+        """Returns false positive rate for every score in the inference
+
+        Returns:
+            dict: dictionary with scores as keys and false positive rate for that score as less restrictive cutoff as values"""
+        return self.__score_fpr_dist
+    
+    @property
+    def f1_scores_dist(self) -> dict:
+        """Returns F1 scores distribution
+
+        Returns:
+            dict: dictionary with scores as keys and the F1 score calculated from that score's Precision and Recall"""
+        return self.__f1_score_dist
+    
+    @property
+    def score_mcc_dist(self) -> dict:
+        """Returns Matthews Correlation Coefficient distribution
+
+        Returns:
+            dict: dictionary with scores as keys and MCC for that score as less restrictive cutoff as values"""
+        return self.__mcc_dist
 
     @property
+    def score_accuracy_dist(self) -> dict:
+        """Returns the Accuracy distribution
+
+        Returns:
+            dict: dictionary with scores as keys and the accuracy calculated for that score as less restrictive cutoff as values"""
+        return self.__accuracy_dist
+
+    
+    @property
+    def size_universe(self) -> int:
+        """Returns the size of the universe
+
+        The universe is composed by, according to two parameters passed as args:
+            directed & allow_self_loops: product
+            directed & !allow_self_loops: permutations
+            !directed & allow_self_loops: combinations with replacements
+            !directed & !allow_self_loops: combinations
+        See Combinatory iterators at https://docs.python.org/3/library/itertools.html for info on each iterator
+
+        Returns:
+            int: size of Universe used as reference in benchmarking"""
+        return self.__size_universe
+    
+    @property
     def precision_baseline(self) -> float:
+        """Returns the precision baseline
+
+        .. math:: Precision Baseline = \frac{\left\| Gold Standard \right\|}{\left\| Universe \right\|}
+
+        Returns:
+            float: precision baseline as a float"""
         return self.__precision_baseline
 
     @property
     def size_negatives(self) -> int:
+        """Returns the size of the Negatives
+
+        .. math:: \left\| Negatives \right\| = \left\| Universe \right\| - \left\| Gold Standard \right\|
+
+        Returns:
+            int: number of negatives in reference to Universe and Gold Standard sizes"""
         return self.__size_negatives
 
     @property
     def size_gold_standard(self) -> int:
+        """Returns size of Gold Standard
+    
+        Returns:
+            int: number of edges in Gold Standard"""
         return self.__size_gold_standard
 
     @property
     def gold_standard_edges(self) -> set:
+        """Returns Gold Standard edges
+
+        Anonymized (from the Universe) edges from Gold Standard
+
+        Returns:
+            set: anonymized set of edges"""
         return self.__gold_standard_edges
 
     @property
     def inference_edges(self) -> dict[float, set]:
+        """Returns inference edges
+
+        Anonymized (from the Universe) edges from the inference.
+        They are sorted according to the arg greater_is_better from most restrictive to less restrictive.
+        All edges with the same score are grouped together in the same set.
+
+        Returns:
+            dict[float, set]: dictionary with the inference's unique scores as keys and the set of edges with said score as values"""
         return self.__inference_edges
 
     @property
-    def size_universe(self) -> int:
-        return self.__size_universe
+    def gold_standard(self) -> Graph | DiGraph:
+        """Returns Gold Standard network
 
-    @property
-    def gold_standard(self) -> str:
+        Returns:
+            Graph | DiGraph: either a networkx Graph or DiGraph object"""
         return self.__gold_standard
 
     @property
-    def inference(self) -> str:
+    def inference(self) -> Graph | DiGraph:
+        """Returns inference network
+
+        Returns:
+            Graph | DiGraph: either a networkx Graph or DiGraph object"""
         return self.__inference
 
     @property
-    def greater_is_better(self) -> bool | None:
+    def greater_is_better(self) -> bool:
+        """Returns whether less restrictive behavior of cutoff
+
+        If greater is better, the higher the score, the better.
+        Viceversa, if False, the lower the score the better.
+
+        Returns:
+            bool: flag that controls less restrictive behavior of cutoff"""
         return self.__greater_is_better
 
     @property
     def directed(self) -> bool:
+        """Returns whether Gold Standard and inference consider direction
+
+        Returns:
+            bool: flag that indicates consideration of direction in benchmarking"""
         return self.__directed
 
     @property
     def allow_self_loops(self) -> bool:
+        """Returns whether the Gold Standard and inference allow self-loops
+
+        Returns:
+            bool: flag that indicates consideration of self-loops in benchmarking"""
         return self.__allow_self_loops
     
     @property
     def inference_id(self) -> str:
+        """Returns the inference name
+
+        Returns:
+            str: inference ID as a string"""
         return self.__inference_id
     
     def __validate_networks(self):
@@ -712,15 +863,45 @@ class LinkEval:
                 raise TypeError(f"{name} must be a networkx.Graph or networkx.DiGraph.")
 
         if self.gold_standard.is_directed() != self.inference.is_directed():
+            stats_logger.critical('Gold standard and inference must be both directed or undirected.')
             raise ValueError("Gold standard and inference must be both directed or undirected.")
 
         if not all("score" in data for _, _, data in self.inference.edges(data=True)):
+            stats_logger.critical("Inference edges must have a score attribute.")
             raise ValueError("Inference edges must have a score attribute.")
 
         if any("score" in data for _, _, data in self.gold_standard.edges(data=True)):
             warn("The gold standard edges have a score attribute. It might be a prediction.")
 
-    def __get_tp_fp(self, gs_edges: set, inference_edges: set):
+    def __get_tp_fp(self, gs_edges: set, inference_edges: dict) -> list[tuple[int, int]]:
+        """Calculates true positives and true negatives in reference to Gold Standard
+
+        Optimized implementation that performs set operations using bitwise operators.
+        The idea behind this method, is converting the Universe (union of Gold Standard edges and inference edges) to
+        an array of bits (using bitarray objects). From this "coded universe", we create a bitwise array of the same length
+        for both the Gold Standard edges and inference edges with all 0s. Here each cell in the array represents one element in the "coded
+        universe", so if the element exists in the set of Gold Standard edges, a 1 in storaged in that position. As a result,
+        we have a "coded array" for the Gold Standard edges that can be used for set operations and could later be mapped back
+        to the original IDs of the elements. The same is done for the inference edges, with the distinction that this array
+        grows N elements each iteration. The number of iterations is the number of unique scores the inference has and each N
+        represents all edges associated to that unique score.
+        With both "coded" arrays, the intersection is simply a bitwise & (AND) operator. All set operations can be performed
+        using bitwise operators, but for this implementation only the intersection and assymetric differences (performed as an intersection)
+        are necessary for the computation of true positives and false positives.
+
+        For more info on the bitarray objects used, read the library documentation: https://pypi.org/project/bitarray/
+
+        .. math:: tp = N(Gold Standard \cap Inference)
+        .. math:: fp = N(Inference \cap \sim tp)
+
+        Arguments:
+            gs_edges (set): anonimyzed edges from the Gold Standard.
+            inference_edges (dict): dictionary with the anonimyzed edges from the inference. Keys are each unique score in the
+                                    inference and all edges associated to that score as values.
+
+        Returns:
+            list[tuple[int, int]]: list with n number of tuples, where n is the number of unique scores in the inference
+                                   and each tupple is that score's true positives and false positives"""
         stats_logger.debug(f'Calculating true positives and false positives for: {self.__inference_id}')
         # Getting complete set of predicted edges
         all_predicted_edges = set()
@@ -765,61 +946,73 @@ class LinkEval:
 
         return tp_fp
 
-    def __compute_roc_pr_datapoints(self, cutoff=None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def __compute_roc_pr_datapoints(self, cutoff: float=None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        # TODO add references to metrics calculations
         """Computes the false positive rate, sensitivity and precision for a given cutoff.
 
-        Args:
-        cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None (default) the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
-
-
-        Returns:
-        precision: np.ndarray
-            Precision values for the given cutoff.
-        sensitivity: np.ndarray
-            Sensitivity values for the given cutoff.
-        fpr: np.ndarray
-            False positive rate values for the given cutoff.
-
-        Notes:
         It caches the values for the given cutoff if the cutoff is the same as the one provided in the initialization.
         The inference edges must be sorted by score following the greater_is_better rule.
         It returns the cache values if the cutoff is the same as the one provided in the initialization or if cutoff is None.
-        """
+        It also calculates the Matthews Correlation Coefficient and accuracy for every score in the inference. Thess are
+        storaged as internal attributes of the class, wich the user can access through a public class method. They are not returned
+        by this method.
+        This method returns the Precision, Sensitivity and FPR datapoints used for the PR and ROC curves, the actual distributions
+        are storaged in an internal attribute of the class, accesible to the user through public class methods specific for each metric.
+
+        .. math:: precision = \frac{tp}{tp + fp}
+        .. math:: sensitivity = sensitivity = \frac{tp}{\left\| Gold Standard \right\|}
+        .. math:: fpr = \fpr = \frac{fp}{\left\| Negatives \right\|}
+        .. math:: mcc = mcc = \frac{tp*tn + fp*fn}{\sqrt{(tp+fp)*(tp+fn)*(tn+fp)*(tn+fn)}}
+        .. math:: accuracy = accuracy = \frac{tp+tn}{\left\| Universe \right\|}
+
+        Arguments:
+            cutoff (float): Cutoff to use to compute the evaluation metrics. Defaults to None.
+                            If None the cutoff provided in the initialization is used.
+                            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided
+                            in the initialization or the cutoff value set.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray, np.ndarray]: tuple with the precision, sensitivity and fpr (as arrays) for that given cutoff."""
+        
         cutoff = self.__validate_cutoff(cutoff)
         cache = True if cutoff == self.cutoff else False
         # TODO:!!! optimization: use a subset of the computed datapoints.
-
         if (
             cache
             and self.precision_dist is not None
             and self.sensitivity_dist is not None
             and self.fpr_dist is not None
         ):
-            stats_logger.warning("The evaluation metrics have already been computed for this cutoff. Returning cached values.")
             return self.precision_dist, self.sensitivity_dist, self.fpr_dist
         
-        stats_logger.debug(f'Computing pr and roc datapoints for: {self.__inference_id}')
+        stats_logger.warning(f'Computing pr and roc datapoints for: {self.__inference_id} and cutoff: {cutoff}')
         stats_logger.debug(f'Trimming predicted edges according to cutoff established ({cutoff}) and greater_is_better argument ({self.greater_is_better})')
         if self.greater_is_better:
             inference_edges = [
                 edges for score, edges in self.inference_edges if score >= cutoff
             ]
+            ordered_scores = [
+                score for score, edges in self.inference_edges if score >= cutoff
+            ]
         else:
             inference_edges = [
                 edges for score, edges in self.inference_edges if score <= cutoff
             ]
+            ordered_scores = [
+                score for score, edges in self.inference_edges if score <= cutoff
+            ]
 
-        num_points = len(inference_edges) + 2
+        num_points = len(ordered_scores) + 2
         # Initialize arrays to store the evaluation metrics coordinates
         fpr_dist = np.empty(num_points)
         precision_dist = np.empty(num_points)
-        sensitivity_dist = np.empty(num_points)  # same as recall and TPR
+        sensitivity_dist = np.empty(num_points)
+        mcc_dist = np.empty(len(ordered_scores))
+        accuracy_dist = np.empty(len(ordered_scores))
 
         # Start-values
         fpr_dist[0] = 0
-        precision_dist[0] = 0
+        precision_dist[0] = 1
         sensitivity_dist[0] = 0
 
         # True positives and False positives from optimized intersection
@@ -831,11 +1024,16 @@ class LinkEval:
         # Statistics calculation
         stats_logger.debug('Calculating precision, sensitivity and false positive rate for each score in the inference...')
         for i, elements in enumerate(tp_fp, 1):
-            true_positives, false_positives = elements 
+            true_positives, false_positives = elements
+            false_negatives = self.__size_gold_standard - true_positives
+            true_negatives = self.__size_negatives - false_positives
+
             # Replace the corresponding values in the arrays
             fpr_dist[i] = false_positives / self.size_negatives
             sensitivity_dist[i] = true_positives / self.size_gold_standard
             precision_dist[i] = true_positives / (true_positives + false_positives)
+            mcc_dist[i-1] = (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt(float((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives)))
+            accuracy_dist[i-1] = (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
 
         # End-values
         precision_dist[-1] = self.precision_baseline
@@ -851,6 +1049,11 @@ class LinkEval:
             self.__precision_dist = precision_dist
             self.__sensitivity_dist = sensitivity_dist
             self.__fpr_dist = fpr_dist
+            self.__score_pre_dist = { score : precision for score, precision in zip(ordered_scores, precision_dist[1:-1]) }
+            self.__score_sensi_dist = { score : sensitivity for score, sensitivity in zip(ordered_scores, sensitivity_dist[1:-1]) }
+            self.__score_fpr_dist = { score : fpr for score, fpr in zip(ordered_scores, fpr_dist[1:-1]) }
+            self.__mcc_dist = { score : mcc for score, mcc in zip(ordered_scores, mcc_dist) }
+            self.__accuracy_dist = { score : accuracy for score, accuracy in zip(ordered_scores, accuracy_dist) }
 
         return precision_dist, sensitivity_dist, fpr_dist
 
@@ -910,11 +1113,13 @@ class LinkEval:
 
         if self.greater_is_better:
             if cutoff is not None and cutoff < self.cutoff:
+                stats_logger.critical(f'The cutoff must be greater than the one provided in the initialization ({self.cutoff}).')
                 raise ValueError(
                     f"The cutoff must be greater than the one provided in the initialization ({self.cutoff})."
                 )
         else:
             if cutoff is not None and cutoff > self.cutoff:
+                stats_logger.critical(f"The cutoff must be lower or equal than the one provided in the initialization ({self.cutoff}).")
                 raise ValueError(
                     f"The cutoff must be lower or equal than the one provided in the initialization ({self.cutoff})."
                 )
@@ -996,7 +1201,6 @@ class LinkEval:
         else:
             return set().union(*[edges for score, edges in self.inference_edges if score <= cutoff])
 
-    # TODO: Optimization: Create a cache to keep {(cutoff, metric): value)}
     def recall(self, cutoff:None|float=None) -> float:
         """Computes the recall for a given cutoff.
 
@@ -1009,16 +1213,20 @@ class LinkEval:
         recall: float
             Recall for the given cutoff.
         """
-        stats_logger.info('Calculating recall for entire inference...')
         cutoff = self.__validate_cutoff(cutoff)
+        stats_logger.debug(f'Calculating recall for specific cutoff: {cutoff}')
 
-        if cutoff == self.cutoff and self.__sensitivity_dist is not None:
-            sensitivity = self.__sensitivity_dist[-2]
+        if self.score_sensitivity_dist is not None:
+            if cutoff in self.score_sensitivity_dist.keys():
+                return self.score_sensitivity_dist[cutoff]
+            else:
+                closest_value = min(self.score_sensitivity_dist.keys(), key= lambda v:abs(v - cutoff))
+                stats_logger.warning(f'Score: {cutoff} not available, showing result for closest score available: {closest_value}')
+                return self.score_sensitivity_dist[closest_value]
         else:
             predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
             true_positives = len(self.gold_standard_edges & predicted_edges)
-            sensitivity = true_positives / self.size_gold_standard
-        return sensitivity
+            return true_positives / self.size_gold_standard
 
     def precision(self, cutoff:None|float=None) -> float:
         """Computes the precision for a given cutoff.
@@ -1033,16 +1241,20 @@ class LinkEval:
             Precision for the given cutoff.
         """
         cutoff = self.__validate_cutoff(cutoff)
-        stats_logger.info(f'Calculating precision for cutoff: {cutoff}')
+        stats_logger.debug(f'Calculating precision for cutoff: {cutoff}')
         
-        if cutoff == self.cutoff and self.__precision_dist is not None:
-            precision = self.__precision_dist[-2]
+        if self.score_precision_dist is not None:
+            if cutoff in self.score_precision_dist.keys():
+                return self.score_precision_dist[cutoff]
+            else:
+                closest_value = min(self.score_precision_dist.keys(), key= lambda v:abs(v - cutoff))
+                stats_logger.warning(f'Score: {cutoff} not available, showing result for closest score available: {closest_value}')
+                return self.score_precision_dist[closest_value]
         else:
             predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
             true_positives = len(self.gold_standard_edges & predicted_edges)
             false_positives = len(predicted_edges - self.gold_standard_edges)
-            precision = true_positives / (true_positives + false_positives)
-        return precision
+            return true_positives / (true_positives + false_positives)
     
     def fpr(self, cutoff:None|float) -> float:
         """Computes the false positive rate for a given cutoff.
@@ -1057,15 +1269,19 @@ class LinkEval:
             False positive rate for the given cutoff.
         """
         cutoff = self.__validate_cutoff(cutoff)
-        stats_logger.info(f'Calculating false positive rate for cutoff: {cutoff}')
+        stats_logger.debug(f'Calculating false positive rate for cutoff: {cutoff}')
 
-        if cutoff == self.cutoff and self.__fpr_dist is not None:
-            fpr = self.__fpr_dist[-2]
+        if self.score_fpr_dist is not None:
+            if cutoff in self.score_fpr_dist.keys():
+                return self.score_fpr_dist[cutoff]
+            else:
+                closest_value = min(self.score_score_dfpr_dist.keys(), key= lambda v:abs(v - cutoff))
+                stats_logger.warning(f'Score: {cutoff} not available, showing result for closest score available: {closest_value}')
+                return self.score_fpr_dist[closest_value]
         else:
             predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
             false_positives = len(predicted_edges - self.gold_standard_edges)
-            fpr = false_positives / self.size_negatives
-        return fpr
+            return false_positives / self.size_negatives
     
     def accuracy(self, cutoff:None|float=None) -> float:
         """Computes the accuracy for a given cutoff.
@@ -1079,43 +1295,24 @@ class LinkEval:
         accuracy: float
             Accuracy for the given cutoff.
         """
+        if self.inference_id == 'Baseline':
+            return np.nan
         cutoff = self.__validate_cutoff(cutoff)
         stats_logger.info(f'Calculating accuracy for cutoff: {cutoff}')
-        if cutoff == self.cutoff:
-            predicted_edges = set().union(*[edges for _, edges in self.inference_edges])
+        if self.score_accuracy_dist is not None:
+            if cutoff in self.score_accuracy_dist.keys():
+                return self.score_accuracy_dist[cutoff]
+            else:
+                closest_value = min(self.score_accuracy_dist.keys(), key= lambda v:abs(v - cutoff))
+                stats_logger.warning(f'Score: {cutoff} not available, showing result for closest score available: {closest_value}')
+                return self.score_accuracy_dist[closest_value]
         else:
             predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
-        true_positives = len(self.gold_standard_edges & predicted_edges)
-        false_positives = len(predicted_edges - self.gold_standard_edges)
-        false_negatives = self.size_gold_standard - true_positives
-        true_negatives = self.size_negatives - false_positives
-
-
-        return (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
-    
-
-    def f1_score(self, cutoff:None|float=None) -> float:
-        """Computes the F1 score for a given cutoff.
-
-        Args:
-        cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If None, the cutoff provided in the initialization is used.
-            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
-
-        Returns:
-        f1_score: float
-            F1 score for the given cutoff.
-        """
-        cutoff = self.__validate_cutoff(cutoff)
-        stats_logger.info(f'Calculating F1 score for cutoff: {cutoff}')
-        precision = self.precision(cutoff=cutoff)
-        recall = self.recall(cutoff=cutoff)
-        if precision+recall == 0:
-            return 0
-        elif self.__inference_id != 'Baseline':
-            return 2 * (precision * recall) / (precision + recall)
-        else:
-            return np.nan
+            true_positives = len(self.gold_standard_edges & predicted_edges)
+            false_positives = len(predicted_edges - self.gold_standard_edges)
+            false_negatives = self.size_gold_standard - true_positives
+            true_negatives = self.size_negatives - false_positives
+            return (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
     
     def mcc(self, cutoff:None|float=None) -> float:
         """Computes the Matthews correlation coefficient for a given cutoff.
@@ -1131,35 +1328,72 @@ class LinkEval:
         mcc: float
             Matthews correlation coefficient for the given cutoff.
         """
+        if self.inference_id == 'Baseline':
+            return np.nan
         cutoff = self.__validate_cutoff(cutoff)
         stats_logger.info(f'Calculating Matthews Correlation Coefficient for cutoff: {cutoff}')
-        predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
-        true_positives = len(self.gold_standard_edges & predicted_edges)
-        false_positives = len(predicted_edges - self.gold_standard_edges)
-        false_negatives = self.size_gold_standard - true_positives
-        true_negatives = self.size_negatives - false_positives
-
-        if self.__inference_id != 'Baseline':
-            return (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt(float((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives)))
+        if self.score_mcc_dist is not None:
+            if cutoff in self.score_mcc_dist.keys():
+                return self.score_mcc_dist[cutoff]
+            else:
+                closest_value = min(self.score_mcc_dist.keys(), key= lambda v:abs(v - cutoff))
+                stats_logger.warning(f'Score: {cutoff} not available, showing result for closest score available: {closest_value}')
+                return self.score_mcc_dist[closest_value]
         else:
+            predicted_edges = self.__filtered_inference_edges(cutoff=cutoff)
+            true_positives = len(self.gold_standard_edges & predicted_edges)
+            false_positives = len(predicted_edges - self.gold_standard_edges)
+            false_negatives = self.size_gold_standard - true_positives
+            true_negatives = self.size_negatives - false_positives
+            return (true_positives * true_negatives - false_positives * false_negatives) / np.sqrt(float((true_positives + false_positives) * (true_positives + false_negatives) * (true_negatives + false_positives) * (true_negatives + false_negatives)))
+        
+    def f1_score(self, cutoff:None|float=None) -> float:
+        """Computes the F1 score for a given cutoff.
+
+        Args:
+        cutoff (float): Cutoff to use to compute the evaluation metrics.
+            If None, the cutoff provided in the initialization is used.
+            The cutoff follows the greater_is_better rule and cannot be less restrictive than the one provided in the initialization or the cutoff value set.
+
+        Returns:
+        f1_score: float
+            F1 score for the given cutoff.
+        """
+        if self.inference_id == 'Baseline':
             return np.nan
+        cutoff = self.__validate_cutoff(cutoff)
+        stats_logger.debug(f'Calculating F1 score for cutoff: {cutoff}')
+        precision = self.precision(cutoff=cutoff)
+        recall = self.recall(cutoff=cutoff)
+        if precision+recall == 0:
+            return 0
+        else:
+            return 2 * (precision * recall) / (precision + recall)
     
-    def compute_f1_score_dist(self) -> np.ndarray:
+    def compute_f1_score_dist(self) -> dict:
         """Computes the F1 score for every score in the inference.
 
         Returns:
         f1_score_dist: dict[float, float]
             Dictionary containing the F1 score for every score in the inference.
         """
-        if self.__f1_score_dist is None:
-            stats_logger.info('Calculating F1 score for every score in the inference...')
+        if self.inference_id == 'Baseline':
+            return {}
+        
+        if self.f1_scores_dist is None:
+            if self.score_precision_dist is None:
+                stats_logger.warning(f'Calculating Precision and Recall values for every score in the inference: {self.inference_id}')
+                _ = self.area_under_precision_recall_curve()
+            else:
+                stats_logger.warning(f"Retrieving cached Precision and Recall to calculate each score in the inference's F1 score: {self.inference_id}")
             f1_score_dist = {}
             for score, _ in self.inference_edges:
-                f1_score_dist[score] = self.f1_score(cutoff=score)
+                if (self.greater_is_better and score >= self.cutoff) or (not self.greater_is_better and score <= self.cutoff):
+                    f1_score_dist[score] = self.f1_score(cutoff=score)
             self.__f1_score_dist = f1_score_dist
             return f1_score_dist
         else:
-            return self.__f1_score_dist
+            return self.f1_scores_dist
     
     def optimal_cutoff(self) -> float:
         """Computes the optimal cutoff for the inference, that is required to maximize the F1 score.
@@ -1168,12 +1402,11 @@ class LinkEval:
         optimal_cutoff: float
             Optimal cutoff for the inference.
         """
+        if self.inference_id == 'Baseline':
+            return np.nan
         stats_logger.info('Calculating optimal cutoff for the inference. Requires to maximize F1 score.')
         self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.compute_f1_score_dist()
-        if self.__inference_id != 'Baseline':
-            return max(self.__f1_score_dist, key=self.__f1_score_dist.get)
-        else:
-            return np.nan
+        return max(self.__f1_score_dist, key=self.__f1_score_dist.get)
     
     def optimal_cutoff_plot(self, ax=None, x_log=False):
         """Plots the precision and the recall values for every score in the inference, showing the optimal cutoff.
@@ -1190,6 +1423,8 @@ class LinkEval:
         """
         self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.compute_f1_score_dist()
         optimal_cutoff = self.optimal_cutoff()
+        if optimal_cutoff == self.cutoff:
+            stats_logger.warning(f'Optimal cutoff is the same as the cutoff established.')
         precision_dist, sensitivity_dist, _ = self.__compute_roc_pr_datapoints() # use the default cutoff to get the cached values
         ax = _build_ax(ax, xlim=(min(self.__f1_score_dist), max(self.__f1_score_dist)), figsize=(4, 2))
         ax.plot(self.__f1_score_dist.keys(), precision_dist[1:-1], label="Precision", color="#DC3220")
@@ -1204,7 +1439,6 @@ class LinkEval:
         stats_logger.debug(self.__f1_score_dist.values(), precision_dist[1:-1], sensitivity_dist[1:-1])
         return ax
     
-
     def coordinates(self, cutoff=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Returns the coordinates for the precision, recall and FPR for every score in the inference.
 

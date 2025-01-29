@@ -346,11 +346,10 @@ def runmode3(args):
         aupr_scores = output_results[0]
         auroc_scores = output_results[1]
         coords = output_results[2]
-        if optimal_cutoff:
-            f1_scores_dist = output_results[3]
-            summary = output_results[4]
-        else:
-            summary = output_results[3]
+        f1_scores_dist = output_results[3]
+        mcc_scores_dist = output_results[4]
+        accuracy_dist = output_results[5]
+        summary = output_results[6]
         
         # Validating output dir and file extensions
         if not os.path.isdir(output):
@@ -414,22 +413,32 @@ def runmode3(args):
             mode= 'a'
         )
 
-        # F1 scores distributions file
-        if optimal_cutoff: 
-            f1_scores_file = concat_path(output, f'f1_scores_distributions.{ext}')
-            f1_scores_f = open(f1_scores_file, 'w')
-            f1_scores_f.write(f'{cl}{comments}F1 scores distribution for every inference\n')
-            for net_name, scores_dist in f1_scores_dist.items():
-                if net_name != 'Baseline':
-                    f1_scores_f.write(f'>>>{net_name} inference scores\n')
-                    for score in scores_dist.keys():
-                        f1_scores_f.write(f'{score}{delimiter}')
-                    f1_scores_f.write('\n')
-                    f1_scores_f.write(f'>>>{net_name} F1 scores\n')
-                    for f1_score in scores_dist.values():
-                        f1_scores_f.write(f'{f1_score}{delimiter}')
-                    f1_scores_f.write('\n')
-            f1_scores_f.close()
+        # Scores-metrics distributions
+        scores_metrics_file = concat_path(output, f'scores_metrics_distributions.{ext}')
+        scores_metrics_f = open(scores_metrics_file, 'w')
+        scores_metrics_f.write(f'{cl}{comments}Scores-metric distribution for every inference for F1 score, MCC and Accuracy\n')
+        net_names = list(f1_scores_dist.keys())
+        for net_name in net_names:
+            if net_name == 'Baseline':
+                continue
+            scores_metrics_f.write(f'>>>{net_name} inference scores\n')
+            # Write scores
+            for score in f1_scores_dist[net_name].keys():
+                scores_metrics_f.write(f'{score}{delimiter}')
+            # F1 scores
+            scores_metrics_f.write(f'\n>>>{net_name} F1 scores\n')
+            for score in f1_scores_dist[net_name].values():
+                scores_metrics_f.write(f'{score}{delimiter}')
+            # MCC values
+            scores_metrics_f.write(f'\n>>>{net_name} Matthews Correlation Coefficient values\n')
+            for score in mcc_scores_dist[net_name].values():
+                scores_metrics_f.write(f'{score}{delimiter}')
+            # Accuracy scores
+            scores_metrics_f.write(f'\n>>>{net_name} Accuracy scores\n')
+            for score in accuracy_dist[net_name].values():
+                scores_metrics_f.write(f'{score}{delimiter}')
+            scores_metrics_f.write('\n')
+        scores_metrics_f.close()
 
     else: # Desired ouput: plotting
         output_results['aupr'].get_figure().savefig(fname= concat_path(output, f'aupr.png'), bbox_inches= 'tight', dpi= 300)

@@ -456,7 +456,7 @@ def _parse_arguments():
     parser_c.add_argument(
         '-ocoff', '--optimal_cutoff',
         action= 'store_true',
-        help= 'whether to include the calculation of the optimal cutoff for each inference, either as an additional plot or included in the stats summary file. IMPORTANT: this stat is not included by default because it requires THE CALCULATION OF THE F1 SCORE FOR EACH DIFFERENT SCORE IN THE INFERENCE.',
+        help= 'whether to plot the optimal cutoff for each inference.',
         required= False
     )
     parser_c.add_argument(
@@ -480,7 +480,7 @@ def _parse_arguments():
     parser_c.add_argument(
         '-k', '--keep_auc_coords_dicts',
         action= 'store_true',
-        help= 'whether to return AUPR, AUROC values and precision, sensitivity and fpr datapoints for every inference in the benchmark.',
+        help= 'whether to return metrics and distributions calculated for every inference in the benchmark. IMPORTANT: no plotting will be perfomed if this option is selected.',
         required= False
     )
     parser_c.add_argument(
