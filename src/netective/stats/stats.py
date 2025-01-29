@@ -1517,8 +1517,12 @@ class LinkEvalPlotter(LinkEval):
         fpr_dist: np.array,
         f1_score: float,
         mcc: float,
-        f1_score_dist: dict = None,
-        optimal_cutoff: float = None,
+        accuracy: float,
+        f1_score_dist: dict,
+        mcc_score_dist: dict,
+        accuracy_score_dist: dict,
+        optimal_cutoff: float,
+        greater_is_better: bool = True,
         inference_id: str = None
     ):
         """
@@ -1531,35 +1535,43 @@ class LinkEvalPlotter(LinkEval):
             This class is unable to compute any statistical evaluation. It only visualizes previously computed
             benchmarking taking advantage of the LinkEval class's plotting method's.
         """
-        # TODO aqui podria ser algo representativo
-        self.__repr = None
-
         # Class atributes that will not be used
-        self.__gold_standard = None
-        self.__inference = None
-        self.__greater_is_better = None
-        self.__allow_self_loops = None
-        self.__gold_standard_edges = None
-        self.__inference_edges = None
-        self.__size_universe = None
-        self.__directed = None
-        self.__size_gold_standard = None
-        self.__size_negatives = None
-        self.__precision_baseline = None
-        self.__cutoff = None
+        self._LinkEval__gold_standard = None
+        self._LinkEval__inference = None
+        self._LinkEval__greater_is_better = None
+        self._LinkEval__allow_self_loops = None
+        self._LinkEval__gold_standard_edges = None
+        self._LinkEval__inference_edges = None
+        self._LinkEval__size_universe = None
+        self._LinkEval__directed = None
+        self._LinkEval__size_gold_standard = None
+        self._LinkEval__size_negatives = None
+        self._LinkEval__precision_baseline = None
 
         # Class attributes that have been previously computed and provided by user
-        self.__inference_id = inference_id
-        self.__aupr = aupr
-        self.__auroc = auroc
-        self.__fpr_dist = fpr_dist
-        self.__precision_dist = precision_dist
-        self.__sensitivity_dist = sensitivity_dist
-        self.__f1_score_dist = None
+        self._LinkEval__inference_id = inference_id
+        # Curves datapoints
+        self._LinkEval__fpr_dist = fpr_dist
+        self._LinkEval__precision_dist = precision_dist
+        self._LinkEval__sensitivity_dist = sensitivity_dist
+        # Stats sumamry values
+        self._LinkEval__aupr = aupr
+        self._LinkEval__auroc = auroc
         self.__f1_score = f1_score
         self.__mcc = mcc
-        self.__optimal_cutoff = optimal_cutoff
-        self.__f1_score_dist = f1_score_dist
+        self.__accuracy = accuracy
+        self._LinkEval__optimal_cutoff = optimal_cutoff
+
+        # Score metrics distributions
+        self._LinkEval__f1_score_dist = f1_score_dist
+        self._LinkEval__mcc_dist = mcc_score_dist
+        self._LinkEval__accuracy_dist = accuracy_score_dist
+        if greater_is_better:
+            self._LinkEval__cutoff = min(f1_score_dist.keys())
+        else:
+            self._LinkEval__cutoff = max(f1_score_dist.keys())
+
+        self._LinkEval__repr = f"LinkEval(inference_id={inference_id}, aupr={aupr}, auroc={auroc}, f1_score={f1_score}, mcc={mcc}, accuracy={accuracy}, number_unique_scores={len(f1_score_dist.keys())}, cutoff= {self._LinkEval__cutoff}, optimal_cutoff={optimal_cutoff}, greater_is_better={greater_is_better})"
 
     def __no_computation_warning(self, process:str) -> None:
         stats_logger.warning(f'Computation of {process} unable because input was previously computed benchmarking, not networks')
@@ -1569,31 +1581,10 @@ class LinkEvalPlotter(LinkEval):
         stats_logger.warning(f'Attribute: {attribute} not available when benchmarking stats are provided without networks')
         return None
     
-    def __repr__(self) -> str:
-        return self.__repr
-
-    def __str__(self) -> str:
-        return self.__repr
-
-    def __eq__(self, other: LinkEval) -> bool:
-        raise NotImplementedError
-    
-    @property
-    def precision_dist(self) -> np.ndarray:
-        return self.__precision_dist
-
-    @property
-    def sensitivity_dist(self) -> np.ndarray:
-        return self.__sensitivity_dist
-
-    @property
-    def fpr_dist(self) -> np.ndarray:
-        return self.__fpr_dist
-    
     @property
     def cutoff(self) -> float | None:
         stats_logger.warning('Cutoff established at the moment of benchmarking computation.')
-        return self.__cutoff
+        return self._LinkEval__cutoff
     
     @property
     def precision_baseline(self) -> float:
@@ -1638,47 +1629,10 @@ class LinkEvalPlotter(LinkEval):
     @property
     def allow_self_loops(self) -> bool:
         return self.__no_attribute_warning('whether networks benchmarked consider self-loops')
-    
-    @property
-    def inference_id(self) -> str:
-        return self.__inference_id
-    
-    @property
-    def f1_score(self) -> float:
-        return self.__f1_score
-    
-    @property
-    def mcc(self) -> float:
-        return self.__mcc
 
     @cutoff.setter
     def cutoff(self, cutoff: float | None):
-        return self.__no_computation_warning('set new cutoff')
-    
-    def __validate_networks(self):
-        return self.__no_computation_warning('Validate networks')
-
-    def __get_tp_fp(self, gs_edges: set, inference_edges: set):
-        return self.__no_computation_warning('true positives and false positives')
-
-    def __compute_roc_pr_datapoints(self, cutoff=None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        return self.precision_dist, self.sensitivity_dist, self.fpr_dist
-
-    @property
-    def area_under_precision_recall_curve(self, cutoff=None) -> float:
-        return self.__aupr
-    
-    @property
-    def area_under_roc_curve(self, cutoff=None) -> float:
-        return self.__auroc
-    
-    # TODO Checar esto
-    @property
-    def f1_score_dist(self)-> np.array:
-        return self.__compute_f1_score_dist()
-    
-    def __validate_cutoff(self, cutoff):
-        return self.__no_computation_warning('Validation of cutoff')    
+        return self.__no_computation_warning('set new cutoff')   
     
     def recall(self) -> None:
         return self.__no_computation_warning('recall for a specific cutoff')
@@ -1688,56 +1642,15 @@ class LinkEvalPlotter(LinkEval):
     
     def fpr(self) -> None:
         return self.__no_computation_warning('fpr for a specific cutoff')
-    
-    def accuracy(self) -> None:
-        return self.__no_computation_warning('accuracy for a specific cutoff')
-    
-    def __compute_f1_score_dist(self) -> np.ndarray:
-        if self.__f1_score_dist:
-            return self.__f1_score_dist
-        else:
-            return self.__no_computation_warning('F1 scores distribution')
+
+    @property
+    def f1_score(self) -> float:
+        return self.__f1_score
     
     @property
-    def optimal_cutoff(self) -> float:
-        if self.__optimal_cutoff:
-            return self.__optimal_cutoff
-        else:
-            return self.__no_computation_warning('Optimal cutoff')
-    
-    # TODO Why can't this method also be inherited from LinkEval?? 
-    def optimal_cutoff_plot(self, ax=None, x_log=False):
-        """Plots the precision and the recall values for every score in the inference, showing the optimal cutoff.
+    def mcc(self) -> float:
+        return self.__mcc   
 
-        Args:
-        ax (matplotlib.axes.Axes): Axes object to plot the curve.
-            If None, a new figure and axes are created.
-        **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
-
-        Returns:
-        -------
-        ax: matplotlib.axes.Axes
-            Axes object containing the plot.
-        """
-        if self.__optimal_cutoff:
-            self.__f1_score_dist = self.__f1_score_dist if self.__f1_score_dist is not None else self.__compute_f1_score_dist()
-            optimal_cutoff = self.optimal_cutoff
-            precision_dist, sensitivity_dist, _ = self.__compute_roc_pr_datapoints() # use the default cutoff to get the cached values
-            ax = _build_ax(ax, xlim=(min(self.__f1_score_dist), max(self.__f1_score_dist)), figsize=(4, 2))
-            ax.plot(self.__f1_score_dist.keys(), precision_dist[1:-1], label="Precision", color="#DC3220")
-            ax.plot(self.__f1_score_dist.keys(), sensitivity_dist[1:-1], label="Recall", color="#005AB5")
-            ax.vlines(optimal_cutoff, ymin=0, ymax=1, color="k", linestyles='dashed', label="Optimal cutoff")
-            ax.set_title(f"Optimal cutoff = {optimal_cutoff}", loc="right", size=FONT_SIZE, color=FONT_COLOR)
-            ax.set_xlabel("Score", size=FONT_SIZE, color=MINOR_FONT_COLOR)
-            ax.set_ylabel("Precision and recall", size=FONT_SIZE, color=MINOR_FONT_COLOR)
-            ax.legend(loc=0)
-            if x_log:
-                ax.set_xscale("log")
-            stats_logger.debug(self.__f1_score_dist.values(), precision_dist[1:-1], sensitivity_dist[1:-1])
-            return ax
-        else:
-            return self.__no_computation_warning('Optimal cutoff Plotting')
-    
     @property
-    def coordinates(self, cutoff=None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        return self.__compute_roc_pr_datapoints(cutoff=cutoff)
+    def accuracy(self) -> float:
+        return self.__accuracy
