@@ -1,23 +1,19 @@
 from __future__ import annotations
-
 import os
 import math
 import gc
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pandas as pd
 from collections import defaultdict
 from itertools import combinations, combinations_with_replacement, permutations, product
 from typing import Tuple
 from bitarray import bitarray
-
 import numpy as np
 from warnings import warn
 from networkx import Graph, DiGraph
-from pandas import DataFrame
 
 from netective.utils import remove_self_loops, parse_network
-
-import logging
 from netective.logging_info import get_logger, set_log_level
 stats_logger = get_logger(__name__)
 
@@ -66,7 +62,6 @@ def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool
         return set(combinations_with_replacement(gold_standard_geneset, 2))
     else:  # if not directed and not allow_self_loops:
         return set(combinations(gold_standard_geneset, 2))
-
 
 def _anonymize_inference_edges(inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed):
         stats_logger.info('Anonymizing inference edges')
@@ -254,7 +249,7 @@ def benchmarking(
 
     if return_auc_coords_dicts:
         stats_logger.info('Calculating AUPR, AUROC, coordinates and F1 score distributions')
-        return_set = benchmark.aupr(), benchmark.auroc(), benchmark.coordinates(), benchmark.f1_score_dists(), benchmark.mcc_dists(), benchmark.accuracy_dists(), benchmark.summarize()
+        return_set = benchmark.aupr, benchmark.auroc, benchmark.coordinates, benchmark.f1_score_dists, benchmark.mcc_dists, benchmark.accuracy_dists, benchmark.summarize
     
     else:
         return_set = {}
@@ -365,7 +360,7 @@ class Benchmark:
         """
         stats_logger.info('Plotting AUROC curves for every inference in the benchmark')
         ax = _build_ax(ax, figsize=(3,3))
-        best_name, _ = self.best_auroc()
+        best_name, _ = self.best_auroc
         for net_id, nis in self.nis_instances.items():
             nis.plot_roc_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else MAIN_PLOT_COLOR, alpha=0, title=False, **kwargs)
         ax.legend(loc=3)
@@ -386,9 +381,10 @@ class Benchmark:
         """
         stats_logger.info('Plotting AUPR curves for every inference in the benchmark')
         ax = _build_ax(ax, figsize=(3,3))
-        best_name, _ = self.best_aupr()
+        best_name, _ = self.best_aupr
+        ylimit = max([nis.precision_dist[0] for _, nis in self.nis_instances.items()])
         for net_id, nis in self.nis_instances.items():
-            nis.plot_precision_recall_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else MAIN_PLOT_COLOR, alpha=0, title=False, **kwargs)
+            nis.plot_precision_recall_curve(ax=ax, ylimit= ylimit, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else MAIN_PLOT_COLOR, alpha=0, title=False, **kwargs)
         ax.legend(loc=3)
         return ax
     
@@ -421,6 +417,7 @@ class Benchmark:
         ax.set_title("AUPR", loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_xlabel("AUPR", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.set_xlim(0, max([nis.area_under_precision_recall_curve() for nis in self.nis_instances.values()]))
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
     
@@ -432,6 +429,7 @@ class Benchmark:
         ax.set_title("AUROC", loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_xlabel("AUROC", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.set_xlim(0, max([nis.area_under_roc_curve() for nis in self.nis_instances.values()]))
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
     
@@ -443,6 +441,7 @@ class Benchmark:
         ax.set_title("F1 score", loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_xlabel("F1 score", size=FONT_SIZE, color=MINOR_FONT_COLOR)
+        ax.set_xlim(0, max([nis.f1_score() for nis in self.nis_instances.values()]))
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
     
@@ -457,59 +456,73 @@ class Benchmark:
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
     
+    @property
     def best_aupr(self) -> tuple[str, float]:
         """Returns the inference with the best AUPR and its value."""
         return max([(net_id, nis.area_under_precision_recall_curve()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
+    @property
     def best_auroc(self) -> tuple[str, float]:
         """Returns the inference with the best AUROC and its value."""
         return max([(net_id, nis.area_under_roc_curve()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
 
+    @property
     def best_f1_score(self) -> tuple[str, float]:
         """Returns the inference with the best F1 score and its value."""
         return max([(net_id, nis.f1_score()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
+    @property
     def best_accuracy(self) -> tuple[str, float]:
         """Returns the inference with the best accuracy and its value."""
         return max([(net_id, nis.accuracy()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
+    @property
     def best_recall(self) -> tuple[str, float]:
         """Returns the inference with the best recall and its value."""
         return max([(net_id, nis.recall()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
+    @property
     def best_precision(self) -> tuple[str, float]:
         """Returns the inference with the best precision and its value."""
         return max([(net_id, nis.precision()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
+    @property
     def best_mcc(self) -> tuple[str, float]:
         """Returns the inference with the best MCC and its value."""
         return max([(net_id, nis.mcc()) for net_id, nis in self.nis_instances.items()], key=lambda x: x[1])
     
+    @property
     def aupr(self) -> dict[str, float]:
         """Returns the AUPR values for every inference in the benchmark."""
         return {net_id: nis.area_under_precision_recall_curve() for net_id, nis in self.nis_instances.items()}
     
+    @property
     def auroc(self) -> dict[str, float]:
         """Returns the AUROC values for every inference in the benchmark."""
         return {net_id: nis.area_under_roc_curve() for net_id, nis in self.nis_instances.items()}
     
+    @property
     def coordinates(self, cutoff=None) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """Returns the coordinates for the precision, recall and FPR for every inference in the benchmark."""
         return {net_id: nis.coordinates(cutoff) for net_id, nis in self.nis_instances.items()}
     
+    @property
     def f1_score_dists(self)-> dict[str, dict[float, float]]:
         """Returns the F1 distribution for every inference in the benchmark."""
         return {net_id: nis.compute_f1_score_dist() for net_id, nis in self.nis_instances.items()}
     
+    @property
     def mcc_dists(self) -> dict[str, dict[float, float]]:
         """Returns the MCC distribution for every inference in the benchmark."""
         return {net_id: nis.score_mcc_dist for net_id, nis in self.nis_instances.items()}
     
+    @property
     def accuracy_dists(self) -> dict[str, dict[float, float]]:
         """Returns the accuracy distribution for every inference in the benchmark."""
         return {net_id: nis.score_accuracy_dist for net_id, nis in self.nis_instances.items()}
     
-    def summarize(self) -> DataFrame:
+    @property
+    def summarize(self) -> pd.DataFrame:
         """Summarizes the evaluation metrics for every inference in the benchmark.
 
         Returns:
@@ -529,7 +542,7 @@ class Benchmark:
             }
             for net_id, nis in self.nis_instances.items()
         }
-        return DataFrame(summary).T
+        return pd.DataFrame(summary).T
 
 class LinkEval:
     def __init__(
@@ -739,7 +752,6 @@ class LinkEval:
             dict: dictionary with scores as keys and the accuracy calculated for that score as less restrictive cutoff as values"""
         return self.__accuracy_dist
 
-    
     @property
     def size_universe(self) -> int:
         """Returns the size of the universe
@@ -1094,12 +1106,13 @@ class LinkEval:
         _, sensitivity, fpr = self.__compute_roc_pr_datapoints(cutoff=cutoff)
         return self.__compute_auc(x=fpr, y=sensitivity)
 
-
-    def __plot_curve(self, x, y, xlabel, ylabel, title="AUC", ax=None, color=MAIN_PLOT_COLOR, alpha = 0.8, **kwargs):
+    def __plot_curve(self, x, y, xlabel, ylabel, ylimit=None, title="AUC", ax=None, color=MAIN_PLOT_COLOR, alpha = 0.8, **kwargs):
         ax = _build_ax(ax, xlim=(0, 1.02), ylim=(0, 1.02))
         ax.fill_between(x, y, color=color, alpha=alpha)
         ax.plot(x, y, color=color, alpha=1, **kwargs)
         # Add titles
+        if ylabel == 'Precision':
+            ax.set_ylim(0, ylimit)
         ax.set_title(title, loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_xlabel(xlabel, size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_ylabel(ylabel, size=FONT_SIZE, color=MINOR_FONT_COLOR)
@@ -1107,7 +1120,6 @@ class LinkEval:
         return ax
     
     def __validate_cutoff(self, cutoff):
-
         if cutoff is None or cutoff==self.cutoff:
             return self.cutoff
 
@@ -1125,7 +1137,7 @@ class LinkEval:
                 )
         return cutoff
 
-    def plot_precision_recall_curve(self, cutoff=None, ax=None, title=True, **kwargs):
+    def plot_precision_recall_curve(self, ylimit=None,cutoff=None, ax=None, title=True, **kwargs):
         """Plots the precision-recall curve.
 
         Args:
@@ -1142,11 +1154,14 @@ class LinkEval:
             Axes object containing the plot.
         """
         precision, sensitivity, _ = self.__compute_roc_pr_datapoints(cutoff=cutoff)
+        if ylimit is None:
+            ylimit = precision[0]
         ax = self.__plot_curve(
             sensitivity,
             precision,
             xlabel="Recall",
             ylabel="Precision",
+            ylimit= ylimit,
             title=f"AUC-PR = {self.__compute_auc(x=sensitivity, y=precision):.3f}" if title else None,
             ax=ax,
             **kwargs,
@@ -1506,7 +1521,83 @@ class LinkEval:
         auc_pr = np.trapz(x=recall, y=precision, dx=0.05)
         auc_roc = np.trapz(x=fpr, y=recall, dx=0.05)
         return auc_roc, auc_pr, ax_roc, ax_pr
+
+class BenchmarkPlotter(Benchmark):
+    def __init__(
+            self,
+            stats_summary_df: pd.DataFrame,
+            coords: dict,
+            f1_score_dists: dict,
+            mcc_score_dists: dict,
+            accuracy_score_dists: dict,
+            greater_is_better: bool = True
+    ):
+        """_summary_
+
+        _extended summary_[#_unique ID_]_
+
+        .. math:: _LaTeX formula_
+
+        Arguments:
+            stats_summary_df (pd.DataFrame): _description_
+            coords (dict): _description_
+            f1_score_dists (dict): _description_
+            mcc_score_dists (dict): _description_
+            accuracy_score_dists (dict): _description_
+            greater_is_better (dict): _description_
+
+        References:
+            .. [#_unique ID_] *_pubmed abbr journal title_* _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
+            .. [#_unique ID_] _first-author first-name last-name_ *_book title_* (_year_) ISBN:_ISBN_ _http link_
+            .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
+        self._Benchmark__repr_str = f"Benchmark(number_of_inferences={len(stats_summary_df.index)}, inferences_ids={stats_summary_df.index})"
+
+        stats_logger.debug('Creating LinkEvalPlotter instances for every GS-inference pair...')
+        nets_names = list(stats_summary_df.index)
+        self._Benchmark__nis_instances = {}
+        for net_name in nets_names:
+            aupr_score = stats_summary_df.loc[net_name]['AUPR']
+            auroc_score = stats_summary_df.loc[net_name]['AUROC']
+            f1_score = stats_summary_df.loc[net_name]['F1 score']
+            mcc = stats_summary_df.loc[net_name]['MCC']
+            optimal_cutoff = stats_summary_df.loc[net_name]['Optimal cutoff']
+            accuracy = stats_summary_df.loc[net_name]['Accuracy']
+            # Score-metric distributions
+            f1_score_dist = f1_score_dists[net_name] if net_name != 'Baseline' else None
+            mcc_score_dist = mcc_score_dists[net_name] if net_name != 'Baseline' else None
+            accuracy_score_dist = accuracy_score_dists[net_name] if net_name != 'Baseline' else None
+            # Curves datapoints
+            precision_dist = coords['precision'][net_name]
+            sensitivity_dist = coords['sensitivity'][net_name]
+            fpr_dist = coords['fpr'][net_name]
+
+            self._Benchmark__nis_instances[net_name] = LinkEvalPlotter(
+                aupr= aupr_score,
+                auroc= auroc_score,
+                precision_dist= precision_dist,
+                sensitivity_dist= sensitivity_dist,
+                fpr_dist= fpr_dist,
+                f1_score= f1_score,
+                mcc= mcc,
+                accuracy= accuracy,
+                f1_score_dist= f1_score_dist,
+                mcc_score_dist= mcc_score_dist,
+                accuracy_score_dist= accuracy_score_dist,
+                optimal_cutoff= optimal_cutoff,
+                greater_is_better= greater_is_better,
+                inference_id= net_name
+            )
     
+    @property
+    def best_recall(self) -> tuple[str, float]:
+        """Returns the inference with the best recall and its value."""
+        return max([(net_id, nis.recall()) for net_id, nis in self.nis_instances.items() if net_id != 'Baseline'], key=lambda x: x[1])
+    
+    @property
+    def best_precision(self) -> tuple[str, float]:
+        """Returns the inference with the best precision and its value."""
+        return max([(net_id, nis.precision()) for net_id, nis in self.nis_instances.items() if net_id != 'Baseline'], key=lambda x: x[1])
+
 class LinkEvalPlotter(LinkEval):
     def __init__(
         self,
@@ -1518,10 +1609,10 @@ class LinkEvalPlotter(LinkEval):
         f1_score: float,
         mcc: float,
         accuracy: float,
-        f1_score_dist: dict,
-        mcc_score_dist: dict,
-        accuracy_score_dist: dict,
-        optimal_cutoff: float,
+        f1_score_dist: dict = None,
+        mcc_score_dist: dict = None,
+        accuracy_score_dist: dict = None,
+        optimal_cutoff: float = None,
         greater_is_better: bool = True,
         inference_id: str = None
     ):
@@ -1538,7 +1629,6 @@ class LinkEvalPlotter(LinkEval):
         # Class atributes that will not be used
         self._LinkEval__gold_standard = None
         self._LinkEval__inference = None
-        self._LinkEval__greater_is_better = None
         self._LinkEval__allow_self_loops = None
         self._LinkEval__gold_standard_edges = None
         self._LinkEval__inference_edges = None
@@ -1550,6 +1640,7 @@ class LinkEvalPlotter(LinkEval):
 
         # Class attributes that have been previously computed and provided by user
         self._LinkEval__inference_id = inference_id
+        self._LinkEval__greater_is_better = greater_is_better
         # Curves datapoints
         self._LinkEval__fpr_dist = fpr_dist
         self._LinkEval__precision_dist = precision_dist
@@ -1563,15 +1654,29 @@ class LinkEvalPlotter(LinkEval):
         self._LinkEval__optimal_cutoff = optimal_cutoff
 
         # Score metrics distributions
-        self._LinkEval__f1_score_dist = f1_score_dist
-        self._LinkEval__mcc_dist = mcc_score_dist
-        self._LinkEval__accuracy_dist = accuracy_score_dist
-        if greater_is_better:
-            self._LinkEval__cutoff = min(f1_score_dist.keys())
-        else:
-            self._LinkEval__cutoff = max(f1_score_dist.keys())
+        if inference_id != 'Baseline' or f1_score_dist is not None:
+            self._LinkEval__f1_score_dist = f1_score_dist
+            self._LinkEval__mcc_dist = mcc_score_dist
+            self._LinkEval__accuracy_dist = accuracy_score_dist
+            self._LinkEval__score_pre_dist = {score : precision for score, precision in zip(f1_score_dist.keys(), precision_dist[1:-1])}
+            self._LinkEval__score_sensi_dist = {score : sensitivity for score, sensitivity in zip(f1_score_dist.keys(), sensitivity_dist[1:-1])}
+            self._LinkEval__score_fpr_dist = {score : fpr for score, fpr in zip(f1_score_dist.keys(), fpr_dist[1:-1])}
 
-        self._LinkEval__repr = f"LinkEval(inference_id={inference_id}, aupr={aupr}, auroc={auroc}, f1_score={f1_score}, mcc={mcc}, accuracy={accuracy}, number_unique_scores={len(f1_score_dist.keys())}, cutoff= {self._LinkEval__cutoff}, optimal_cutoff={optimal_cutoff}, greater_is_better={greater_is_better})"
+            if greater_is_better:
+                self._LinkEval__cutoff = min(f1_score_dist.keys())
+            else:
+                self._LinkEval__cutoff = max(f1_score_dist.keys())
+            self._LinkEval__repr = f"LinkEval(inference_id={inference_id}, aupr={aupr}, auroc={auroc}, f1_score={f1_score}, mcc={mcc}, accuracy={accuracy}, number_unique_scores={len(f1_score_dist.keys())}, cutoff= {self._LinkEval__cutoff}, optimal_cutoff={optimal_cutoff}, greater_is_better={greater_is_better})"
+        else:
+            self._LinkEval__f1_score_dist = None
+            self._LinkEval__mcc_dist = None
+            self._LinkEval__accuracy_dist = None
+            self._LinkEval__cutoff = None
+            self._LinkEval__score_pre_dist = None
+            self._LinkEval__score_sensi_dist = None
+            self._LinkEval__score_fpr_dist = None
+
+            self._LinkEval__repr = f"LinkEval(inference_id={inference_id}, aupr={aupr}, auroc={auroc}, f1_score={f1_score}, mcc={mcc}, accuracy={accuracy}, number_unique_scores={None}, cutoff= {self._LinkEval__cutoff}, optimal_cutoff={optimal_cutoff}, greater_is_better={greater_is_better})"
 
     def __no_computation_warning(self, process:str) -> None:
         stats_logger.warning(f'Computation of {process} unable because input was previously computed benchmarking, not networks')
@@ -1619,10 +1724,6 @@ class LinkEvalPlotter(LinkEval):
         return self.__no_attribute_warning('inference network')
 
     @property
-    def greater_is_better(self) -> bool | None:
-        return self.__no_attribute_warning('whether greater score is better')
-
-    @property
     def directed(self) -> bool:
         return self.__no_attribute_warning('whether networks benchmarked consider direction')
 
@@ -1632,25 +1733,22 @@ class LinkEvalPlotter(LinkEval):
 
     @cutoff.setter
     def cutoff(self, cutoff: float | None):
-        return self.__no_computation_warning('set new cutoff')   
+        return self.__no_computation_warning('set new cutoff')
     
-    def recall(self) -> None:
-        return self.__no_computation_warning('recall for a specific cutoff')
-
-    def precision(self) -> None:
-        return self.__no_computation_warning('precision for a specific cutoff')
+    def optimal_cutoff_plot(self, ax=None, x_log=False):
+        if self._LinkEval__f1_score_dist:
+            return super().optimal_cutoff_plot(ax, x_log)
+        else:
+            return self.__no_computation_warning(f'optimal cutoff plot for {self._LinkEval__inference_id}')
+        
+    def recall(self, cutoff = None):
+        if self._LinkEval__inference_id != 'Baseline':
+            return super().recall(cutoff)
+        else:
+            return self.__no_computation_warning('Baseline recall for specific cutoff')
     
-    def fpr(self) -> None:
-        return self.__no_computation_warning('fpr for a specific cutoff')
-
-    @property
-    def f1_score(self) -> float:
-        return self.__f1_score
-    
-    @property
-    def mcc(self) -> float:
-        return self.__mcc   
-
-    @property
-    def accuracy(self) -> float:
-        return self.__accuracy
+    def precision(self, cutoff = None):
+        if self._LinkEval__inference_id != 'Baseline':
+            return super().precision(cutoff)
+        else:
+            return self.__no_computation_warning('Baseline precision for specific cutoff')
