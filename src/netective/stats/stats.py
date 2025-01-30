@@ -412,36 +412,36 @@ class Benchmark:
     def plot_aupr(self, ax=None, **kwargs):
         """Plots the AUPR values for every inference in the benchmark."""
         stats_logger.info('Plotting AUPR values for every inference in the benchmark')
-        ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
+        ax = _build_ax(ax, xlim=None, ylim=None)
         ax.barh(list(self.nis_instances.keys()), [nis.area_under_precision_recall_curve() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
         ax.set_title("AUPR", loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_xlabel("AUPR", size=FONT_SIZE, color=MINOR_FONT_COLOR)
-        ax.set_xlim(0, max([nis.area_under_precision_recall_curve() for nis in self.nis_instances.values()]))
+        # ax.set_xlim(0, max([nis.area_under_precision_recall_curve() for nis in self.nis_instances.values()]))
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
     
     def plot_auroc(self, ax=None, **kwargs):
         """Plots the AUROC values for every inference in the benchmark."""
         stats_logger.info('Plotting AUROC values for every inference in the benchmark')
-        ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
+        ax = _build_ax(ax, xlim=None, ylim=None)
         ax.barh(list(self.nis_instances.keys()), [nis.area_under_roc_curve() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
         ax.set_title("AUROC", loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_xlabel("AUROC", size=FONT_SIZE, color=MINOR_FONT_COLOR)
-        ax.set_xlim(0, max([nis.area_under_roc_curve() for nis in self.nis_instances.values()]))
+        # ax.set_xlim(0, max([nis.area_under_roc_curve() for nis in self.nis_instances.values()]))
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
     
     def plot_f1_score(self, ax=None, **kwargs):
         """Plots the F1 score values for every inference in the benchmark."""
         stats_logger.info('Plotting F1 scores values for every inference in the benchmark')
-        ax = _build_ax(ax, xlim=[0,1.01], ylim=None)
+        ax = _build_ax(ax, xlim=None, ylim=None)
         ax.barh(list(self.nis_instances.keys()), [nis.f1_score() for nis in self.nis_instances.values()], color=MAIN_PLOT_COLOR, **kwargs)
         ax.set_title("F1 score", loc="right", size=FONT_SIZE, color=FONT_COLOR)
         ax.set_ylabel("Inference", size=FONT_SIZE, color=MINOR_FONT_COLOR)
         ax.set_xlabel("F1 score", size=FONT_SIZE, color=MINOR_FONT_COLOR)
-        ax.set_xlim(0, max([nis.f1_score() for nis in self.nis_instances.values()]))
+        # ax.set_xlim(0, max([nis.f1_score() for nis in self.nis_instances.values()]))
         ax.tick_params(axis="both", colors=MINOR_FONT_COLOR)
         return ax
     
@@ -1688,7 +1688,6 @@ class LinkEvalPlotter(LinkEval):
     
     @property
     def cutoff(self) -> float | None:
-        stats_logger.warning('Cutoff established at the moment of benchmarking computation.')
         return self._LinkEval__cutoff
     
     @property
