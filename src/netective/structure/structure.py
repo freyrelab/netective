@@ -81,7 +81,7 @@ def flatten_list_of_iterables(lst):
     return list(chain.from_iterable(lst))
 
 # Get properties selected Fxn
-def get_child_classes(parent_class: type=properties._Property, selected_props: str|list="all", include_env: None|dict=None) -> dict:
+def get_child_classes(parent_class: type=properties._Property, selected_props: str|list="all", conserve_props: bool = True, include_env: None|dict=None) -> dict:
     """Returns a dict of child classes of parent_class based on selected_props.
     
     Arguments:
@@ -89,6 +89,7 @@ def get_child_classes(parent_class: type=properties._Property, selected_props: s
             This function is intented to work for the properties.Property abscract class.
         selected_props (str|list, optional): Properties to search for. Defaults to "all".
             Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names.
+        conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
         include_env (None|dict, optional): Dictionary with the environment variables to include. Defaults to None.
     
     Returns:
@@ -134,6 +135,9 @@ def get_child_classes(parent_class: type=properties._Property, selected_props: s
     if selected_props != "all":
         if not isinstance(selected_props, list):
             selected_props = [selected_props]
+        if not conserve_props:
+            struct_logger.info(f"Removing following properties so they won't be computed: {selected_props}")
+            selected_props = [prop for prop in all_properties if prop not in selected_props]
         child_classes = {cls: mask for cls, mask in child_classes.items() if cls.CLASS_NAME in selected_props}
     
     for cls in child_classes:
@@ -141,7 +145,10 @@ def get_child_classes(parent_class: type=properties._Property, selected_props: s
         
     struct_logger.info('')
     if len(child_classes) == 0:
-        struct_logger.critical(f"Sorry, no matches for properties inquired.\nThe available properties are: {all_properties}")
+        if conserve_props:
+            struct_logger.critical(f"Sorry, no matches for properties inquired.\nThe available properties are: {all_properties}")
+        else: 
+            struct_logger.critical(f"List of selected properties (with parameter conserve_props = False) contain all available properties.\nTry again with less properies or with conserve_props parameter to deffault (True)")
         raise ValueError(
             f"Invalid list of properties."
         )
@@ -604,7 +611,7 @@ class Structure:
         return self.scalar_values, self.dist_values
 
     def get_props(
-        self, selected_props: str | list = "all", child_classes: list = None, include_env: None | dict = None
+        self, selected_props: str | list = "all", conserve_props: bool = True, child_classes: list = None, include_env: None | dict = None
     ) -> Tuple[dict[str, dict[str, float | int]], dict[str, dict[str, np.array]]]:
         """Get structural properties for the network instanced.
 
@@ -615,6 +622,7 @@ class Structure:
         Arguments:
             selected_props (str|list): Structural properties to compute. Defaults to 'all'.
                 Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names. Ignored if child_classes is provided.
+            conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
             child_classes (dict): List of property classes to compute all the properties of those classes. If provided, selected_props and include_env is ignored. Defaults to None.
             include_env (None|dict, optional): Dictionary with the environment variables to include. Defaults to None. Ignored if child_classes is provided. Defaults to None.
 
@@ -647,7 +655,7 @@ class Structure:
                 self._dist_arrays = {}
 
                 if child_classes is None:
-                    child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
+                    child_classes = get_child_classes(PARENT_CLASS, selected_props, conserve_props, include_env=include_env)
 
                 # props
                 scalar_values, dist_values = self._compute_props(child_classes)
@@ -677,6 +685,7 @@ def characterize_network(
     net_id: str = None,
     norm: str | None = None,
     selected_props: str | list = "all",
+    conserve_props: bool = True,
     child_classes: dict = None,
     include_env: None | dict = None,
     return_prop_dicts: bool = False,
@@ -691,6 +700,7 @@ def characterize_network(
         norm (str, optional): Normalization to apply. Valid values are 'network', 'biological' or None. Defaults to None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
             Use 'all' to search for all child classes. Otherwise, use the name of a property or a list of property names. Ignored if child_classes is provided.
+        conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
         child_classes (dict, optional): Dict of child classes to compute. Defaults to None.
             if child_classes is not None, selected_props and include_env is ignored.
         include_env (None | dict, optional): Dictionary with the environment variables to include. Defaults to None. Ignored if child_classes is provided.
@@ -716,8 +726,7 @@ def characterize_network(
     if child_classes is not None:
         scalar_values, dist_values = struc.get_props(child_classes=child_classes)
     else:
-        scalar_values, dist_values = struc.get_props(selected_props=selected_props, include_env=include_env)
-
+        scalar_values, dist_values = struc.get_props(selected_props=selected_props, conserve_props=conserve_props, include_env=include_env)
 
     if len(dist_values) == 0 and len(scalar_values) == 0:
         struct_logger.critical("Not enough data, try with more properties or another normalization")
@@ -940,6 +949,7 @@ def avg_random_nets_per_net(
     Notes:
         For "K Regular" algorithm the parameter k has to fulfill the condition: (k * n) % 2 == 0, where k is the final degree for each node and n is the total number of nodes [2]. 
         Therefore if condition is not met, k will be incremented by a unit.
+        Seed condition was not implemented because igraph's random models generators doesn't include this parameter.
 
     Returns:
         Tuple[dict[str, float | int], dict[str, np.array]]: tuple of dictionaries(average scalar properties, average distributions moments)
@@ -1385,6 +1395,7 @@ def compare_structure(
     directed: bool = True,
     norm: str | None = None,
     selected_props: str | list = "all",
+    conserve_props: bool = True,
     workers: str | int = "auto",
     include_env: None | dict = None,
     return_prop_dicts: bool = False,
@@ -1417,6 +1428,7 @@ def compare_structure(
         directed (bool): _description_. Defaults to True.
         norm (str | None): _description_. Defaults to None.
         selected_props (str | list): _description_. Defaults to "all".
+        conserve_props (bool): _description_. Defaults to True.
         workers (str | int): _description_. Defaults to "auto".
         include_env (None | dict): _description_. Defaults to None.
         return_prop_dicts (bool): _description_. Defaults to False.
@@ -1464,7 +1476,7 @@ def compare_structure(
 
     # currently, both selected_props and child_classes are being passed to get_props, however, only one is needed.
     # TODO: Optimization:  passing only child_classes would be more efficient beacuse it computes get_child_classes only once.
-    child_classes = get_child_classes(PARENT_CLASS, selected_props, include_env=include_env)
+    child_classes = get_child_classes(PARENT_CLASS, selected_props, conserve_props, include_env=include_env)
 
     # handle workers
     usable_workers = cpu_count() - 1

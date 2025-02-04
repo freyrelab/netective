@@ -472,6 +472,10 @@ def filter_properties(props_dict: dict, selected_props: list | str = 'all', cons
     Returns:
         dict: Dictionary with all props, selected props or without selected props"""
     
+    if not isinstance(props_dict, dict) or not props_dict:
+        utils_logger.critical("The properties input format is invalid (it must be a dictionary) or is empty.")
+        raise ValueError("props_dict must be a non-empty dictionary.")
+
     if selected_props == 'all':
         return props_dict
     
