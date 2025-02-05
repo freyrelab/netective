@@ -135,6 +135,10 @@ def get_child_classes(parent_class: type=properties._Property, selected_props: s
     if selected_props != "all":
         if not isinstance(selected_props, list):
             selected_props = [selected_props]
+        invalid_props = [prop for prop in selected_props if prop not in all_properties]
+        if invalid_props:
+            struct_logger.warning(f"The following properties can't be computed: {invalid_props}, therefore will be eliminates from selected_props list.")
+            selected_props=[prop for prop in selected_props if prop not in invalid_props]
         if not conserve_props:
             struct_logger.info(f"Removing following properties so they won't be computed: {selected_props}")
             selected_props = [prop for prop in all_properties if prop not in selected_props]
@@ -831,6 +835,7 @@ def __batch_processing(
         networks: dict,
         norm: str,
         selected_props: list,
+        conserve_props: bool,
         child_classes: list,
         verbose: str,
         workers: int,
@@ -847,6 +852,7 @@ def __batch_processing(
         networks (dict): _description_
         norm (str): _description_
         selected_props (list): _description_
+        conserve_props (bool): _description_
         child_classes (list): _description_
         verbose (str): _description_
         workers (int): _description_
@@ -866,6 +872,7 @@ def __batch_processing(
         list(networks.keys()),
         [norm] * len(networks),
         [selected_props] * len(networks),
+        [conserve_props] * len(networks),
         [child_classes] * len(networks),
         [include_env] * len(networks),
         [True] * len(networks),
@@ -903,6 +910,7 @@ def avg_random_nets_per_net(
     random_graph_parameters: dict = None,
     ba_m: str | int = 2,
     selected_props : str | list = 'all',
+    conserve_props: bool = True,
     keep_averages: bool = True,
     workers: int = 2,
     verbose: str = None,
@@ -932,6 +940,7 @@ def avg_random_nets_per_net(
         ba_m (str | int): Type of m (integrer or a degree distribution) that is going to be used in Barabasi Albert generator. Defaults to 2.
             Choices are "out degree", "in degree", "degree" or any positive integrer.
         selected_props (str | list):  Properties to compute. Defaults to 'all'.
+        conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
         keep_averages (bool): Whether to keep the averages of the moments of the distributions. Defaults to True.
         workers (int): Number of workers to use. Defaults to 2.
                                 IMPORTANT : Introducing a number of workers bigger than available is not going to make 
@@ -1193,6 +1202,7 @@ def avg_random_nets_per_net(
                             norm= norm,
                             keep_averages= keep_averages,
                             selected_props= selected_props,
+                            conserve_props=conserve_props,
                             workers= workers,
                             return_prop_dicts= True,
                             verbose= verbose,
@@ -1282,6 +1292,7 @@ def characterize_models(
     random_graph_generator_params : dict = None,
     ba_m : int | str | list = 2,
     selected_props : str | list = 'all',
+    conserve_props: bool = True,
     keep_averages: bool = True,
     workers: int = 2,
     verbose: str = None,
@@ -1306,6 +1317,7 @@ def characterize_models(
         ba_m (int | str | list): Type of m (integrer or a degree distribution) that is going to be used in Barabasi Albert generator. Defaults to 2.
             Valid values are "out degree", "in degree", "degree" or any positive integrer.
         selected_props (str | list):  Properties to compute. Defaults to 'all'.
+        conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
         keep_averages (bool): Whether to include the averages of local properties in the global properties array. Defaults to True.
         workers (int): Number of workers to use. Defaults to 2.
                                 IMPORTANT : Introducing a number of workers bigger than available is not going to make 
@@ -1352,6 +1364,7 @@ def characterize_models(
                                                 random_graph_parameters = random_graph_generator_params,
                                                 ba_m = m,
                                                 selected_props = selected_props,
+                                                conserve_props=conserve_props,
                                                 keep_averages = keep_averages,
                                                 workers=workers,
                                                 verbose= verbose,
@@ -1374,6 +1387,7 @@ def characterize_models(
                                             directed_models= directed_models,
                                             random_graph_parameters = random_graph_generator_params,
                                             selected_props = selected_props,
+                                            conserve_props=conserve_props,
                                             keep_averages = keep_averages,
                                             workers=workers,
                                             verbose= verbose,
@@ -1538,6 +1552,7 @@ def compare_structure(
                 networks= temp_nets,
                 norm= norm,
                 selected_props= selected_props,
+                conserve_props= conserve_props,
                 child_classes= child_classes,
                 verbose= verbose,
                 workers= workers,
@@ -1562,6 +1577,7 @@ def compare_structure(
             random_graph_generator_params=random_graph_generator_params,
             ba_m=ba_m,
             selected_props=selected_props,
+            conserve_props=conserve_props,
             keep_averages=keep_averages,
             workers=workers,
             verbose=verbose,
@@ -1625,6 +1641,7 @@ def classify_networks(
             'Entropy of Degree Distribution',
             'Self-Loops'
         ],
+        conserve_props: bool = True,
         workers: str | int = "auto",
         include_env: None | dict = None,
         add_averages: bool = True,
@@ -1650,6 +1667,7 @@ def classify_networks(
         norm (str, optional): Normalization to apply. Defaults to None.
             Valid values are 'network', 'biological' or None.
         selected_props (str | list, optional): Properties to compute. Defaults to 'all' (all properties).
+        conserve_props (bool): Whether to include or remove the selected properties. Defaults to True.
         workers (int, optional): Number of workers to use. Defaults to 'auto'.
             Auto means number of cpu's - 1.
         get_clusters_kargs (dict, optional): Keyword arguments for the get_clusters function. Defaults to None.
@@ -1687,7 +1705,7 @@ def classify_networks(
             results_dir= results_dir,
             return_props_dict= True,
             selected_props= selected_props,
-            conserve_props= True,
+            conserve_props= conserve_props,
             add_averages= add_averages,
             verbose= verbose
         )
@@ -1697,6 +1715,7 @@ def classify_networks(
             directed= directed,
             norm= norm,
             selected_props= selected_props,
+            conserve_props= conserve_props,
             workers= workers,
             include_env= include_env,
             return_prop_dicts= True,
