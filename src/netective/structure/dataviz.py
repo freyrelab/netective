@@ -429,6 +429,7 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
             )
         
         # Add colorbars for numerical columns
+        colorbar_counter = 0
         if 'numerical' in list(data_type.values()):
             dataviz_logger.debug('Adding colorbar(s) for numerical features')
             heatmap_bbox = g.ax_heatmap.get_position()
@@ -437,7 +438,6 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
             colorbar_width = 0.02 # each colorbar width 
             colorbar_spacing = 0.12  # Space between colorbars
             start_x_position = dendrogram_bbox.width + row_colors_bbox.width + heatmap_bbox.width + 0.025
-            colorbar_counter = 0
             for col, norm in norms.items():
                 cmap = sns.color_palette(NUMERICAL, as_cmap=True)
                 mappable = ScalarMappable(norm=norm, cmap= cmap)
@@ -451,6 +451,7 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
         # Add legends for categorical columns
         if 'categorical' in list(data_type.values()):
             dataviz_logger.debug('Adding legend(s) for categorical features')
+            heatmap_bbox = g.ax_heatmap.get_position()
             current_y_position = heatmap_bbox.height
             start_x_position = 0.1 * (colorbar_counter + 0.2) + 1
             legend_counter = 0

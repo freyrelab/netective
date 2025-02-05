@@ -1661,6 +1661,10 @@ def classify_networks(
     Returns:
         dict: Dictionary with the id of the cluster and the networks that belong to it.
     """
+    if verbose != None:
+        current_level = struct_logger.getEffectiveLevel()
+        set_log_level(verbose)
+    
     if distance_df is None:
         distance_df = pd.DataFrame()
     
@@ -1721,5 +1725,8 @@ def classify_networks(
         map_ids= map_ids,
         fcluster_kwargs= fcluster_kwargs
     )
+    
+    if verbose != None:
+        set_log_level(current_level)
 
     return clusters
