@@ -363,7 +363,7 @@ class Benchmark:
         best_name, _ = self.best_auroc
         for net_id, nis in self.nis_instances.items():
             nis.plot_roc_curve(ax=ax, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else MAIN_PLOT_COLOR, alpha=0, title=False, **kwargs)
-        ax.legend(loc=3)
+        ax.legend()
         return ax
     
     def plot_precision_recall_curves(self, ax=None, **kwargs):
@@ -385,7 +385,7 @@ class Benchmark:
         ylimit = max([nis.precision_dist[0] for _, nis in self.nis_instances.items()])
         for net_id, nis in self.nis_instances.items():
             nis.plot_precision_recall_curve(ax=ax, ylimit= ylimit, label=net_id if net_id==best_name else None, color='r' if net_id==best_name else MAIN_PLOT_COLOR, alpha=0, title=False, **kwargs)
-        ax.legend(loc=3)
+        ax.legend()
         return ax
     
     def optimal_cutoffs(self) -> dict[str, float]:
