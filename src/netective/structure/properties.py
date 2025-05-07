@@ -544,13 +544,13 @@ class ComplexFeedForwardCircuits(_Property):
 
 
 @return_scalar
-class GenesintheGiantComponent(_Property):
-    """Number of genes in the giant component.
+class NodesintheGiantComponent(_Property):
+    """Number of nodes in the giant component.
 
     Methods:
-        compute: Compute the number of genes in the giant component.
+        compute: Compute the number of nodes in the giant component.
         norm_biol: No biological normalization available, network normalization used.
-        norm_network: Normalize the number of genes in the giant component to the number of nodes.
+        norm_network: Normalize the number of nodes in the giant component to the number of nodes.
     """
 
     CLASS_NAME = "Giant Component Size"
@@ -1840,7 +1840,6 @@ class NumberEdges(_Property):
     
 @return_scalar
 @use_selfloops
-@use_giant_component
 class UndirDensity(_Property):
     """Density of an undirected graph.
 

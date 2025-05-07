@@ -1647,7 +1647,7 @@ def classify_networks(
         add_averages: bool = True,
         association_metric: str = 'pearson',
         clust_num: int = None,
-        threshold: float = None,
+        threshold: float = 0.7,
         metric: str = 'euclidean',
         method: str = 'ward',
         map_ids: bool = True,
