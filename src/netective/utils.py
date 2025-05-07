@@ -30,10 +30,12 @@ from scipy.cluster.hierarchy import linkage, fcluster
 from typing import Union, Callable, Iterable, Tuple
 
 from netective.logging_info import get_logger, set_log_level
+from netective.stats.stats import BenchmarkPlotter
 from netective.structure.dataviz import create_comp_heatmap, create_scalar_dist_plot
 
 import matplotlib
 import matplotlib.figure
+import matplotlib.pyplot as plt
 
 concat_path = os.path.join
 
@@ -49,6 +51,15 @@ CORRELATIONS = {
     'spearman' : spearmanr,
     'cosine' : cosine_similarity
 }
+
+ADMITTED_STATS_FILES = ['aupr_scores', 
+                        'auroc_scores', 
+                        'precision', 
+                        'sensitivity', 
+                        'fpr', 
+                        'stats_summary', 
+                        'scores_metrics_distributions']
+
 
 class NullGraphError(Exception):
     """Exception raised for null graph."""
@@ -901,6 +912,136 @@ def process_netective_properties_files(
         set_log_level(utils_logger, current_level)
     
     return results
+
+def get_datapoints_from_files(results_dir: str, delimiter: str = '\t')-> dict[dict [str, np.array]]:
+    coords = {
+        'precision' : {},
+        'sensitivity' : {},
+        'fpr' : {}
+    }
+    for file_name in os.listdir(results_dir):
+        suffix_flag = False
+        for suffix in ADMITTED_STATS_FILES:
+            if file_name.find(suffix) != -1:
+                suffix_flag = True
+        if not suffix_flag:
+            utils_logger.warning(f'Unknown datapoints file detected, skipping it: {file_name}')
+            continue
+        if file_name.find('scores_metrics_distributions') != -1:
+            continue
+        file_path = os.path.join(results_dir, file_name)
+        f = open(file_path, 'r')
+        for line in f:
+            if '>>>' in line:
+                net_name = line.split(' ')[0].replace('>>>', '')
+                next_line = f.readline().strip(f'{delimiter}\n').split(delimiter)
+                coord_array = np.array([float(i) for i in next_line])
+                coords[file_name.split('.')[0]][net_name] = coord_array
+        f.close()
+    return coords
+
+def get_stats_summary_from_file(results_dir: str, delimiter: str = '\t', comments: str = '#')-> pd.DataFrame:
+    for file_name in os.listdir(results_dir):
+        # Detecting files not created by Netective
+        suffix_flag = False
+        for suffix in ADMITTED_STATS_FILES:
+            if file_name.find(suffix) != -1:
+                suffix_flag = True
+        if not suffix_flag:
+            utils_logger.warning(f'Unknown datapoints file detected, skipping it: {file_name}')
+            continue
+
+        # Only reading stats summary file
+        if 'stats_summary' in file_name:
+            summary_filepath = os.path.join(results_dir, file_name)
+            return pd.read_csv(summary_filepath, index_col= 0, sep= delimiter, comment= comments)
+
+def get_scores_metrics_dists_from_file(results_dir: str, delimiter: str= '\t') -> tuple[dict[float, float], dict[float, float], dict[float, float]]:
+    f1_score_dists = {}
+    accuracy_score_dists = {}
+    mcc_score_dists = {}
+    for file_name in os.listdir(results_dir):
+        suffix_flag = False
+        for suffix in ADMITTED_STATS_FILES:
+            if file_name.find(suffix) != -1:
+                suffix_flag = True
+        if not suffix_flag:
+            utils_logger.warning(f'Unknown datapoints file detected, skipping it: {file_name}')
+            continue
+        if file_name.find('scores_metrics_distributions') != -1:
+            file_path = os.path.join(results_dir, file_name)
+            f = open(file_path, 'r')
+            for line in f:
+                if '>>>' in line and 'inference scores' in line:
+                    net_name = line.replace('>>>', '').split(' ')[0]
+                    scores = f.readline().strip(f'{delimiter}\n').split(delimiter)
+                    # F1 scores
+                    f.readline()
+                    f1_scores = f.readline().strip(f'{delimiter}\n').split(delimiter)
+                    f1_score_dists[net_name] = {
+                        float(score) : float(f1)
+                        for score, f1 in zip(scores, f1_scores)
+                    }
+                    # MCC values
+                    f.readline()
+                    mcc_values = f.readline().strip(f'{delimiter}\n').split(delimiter)
+                    mcc_score_dists[net_name] = {
+                        float(score) : float(mcc)
+                        for score, mcc in zip(scores, mcc_values)
+                    }
+                    # Accuracy scores
+                    f.readline()
+                    accuracy_scores = f.readline().strip(f'{delimiter}\n').split(delimiter)
+                    accuracy_score_dists[net_name] = {
+                        float(score) : float(acc)
+                        for score, acc in zip(scores, accuracy_scores)
+                    }
+            f.close()
+    return f1_score_dists, mcc_score_dists, accuracy_score_dists
+
+
+def process_netective_stats_files(
+        results_dir: str,
+        greater_is_better: bool= True,
+        plot_metrics: bool = False,
+        delimiter: str= '\t',
+        comments: str= '#',
+        verbose= 'CRITICAL'
+    ) -> dict[str, plt.Axes]:
+    coords = get_datapoints_from_files(results_dir, delimiter)
+    stats_summary_df = get_stats_summary_from_file(results_dir, delimiter, comments)
+    f1_score_dists, mcc_score_dists, accuracy_score_dists = get_scores_metrics_dists_from_file(results_dir, delimiter)
+
+    benchmark_plotter = BenchmarkPlotter(
+        stats_summary_df= stats_summary_df,
+        coords= coords,
+        f1_score_dists= f1_score_dists,
+        mcc_score_dists= mcc_score_dists,
+        accuracy_score_dists= accuracy_score_dists,
+        greater_is_better= greater_is_better
+    )
+
+    # Base fig
+    fig1, axes1 = plt.subplots(2, 2, figsize=(8, 8), constrained_layout= True)
+    benchmark_plotter.plot_precision_recall_curves(ax=axes1[0, 0])
+    benchmark_plotter.plot_aupr(ax=axes1[0, 1])
+    benchmark_plotter.plot_roc_curves(ax=axes1[1, 0])
+    benchmark_plotter.plot_auroc(ax=axes1[1, 1])
+    plt.sca(axes1[0,1])
+    plt.xticks(rotation=45)
+    plt.sca(axes1[1,1])
+    plt.xticks(rotation=45)
+
+    # Optional fig
+    if plot_metrics:
+        fig2, axes2 = plt.subplots(1, 3, figsize=(10, 5), constrained_layout= True, sharey= 'all')
+        benchmark_plotter.plot_f1_score(ax= axes2[0])
+        benchmark_plotter.plot_mcc(ax= axes2[1])
+        benchmark_plotter.plot_optimal_cutoffs(ax= axes2[2])
+        return fig1, fig2
+    else:
+        return fig1
+
 
 # Paths objects
 class ShortestDistances:
