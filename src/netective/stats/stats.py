@@ -13,8 +13,7 @@ import numpy as np
 from warnings import warn
 from networkx import Graph, DiGraph
 from networkx.classes.function import selfloop_edges
-
-import networkx as nx # TODO: Erase this and filter to just usable functions
+from networkx.readwrite.edgelist import read_edgelist
 
 from netective.logging_info import get_logger, set_log_level
 stats_logger = get_logger(__name__)
@@ -34,7 +33,7 @@ def remove_self_loops(G: DiGraph):
     G.remove_edges_from(selfloop_edges(G))
     return G
 
-def parse_network(file_path: str, comments:str= "#", delimiter:str="\t", directed:bool= True, score:bool= False, use_position_as_score:bool= False, net_file_format:str= 'edgelist') -> Union[nx.DiGraph, nx.Graph]:
+def parse_network(file_path: str, comments:str= "#", delimiter:str="\t", directed:bool= True, score:bool= False, use_position_as_score:bool= False, greater_score_is_better: bool=True) -> Union[DiGraph, Graph]:
     """Useful fxn for parsing a network file
 
     Fxn for parsing a network file, robust for several common file formats. It is also robust to ranking of edges when providing an edgelist with scores.
@@ -46,8 +45,8 @@ def parse_network(file_path: str, comments:str= "#", delimiter:str="\t", directe
         directed (bool): whether the network will be created with nx.Graph or nx.DiGraph. Defaults to True.
         score (bool): if True, the network will use the third column of the file as the score of the edge. Defaults to False.
         use_position_as_score (bool): if True, the position of the edge in the file will be used as the score of the edge.. Defaults to False.
-        net_file_format (str): format to read network from file. Accepted formats are: edgelist, graphml, adj list and multiline adj list. Defaults to 'edgelist'.
-
+        greater_score_is_better (bool): Whether the inference score is better when it is higher or lower.
+        
     Raises:
         ValueError: _description_
         ValueError: _description_
@@ -60,49 +59,41 @@ def parse_network(file_path: str, comments:str= "#", delimiter:str="\t", directe
         stats_logger.critical("score and use_position_as_score cannot be True at the same time.")
         raise ValueError("score and use_position_as_score cannot be True at the same time.")
 
-    if net_file_format == 'edgelist':
-        if not use_position_as_score:
-            if score:
-                # check if first line has 3 columns
-                with open(file_path, "r") as f:
-                    first_line = f.readline()
-                    cols = first_line.strip().split(delimiter)
-                    if len(cols) < 3:
-                        stats_logger.critical(
-                            f"File {file_path} does not have a score column. Set score=False."
-                        )
-                        raise ValueError(
-                            f"File {file_path} does not have a score column. Set score=False."
-                        )
-
-            G = nx.read_edgelist(
-                file_path,
-                comments=comments,
-                delimiter=delimiter,
-                create_using=nx.DiGraph if directed else nx.Graph,
-                data=(("score", float),) if score else False,
-            )
-        else:
-            G = nx.DiGraph() if directed else nx.Graph()
+    if not use_position_as_score:
+        if score:
+            # check if first line has 3 columns
             with open(file_path, "r") as f:
-                for i, line in enumerate(f):
-                    if line.startswith(comments):
-                        continue
+                first_line = f.readline()
+                cols = first_line.strip().split(delimiter)
+                if len(cols) < 3:
+                    stats_logger.critical(
+                        f"File {file_path} does not have a score column. Set score=False."
+                    )
+                    raise ValueError(
+                        f"File {file_path} does not have a score column. Set score=False."
+                    )
+
+        G = read_edgelist(
+            file_path,
+            comments=comments,
+            delimiter=delimiter,
+            create_using=DiGraph if directed else Graph,
+            data=(("score", float),) if score else False,
+        )
+    else:
+        G = DiGraph() if directed else Graph()
+        with open(file_path, "r") as f:
+                edges = [line for line in f if not line.startswith(comments)]
+
+                for i, line in enumerate(edges if not greater_score_is_better else edges[::-1]):
                     cols = line.strip().split(delimiter)
                     source = cols[0]
                     target = cols[1]
-                    G.add_edge(source, target, score=i)
-    
-    elif net_file_format == 'graphml':
-        G = nx.read_graphml(file_path)
-    
-    else:
-        adj_readers = {
-            'multiline adj list' : nx.read_multiline_adjlist,
-            'adj list' : nx.read_adjlist
-        }
-        G = adj_readers[net_file_format](file_path, comments= comments, delimiter= delimiter, create_using= nx.DiGraph if directed else nx.Graph)
-    
+
+                    score = i
+
+                    G.add_edge(source, target, score=score)
+  
     if G.number_of_edges() == 0:
         stats_logger.critical(f'Empty graph detected after parsing. It is probably due to an error declaring delimiters or comments in network file -> {file_path}')
         raise NullGraphError(f'Empty graph detected after parsing. It is probably due to an error declaring delimiters or comments in network file -> {file_path}')
@@ -301,7 +292,7 @@ def benchmarking(
 
         # load networks using the filename as key
         networks = {
-            os.path.splitext(network)[0]: parse_network(os.path.join(networks, network), comments=comments, delimiter=delimiter, directed=directed, score=score, use_position_as_score=True if not score else False, net_file_format= 'edgelist')
+            os.path.splitext(network)[0]: parse_network(os.path.join(networks, network), comments=comments, delimiter=delimiter, directed=directed, score=score, use_position_as_score=True if not score else False)
             for network in os.listdir(networks) if network != gold_standard
             }
         
