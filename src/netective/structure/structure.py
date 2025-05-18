@@ -1413,6 +1413,7 @@ def compare_structure(
     workers: str | int = "auto",
     include_env: None | dict = None,
     return_prop_dicts: bool = False,
+    return_association_df: bool = False,
     keep_averages: bool = True,
     association_metric: str | Callable = 'pearson',
     metric: str = 'euclidean',
@@ -1447,6 +1448,7 @@ def compare_structure(
         workers (str | int): _description_. Defaults to "auto".
         include_env (None | dict): _description_. Defaults to None.
         return_prop_dicts (bool): _description_. Defaults to False.
+        return_association_df (bool): _description_. Defaults to False.
         keep_averages (bool): _description_. Defaults to True.
         association_metric (str | Callable): _description_. Defaults to 'pearson'.
         metric (str): _description_. Defaults to 'euclidean'.
@@ -1617,7 +1619,8 @@ def compare_structure(
             data_type = clean_names_association_df(data_type)
             data_type = data_type.to_dict(orient='records')[0]
             
-
+        if return_association_df:
+            return association_df
         fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title= title, features= features, data_type= data_type, verbose= verbose, compare_to_models= compare_to_models, **clustermap_kwargs)
     else:
         struct_logger.critical("Not enough data to compare.")
