@@ -1429,7 +1429,8 @@ def compare_structure(
     delimiter : str = '\t',
     features: pd.DataFrame = None,
     data_type: dict = None,
-    title: str = None
+    title: str = None,
+    **clustermap_kwargs
 ) -> Union[Tuple[dict, dict], Tuple[dict, dict, dict, dict], Tuple[plt.Figure, pd.DataFrame]]:
     """Structural characterization-based networks' comparison
 
@@ -1610,8 +1611,14 @@ def compare_structure(
             association_df = filter_association_df_for_models(association_df, abbreviations)
         
         association_df = clean_names_association_df(association_df)
+        if features is not None and data_type is not None:
+            features = clean_names_association_df(features)
+            data_type = pd.DataFrame(data_type, index=[0])
+            data_type = clean_names_association_df(data_type)
+            data_type = data_type.to_dict(orient='records')[0]
+            
 
-        fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title= title, features= features, data_type= data_type, verbose= verbose, compare_to_models= compare_to_models)
+        fig_scalar = create_comp_heatmap(association_df, metric= metric, method= method, title= title, features= features, data_type= data_type, verbose= verbose, compare_to_models= compare_to_models, **clustermap_kwargs)
     else:
         struct_logger.critical("Not enough data to compare.")
         raise ValueError("Not enough data to compare.")

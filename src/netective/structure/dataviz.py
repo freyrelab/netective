@@ -7,6 +7,7 @@ from matplotlib.colors import Normalize, LinearSegmentedColormap
 from matplotlib.cm import ScalarMappable
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Patch
+from matplotlib.colors import to_rgb
 
 import numpy as np
 import pandas as pd
@@ -359,7 +360,7 @@ def create_scalar_dist_plot(scalars_df: pd.DataFrame, scale: str = 'linear', add
     return fig
 
 
-def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: str= 'euclidean', method:str = "ward", features: pd.DataFrame= None, data_type: dict= None, verbose: str= None, compare_to_models: bool= None) -> matplotlib.figure.Figure:
+def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: str= 'euclidean', method:str = "ward", features: pd.DataFrame= None, data_type: dict= None, verbose: str= None, compare_to_models: bool= None, **clustermap_kwargs) -> matplotlib.figure.Figure:
     """Create a comparison heatmap of the input dataframe.
 
     Arguments:
@@ -391,28 +392,40 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
     
     dataviz_logger.info('Creating comparison heatmap...')
     
-    def add_features(features: pd.DataFrame, data_type: dict):
-        dataviz_logger.info('Adding features tu comparison heatmap')
+    def add_features(features: pd.DataFrame, data_type: dict):   
+        dataviz_logger.info('Adding features to comparison heatmap')
         color_mappings = {}
         norms = {}
 
         dataviz_logger.debug('Getting cmaps for features')
         for col in features.columns:
             if data_type[col] == 'categorical':
-                # Continue handling categorical columns as before
                 unique_values = features[col].unique()
-                mapping = dict(zip(unique_values, CATEGORICAL[:len(unique_values)]))
-                color_mappings[col] = features[col].map(mapping)
+                palette = CATEGORICAL[:len(unique_values)]
+                mapping = dict(zip(unique_values, palette))
+                color_mappings[col] = features[col].map(lambda val: to_rgb(mapping[val]))
             else:
-                # Normalize and map each numerical column individually
                 norm = Normalize(vmin=features[col].min(), vmax=features[col].max())
-                norms[col] = norm  # Store the normalization
+                norms[col] = norm
                 cmap = sns.color_palette(NUMERICAL, as_cmap=True)
                 mappable = ScalarMappable(norm=norm, cmap=cmap)
-                color_mappings[col] = features[col].apply(lambda x: mappable.to_rgba(x))
+                color_mappings[col] = features[col].apply(lambda x: mappable.to_rgba(x)[:3])
+
 
         # Convert color mappings to DataFrame for row_colors
-        row_colors = pd.DataFrame(color_mappings)
+        row_colors = pd.DataFrame({
+            col: [tuple(val) for val in color_mappings[col]]
+            for col in color_mappings
+        }, index=features.index)
+
+
+        xticks_default = False if title else True
+        xticks_final = clustermap_kwargs.get("xticklabels", xticks_default)
+        yticks_default = True
+        yticks_final = clustermap_kwargs.get("yticklabels", yticks_default)
+        clustermap_kwargs["xticklabels"] = xticks_final
+        clustermap_kwargs["yticklabels"] = yticks_final
+
         # Generate clustermap
         g = sns.clustermap(
             distances_df,
@@ -421,12 +434,25 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
             row_colors= row_colors,
             col_cluster= False if compare_to_models else True,
             cmap= color_map,
-            yticklabels= True,
-            xticklabels= False if title else True,
-            figsize= (8, 8),
             annot= True if distances_df.shape[0] < 10 else False,
-            fmt= '.2f'
+            fmt= '.2f',
+            **clustermap_kwargs
             )
+        
+        # Ensure heatmap remains square, extend width for legend
+        square_size = 10  # base square
+        categorical_lengths = [
+            len(features[col].unique())
+            for col in features.columns
+            if data_type[col] == 'categorical'
+        ]
+        max_num_legend_items = max(categorical_lengths) if categorical_lengths else 0
+
+        # Estimate extra space needed for legends
+        extra_legend_space = max(2.5, 0.25 * max_num_legend_items)
+
+        # 🔄 Resize before layout elements are added
+        g.figure.set_size_inches(square_size + extra_legend_space + 1.5, square_size)
         
         # Add colorbars for numerical columns
         colorbar_counter = 0
@@ -450,23 +476,48 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
 
         # Add legends for categorical columns
         if 'categorical' in list(data_type.values()):
-            dataviz_logger.debug('Adding legend(s) for categorical features')
+            dataviz_logger.debug('Adding categorical legends with individual axes')
             heatmap_bbox = g.ax_heatmap.get_position()
-            current_y_position = heatmap_bbox.height
-            start_x_position = 0.1 * (colorbar_counter + 0.2) + 1
+            colorbar_right = heatmap_bbox.x1 + (colorbar_counter * 0.14)  # estimate space used by colorbars
+
+            legend_width = 0.12
+            extra_space = 0.02
+            current_x = colorbar_right + extra_space
+            current_y = 0.5  # vertical center
+            legend_height = 0.3
+
             legend_counter = 0
-            legend_height = 0
-            for col, mapping in color_mappings.items():
+            for col in features.columns:
                 if data_type[col] != 'categorical':
                     continue
+
                 unique_values = features[col].unique()
-                handles = [Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val) for i, val in enumerate(unique_values)]
-                current_y_position -= legend_height
-                current_x_position = start_x_position + (0.2 * legend_counter)
-                # Aprox height of current legend entry
-                legend_height = (len(unique_values) + 1) * 0.029
-                g.figure.legend(handles=handles, title=col, ncol=1, loc= 'upper center', bbox_to_anchor= (start_x_position, current_y_position, 0.2, 0.05), mode= 'expand', frameon= False, alignment= 'left')
+                handles = [
+                    Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val)
+                    for i, val in enumerate(unique_values)
+                ]
+
+                legend_ax = g.figure.add_axes([
+                    current_x + legend_counter * (legend_width + extra_space),
+                    current_y,
+                    legend_width,
+                    legend_height
+                ])
+                legend_ax.axis("off")
+                legend_ax.legend(
+                    handles=handles,
+                    title=col,
+                    loc='center left',
+                    frameon=False,
+                )
                 legend_counter += 1
+
+            # Resize figure to fit new legend space
+            g.figure.set_size_inches(square_size + (legend_counter * (legend_width + extra_space)) + colorbar_counter * 0.14, square_size)
+
+
+
+
    
         return g
 
@@ -483,6 +534,13 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
 
     else:
         try:
+            xticks_default = False if title else True
+            xticks_final = clustermap_kwargs.get("xticklabels", xticks_default)
+            yticks_default = True
+            yticks_final = clustermap_kwargs.get("yticklabels", yticks_default)
+            clustermap_kwargs["xticklabels"] = xticks_final
+            clustermap_kwargs["yticklabels"] = yticks_final
+
             g = sns.clustermap(
                 distances_df,
                 row_linkage= row_linkage,
@@ -493,8 +551,7 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
                 fmt= '.2f',
                 cbar= True,
                 col_cluster= False if compare_to_models else True,
-                yticklabels= True,
-                xticklabels= False if title else True
+                **clustermap_kwargs
             )
         except ValueError:
             dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
@@ -509,4 +566,4 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
         set_log_level(dataviz_logger, current_level)
     
     # Return the figure
-    return g.figure
+    return g
