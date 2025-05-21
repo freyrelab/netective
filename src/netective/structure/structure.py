@@ -725,6 +725,7 @@ def characterize_network(
         current_level = struct_logger.getEffectiveLevel()
         set_log_level(verbose)
     
+    # TODO characterize_network should also be able to parse network from a file
     net_id = net_id if net_id is not None else str(uuid.uuid4())[:8]
     struc = Structure(G, norm= norm, net_id= net_id, verbose= verbose)
     if child_classes is not None:
@@ -1543,8 +1544,7 @@ def compare_structure(
                     net_file_format= nets_file_format,
                     comments= comments,
                     delimiter= delimiter,
-                    directed= directed,
-                    use_position_as_score= False
+                    directed= directed
                 )
             else:
                 temp_nets[net_id] = networks[net_id]
