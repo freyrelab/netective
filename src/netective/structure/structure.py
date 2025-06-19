@@ -1480,6 +1480,10 @@ def compare_structure(
         .. [#_unique ID_] _first-author first-name last-name_ *_book title_* (_year_) ISBN:_ISBN_ _http link_
         .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
     
+    if isinstance(networks, dict) and len(networks) == 0:
+        struct_logger.critical("Networks dictionary is empty.")
+        raise ValueError('Networks dictionary is empty.')
+
     if verbose != None:
         current_level = struct_logger.getEffectiveLevel()
         set_log_level(verbose)
@@ -1638,19 +1642,7 @@ def classify_networks(
         distance_df: pd.DataFrame = None,
         norm: str | None = None,
         directed: bool = True,
-        selected_props: str | list = ['Average Local Efficiency',
-            'Radius',
-            'Center',
-            'Periphery',
-            'Complex Feed-Forward Circuits',
-            'Feed-Forward Circuits',
-            'Max Degree',
-            'Gini Index',
-            'Global Efficiency',
-            'Undirected Gini Index',
-            'Entropy of Degree Distribution',
-            'Self-Loops'
-        ],
+        selected_props: str | list = 'all',
         conserve_props: bool = True,
         workers: str | int = "auto",
         include_env: None | dict = None,
@@ -1744,6 +1736,10 @@ def classify_networks(
         if len(scalars_array) > 0 and len(list(scalars_array.values())[0]) > 1:
             distance_df = association(scalars_array, corr_func= association_metric)
             distance_df = clean_names_association_df(distance_df)
+        else:
+            struct_logger.critical("Not enough data to compare.")
+            raise ValueError("Not enough data to compare.")
+        
 
     clusters = get_clusters(
         distance_df= distance_df,

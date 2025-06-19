@@ -296,6 +296,7 @@ class NonLeafNodes(_Property):
 @use_direction
 @return_scalar
 @use_selfloops
+# TODO Remove use_direction decorator and make this for undirected nets (will also work with directed networks)
 class SelfLoops(_Property):
     """Number of self-loops of the directed graph.
 
@@ -1723,6 +1724,7 @@ class NumberNodes(_Property):
     
 @return_scalar
 @use_selfloops
+# TODO Possible redundancy with other SelfLoops property
 class UndirSelfLoops(_Property):
     """Number of self-loops of the undirected graph.
 

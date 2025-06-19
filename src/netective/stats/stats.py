@@ -1,12 +1,14 @@
 from __future__ import annotations
 import os
-import math
 import gc
+from tqdm import tqdm
+import sys
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from collections import defaultdict
 from itertools import combinations, combinations_with_replacement, permutations, product
+from math import comb, perm
 from typing import Tuple
 from bitarray import bitarray
 import numpy as np
@@ -129,18 +131,24 @@ def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool
 
     Returns:
         set[tuple[str, str]]: potential edges computed for benchmarking"""
-    stats_logger.debug('Establishing universe from Gold Standard...')
+    n = len(gold_standard_geneset)
     if directed and allow_self_loops:
-        return set(product(gold_standard_geneset, repeat=2))
+        total = n**2
+        iterable = product(gold_standard_geneset, repeat=2)
     elif directed and not allow_self_loops:
-        return set(permutations(gold_standard_geneset, 2))
+        total = perm(n, 2)
+        iterable = permutations(gold_standard_geneset, 2)
     elif not directed and allow_self_loops:
-        return set(combinations_with_replacement(gold_standard_geneset, 2))
+        total = comb(n + 1, 2)
+        iterable = combinations_with_replacement(gold_standard_geneset, 2)
     else:  # if not directed and not allow_self_loops:
-        return set(combinations(gold_standard_geneset, 2))
+        total = comb(n)
+        iterable = combinations(gold_standard_geneset, 2)
+    
+    return set(tqdm(iterable, total= total, file= sys.stdout, leave= True, desc= 'Creating Universe from Gold Standard', unit= ' comb'))
 
-def _anonymize_inference_edges(inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed):
-        stats_logger.info('Anonymizing inference edges')
+def _anonymize_inference_edges(inference_id, inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed):
+        stats_logger.info(f'Mapping {inference_id} edges to anonymized Universe')
         inference_edges = defaultdict(list)
         for u, v, data in inference.edges(data=True):
             # self-loops are already handled in __init__
@@ -165,7 +173,7 @@ def _anonymize_inference_edges(inference, gold_standard_geneset, greater_score_i
 
 def _anonymize_edges(
     gold_standard: Graph | DiGraph,
-    inference: Graph | DiGraph | list[Graph | DiGraph],
+    inference: Graph | DiGraph | dict,
     greater_score_is_better: bool = True,
     allow_self_loops: bool = False,
     ) -> Tuple[set, list, int]:
@@ -193,7 +201,6 @@ def _anonymize_edges(
     size_universe: int
         Size of the universe of potential edges.
     """
-    stats_logger.info('Anonymizing GS edges')
     directed = gold_standard.is_directed()
     gold_standard_edges = set(gold_standard.edges(data=False))
     gold_standard_geneset = set(gold_standard.nodes(data=False))
@@ -205,21 +212,24 @@ def _anonymize_edges(
         gold_standard_edges = {frozenset(edge) for edge in gold_standard_edges}
         universe = {frozenset(edge) for edge in universe}
         # The size of the universe should not change, repetition are considered in __universe
-
     # Universe is used as reference
-    edge_to_id = {edge: i for i, edge in enumerate(universe)}
+    edge_to_id = {edge: i for i, edge in enumerate(tqdm(universe, file= sys.stdout, leave= True, desc= 'Anonymizing Universe edges', unit= ' Edge'))}
+    stats_logger.info("Mapping GS edges to anonymized Universe")
     gold_standard_edges = {edge_to_id[edge] for edge in gold_standard_edges}
 
-    if isinstance(inference, list):
+    if isinstance(inference, dict):
+        inferences_ids = list(inference.keys())
+        inferences = list(inference.values())
         inference_edges = [_anonymize_inference_edges(
-            inf, gold_standard_geneset, greater_score_is_better, edge_to_id, directed
-            ) for inf in inference]
+            inf_id, inf, gold_standard_geneset, greater_score_is_better, edge_to_id, directed
+            ) for inf_id, inf in zip(inferences_ids, inferences)]
     else: # inference is a single network
         inference_edges = _anonymize_inference_edges(
             inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed
             )
 
     # erase universe, mapping and gold standard geneset
+    stats_logger.info('Cleaning up memory, deleting Universe...')
     del universe
     del edge_to_id  # TODO: UX: user may want to keep this mapping
     del gold_standard_geneset
@@ -242,7 +252,7 @@ def benchmarking(
     delimiter : str = '\t',
     score : bool = True,
     verbose: str = None,
-    baseline: bool = True,
+    baseline: bool = False,
 ) -> tuple | dict:
     """Perform a statistical analysis of the inference networks.
     
@@ -329,7 +339,6 @@ def benchmarking(
     
     else:
         return_set = {}
-        stats_logger.info('Plotting AUPR and AUROC curves...')
         return_set['aupr'] = benchmark.plot_aupr()
         return_set['pr curves'] = benchmark.plot_precision_recall_curves()
         return_set['auroc'] = benchmark.plot_auroc()
@@ -387,7 +396,7 @@ class Benchmark:
 
         gold_standard_edges, inference_edges, size_universe = _anonymize_edges(
             gold_standard,
-            list(inferences.values()),
+            inferences,
             greater_score_is_better,
             allow_self_loops,
         )
@@ -434,7 +443,7 @@ class Benchmark:
         ax: matplotlib.axes.Axes
             Axes object containing the plot.
         """
-        stats_logger.info('Plotting AUROC curves for every inference in the benchmark')
+        stats_logger.info('Plotting ROC curves for every inference in the benchmark')
         ax = _build_ax(ax, figsize=(3,3))
         best_name, _ = self.best_auroc
         for net_id, nis in self.nis_instances.items():
@@ -455,7 +464,7 @@ class Benchmark:
         ax: matplotlib.axes.Axes
             Axes object containing the plot.
         """
-        stats_logger.info('Plotting AUPR curves for every inference in the benchmark')
+        stats_logger.info('Plotting PR curves for every inference in the benchmark')
         ax = _build_ax(ax, figsize=(3,3))
         best_name, _ = self.best_aupr
         ylimit = max([nis.precision_dist[0] for _, nis in self.nis_instances.items()])
@@ -695,7 +704,7 @@ class LinkEval:
 
             self.__repr = f"LinkEval(gold_standard={self.__gold_standard}, inference={self.__inference}, greater_is_better={self.__greater_is_better}, directed={self.__directed})"
 
-        stats_logger.info('Establishing Gold Standard size, Negatives size and Precision baseline')
+        stats_logger.debug('Establishing Gold Standard size, Negatives size and Precision baseline')
         self.__size_gold_standard = len(self.__gold_standard_edges)
         self.__size_negatives = self.__size_universe - self.__size_gold_standard
         # At the last step, every edge is considered as a positive by inference
@@ -990,7 +999,7 @@ class LinkEval:
         Returns:
             list[tuple[int, int]]: list with n number of tuples, where n is the number of unique scores in the inference
                                    and each tupple is that score's true positives and false positives"""
-        stats_logger.debug(f'Calculating true positives and false positives for: {self.__inference_id}')
+        stats_logger.info(f'Calculating true positives and false positives for: {self.__inference_id}')
         # Getting complete set of predicted edges
         all_predicted_edges = set()
         for edges in inference_edges:
@@ -1012,25 +1021,29 @@ class LinkEval:
 
         # Predicted Positives Edges array & true positives and false positives calculations
         tp_fp = []
-        stats_logger.debug(f'{self.__inference_id} has a total of {len(inference_edges)} scores after trimming.')
+        unique_scores = len(inference_edges)
+        stats_logger.info(f'{self.__inference_id} has a total of {unique_scores} scores after trimming.')
         predicted_positives_bin = bitarray(len(universe))
-        for i, bunch_edges in enumerate(inference_edges):
-            stats_logger.debug(f"Creating {i + 1}/{len(inference_edges)} binary array and calculating this score's true positives and false positives...")
-            
-            # Predicted edges binary array update
-            for interaction in bunch_edges:
-                predicted_positives_bin[ids_indexes[interaction]] |= 1
-            
-            # Intersection
-            intersection_bin = gs_bin & predicted_positives_bin
+        with tqdm(total=unique_scores, file= sys.stdout, leave= True, desc= f'Calculation of TP and FP for {self.__inference_id}', unit= " Score'sEdges") as pbar:
+            for i, bunch_edges in enumerate(inference_edges):
+                stats_logger.debug(f"Creating {i+1}/{unique_scores} binary array and calculating this score's true positives and false positives...")
+                
+                # Predicted edges binary array update
+                for interaction in bunch_edges:
+                    predicted_positives_bin[ids_indexes[interaction]] |= 1
+                
+                # Intersection
+                intersection_bin = gs_bin & predicted_positives_bin
 
-            # Intersection cardinality
-            tp = intersection_bin.count(1)
+                # Intersection cardinality
+                tp = intersection_bin.count(1)
 
-            # Substraction cardinality
-            fp = (predicted_positives_bin & ~intersection_bin).count(1)
+                # Substraction cardinality
+                fp = (predicted_positives_bin & ~intersection_bin).count(1)
 
-            tp_fp.append((tp, fp))
+                tp_fp.append((tp, fp))
+
+                pbar.update(1)
 
         return tp_fp
 

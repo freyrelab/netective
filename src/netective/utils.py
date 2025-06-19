@@ -1,15 +1,4 @@
 from __future__ import annotations
-
-"""Utility functions for the netective package."""
-# __all__ = [
-#     "concat_path",
-#     "run_parallel",
-#     "validate_network",
-#     "parse_nets",
-#     "flatten_list_of_iterables",
-#     "compute_moments",
-# ]
-
 import os
 import re
 import sys
@@ -190,6 +179,17 @@ def parse_network(file_path: str, comments:str= "#", delimiter:str="\t", directe
         raise UnsupportedNetFormatError(f'Unsupported file format: {net_file_format}. Supported formats are: {NET_FORMATS}.') 
     
     if net_file_format == 'edgelist':
+        with open(file_path, "r") as f:
+            first_line = f.readline()
+            cols = first_line.strip().split(delimiter)
+            if len(cols) > 2:
+                utils_logger.critical(
+                    f"File {file_path} seems to have more than 2 columns. Please verify delimiter parameter or the file."
+                )
+                raise ValueError(
+                    f"File {file_path} seems to have more than 2 columns. Please verify delimiter parameter or the file."
+                )
+        
         G = nx.read_edgelist(
             file_path,
             comments=comments,
