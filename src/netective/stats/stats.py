@@ -4,7 +4,6 @@ import gc
 from tqdm import tqdm
 import sys
 import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
 from collections import defaultdict
 from itertools import combinations, combinations_with_replacement, permutations, product
