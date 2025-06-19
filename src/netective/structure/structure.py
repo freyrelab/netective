@@ -858,12 +858,8 @@ def __batch_processing(
         verbose (str): _description_
         workers (int): _description_
         keep_averages (bool): _description_
-        erdos_renyi (int): _description_
         include_env (dict): _description_
-
-    Raises:
-        ValueError: if the number of Erdos Renyi networks is <0 .
-
+        
     Returns:
         Tuple[dict[str, float | int], dict[str, np.array]]: _description_
     """
