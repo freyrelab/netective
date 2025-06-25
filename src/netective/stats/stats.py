@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Tuple, Union, Set, List
 import os
 import gc
 from tqdm import tqdm
@@ -8,7 +9,6 @@ import pandas as pd
 from collections import defaultdict
 from itertools import combinations, combinations_with_replacement, permutations, product
 from math import comb, perm
-from typing import Tuple
 from bitarray import bitarray
 import numpy as np
 from warnings import warn
@@ -49,9 +49,9 @@ def parse_network(file_path: str, comments:str= "#", delimiter:str="\t", directe
         greater_score_is_better (bool): Whether the inference score is better when it is higher or lower.
         
     Raises:
-        ValueError: _description_
-        ValueError: _description_
-        NullGraphError: _description_
+        ValueError: happens when setting both parameters use_position_as_score and score as True. Only one criteria applies at a time.
+        ValueError: happens when setting the score parameter to True but Netective does not detect a third score column. Might be because of the delimiter set.
+        NullGraphError: happens when the graph is empty after parsing.
 
     Returns:
         Union[nx.DiGraph, nx.Graph]: networkx object."""
@@ -113,23 +113,23 @@ def _build_ax(ax=None, ylim=(0, 1), xlim=(0, 1), figsize=(2, 2)):
         ax.set_xlim(xlim)
     return ax
 
-def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool) -> set[tuple[str, str]]:
+def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool) -> Set[Tuple[str, str]]:
     """Returns the universe of potential edges between genes in the Gold Standard
 
     The universe is compute following the rules:
-        - If the inference is directed and self-loops are allowed, the universe is the cartesian product of the gold standard geneset.
-        - If the inference is directed and self-loops are not allowed, the universe is the permutations of the gold standard geneset.
-        - If the inference is undirected and self-loops are allowed, the universe is the combinations with replacement of the gold standard geneset.
-        - If the inference is undirected and self-loops are not allowed, the universe is the combinations without replacement of the gold standard geneset.
+        If the inference is directed and self-loops are allowed, the universe is the cartesian product of the gold standard geneset.
+        If the inference is directed and self-loops are not allowed, the universe is the permutations of the gold standard geneset.
+        If the inference is undirected and self-loops are allowed, the universe is the combinations with replacement of the gold standard geneset.
+        If the inference is undirected and self-loops are not allowed, the universe is the combinations without replacement of the gold standard geneset.
     See Combinatory iterators from itertools https://docs.python.org/3/library/itertools.html for info
 
     Arguments:
-        gold_standard_geneset (set): set of unique genes present in the Gold Standard
-        directed (bool): whether or not benchmarking will consider direction of interactions
-        allow_self_loops (bool): whether or not benchmarking will allow self-regulations
+        gold_standard_geneset (set): set of unique genes present in the Gold Standard.
+        directed (bool): whether or not benchmarking will consider direction of interactions.
+        allow_self_loops (bool): whether or not benchmarking will allow self-regulations.
 
     Returns:
-        set[tuple[str, str]]: potential edges computed for benchmarking"""
+        Set[Tuple[str, str]]: potential edges computed for benchmarking."""
     n = len(gold_standard_geneset)
     if directed and allow_self_loops:
         total = n**2
@@ -141,34 +141,49 @@ def _universe(gold_standard_geneset: set, directed: bool, allow_self_loops: bool
         total = comb(n + 1, 2)
         iterable = combinations_with_replacement(gold_standard_geneset, 2)
     else:  # if not directed and not allow_self_loops:
-        total = comb(n)
+        total = comb(n, 2)
         iterable = combinations(gold_standard_geneset, 2)
     
     return set(tqdm(iterable, total= total, file= sys.stdout, leave= True, desc= 'Creating Universe from Gold Standard', unit= ' comb'))
 
-def _anonymize_inference_edges(inference_id, inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed):
-        stats_logger.info(f'Mapping {inference_id} edges to anonymized Universe')
-        inference_edges = defaultdict(list)
-        for u, v, data in inference.edges(data=True):
-            # self-loops are already handled in __init__
-            if u not in gold_standard_geneset or v not in gold_standard_geneset:
-                continue    # we cannot assess what we don't know with this approach
-            inference_edges[data["score"]].append((u, v))
+def _anonymize_inference_edges(inference_id: str, inference: Graph | DiGraph, gold_standard_geneset: set, greater_score_is_better: bool, edge_to_id: dict, directed: bool) -> List[Tuple[float, List]]:
+    """Fxn to map inference edges to anonymized Universe edges
 
-        if not directed:
-            inference_edges = {
-                    score: {frozenset(edge) for edge in edges}
-                    for score, edges in inference_edges.items()
-                }
-        
-        inference_edges = sorted(
-            [
-                [score, {edge_to_id[edge] for edge in edges}]
+    In order to perform set operations efficiently (bitwise operations), edges must be mapped to anonymized (numbered)
+    versions. This allows performing the calculation of TP and FP on sets of numbers, rather than edges.
+
+    Arguments:
+        inference_id (str): ID of the inference.
+        inference (Graph | DiGraph): networkx graph object.
+        gold_standard_geneset (set): set of unique genes present in the Gold Standard
+        greater_score_is_better (bool): whether or not a greater score is considered to be better. This determines the sorting of interactions order.
+        edge_to_id (dict): dictionary containing the mapping of each edge to the anonymized Universe.
+        directed (bool): whether or not the benchmarking will consider direction of interactions.
+
+    Returns:
+        List[Tuple[float, List]]: list containing tuples that contain each a unique score and all its corresponding edges."""
+    stats_logger.info(f'Mapping {inference_id} edges to anonymized Universe')
+    inference_edges = defaultdict(list)
+    for u, v, data in inference.edges(data=True):
+        # self-loops are already handled in __init__
+        if u not in gold_standard_geneset or v not in gold_standard_geneset:
+            continue    # we cannot assess what we don't know with this approach
+        inference_edges[data["score"]].append((u, v))
+
+    if not directed:
+        inference_edges = {
+                score: {frozenset(edge) for edge in edges}
                 for score, edges in inference_edges.items()
-            ],
-            reverse=greater_score_is_better,
-        )
-        return inference_edges
+            }
+    
+    inference_edges = sorted(
+        [
+            [score, {edge_to_id[edge] for edge in edges}]
+            for score, edges in inference_edges.items()
+        ],
+        reverse=greater_score_is_better,
+    )
+    return inference_edges
 
 def _anonymize_edges(
     gold_standard: Graph | DiGraph,
@@ -176,30 +191,23 @@ def _anonymize_edges(
     greater_score_is_better: bool = True,
     allow_self_loops: bool = False,
     ) -> Tuple[set, list, int]:
-    """Use the universe to anonymize the gold standard and the inference.
-    The anonymization is done by mapping the edges to integers.
+    """Anonymization of Gold Standard and inference's edges
+    
+    The anonymization is done by mapping the edges to integers established from the creation of the Universe.
+    The Universe itself is created considering the Gold Standards geneset and whether or not it has directions and/or self-loops
 
-    Args:
-    gold_standard (Graph | DiGraph): Gold standard network.
-    inference (Graph | DiGraph | list[Graph | DiGraph]): Inference network. The edges can have a score as an attribute 'score'.
-        If a list of networks is provided, a list of inference_edges is returned.
-        The graphs must be of the same type (Graph or DiGraph) as the gold standard.
-    greater_score_is_better (bool): Whether the inference score is better when it is higher or lower.
-        If True, the higher the score, the better the inference.
-        If False, the lower the score, the better the inference.
-    allow_self_loops (bool): Whether self-loops are allowed or not.
+    Arguments:
+        gold_standard (Graph | DiGraph): Gold Standard Network
+        inference (Graph | DiGraph | dict): inference network. The edges can have a score as an attribute 'score'.
+            If a list of networks is provided, a list of inference_edges is returned.
+            The graphs must be of the same type (Graph or DiGraph) as the gold standard.
+        greater_score_is_better (bool): whether the inference score is better when it is higher or lower.
+            If True, the higher the score, the better the inference.
+            If False, the lower the score, the better the inference. Defaults to True.
+        allow_self_loops (bool): whether self-loops are allowed or not. Defaults to False.
 
     Returns:
-    -------
-    gold_standard_edges: set
-        Set of edges in the gold standard.
-    inference_edges: list
-        List of lists containing the score and the set of edges for each score.
-        The list is sorted by score following the greater_is_better rule.
-        This is a list of lists when inference is a list of networks.
-    size_universe: int
-        Size of the universe of potential edges.
-    """
+        Tuple[set, list, int]: tuple containing the set of edges in the gold standard, inference edges and the size of the universe."""
     directed = gold_standard.is_directed()
     gold_standard_edges = set(gold_standard.edges(data=False))
     gold_standard_geneset = set(gold_standard.nodes(data=False))
@@ -252,38 +260,47 @@ def benchmarking(
     score : bool = True,
     verbose: str = None,
     baseline: bool = False,
-) -> tuple | dict:
-    """Perform a statistical analysis of the inference networks.
-    
-    Args:
-        networks (dict | str): Dictionary containing the inference networks or path to the directory containing the inference networks.
+) -> Union[dict, dict]:
+    """Perform statistical evaluation of a set of inference to the same Gold Standard
+
+    By assessing multiple predictions to a shared Gold Standard, a performance comparison is possible.
+    Netective performs this evaluation in an optimized manner to efficiently handle resources.
+    Multiple output options are available aswell as a diverse set of statistical metrics.
+
+    Arguments:
+        networks (dict | str): dictionary containing the inference networks or path to the directory containing the inference networks.
             If a dictionary is provided, the keys are the network names and the values are the networks.
             If a path is provided, the networks are loaded from the directory.
-        gold_standard (Graph | DiGraph | str): Networkx object or name or path to the gold standard network.
+        gold_standard (Graph | DiGraph | str): networkx object or name or path to the gold standard network.
             If gold_standard is part of the networks, it is removed from the networks.
             If networks is a path to a directory, gold_standard must be a path to a file.
-        directed (bool): Whether the gold standard and the inference networks are directed or not.
-        greater_score_is_better (bool): Whether the inference score is better when it is higher or lower.
+        directed (bool): whether the gold standard and the inference networks are directed or not. Defaults to True.
+        greater_score_is_better (bool): whether the inference score is better when it is higher or lower.
             If True, the higher the score, the better the inference.
-            If False, the lower the score, the better the inference.
-        allow_self_loops (bool): Whether self-loops are allowed or not.
-        cutoff (float): Cutoff to use to compute the evaluation metrics.
-            If False, the evaluation metrics are computed for every score in the inference.
-        return_auc_coords_dicts (bool): Whether to return the AUC values for every inference in the benchmark and their precision, sensitivity and fpr distributions respectively.
-            If False, the figure axis are returned.
-        comments (str): Character used to indicate comments in the network files.
-        delimiter (str): Character used to separate the columns in the network files.
-        score (bool): Whether the inference networks have a score attribute or not.
-            If score is False, the ranking of the edges is used as score (e.g., the first edge has a score of 0, the second a score of 1, etc.).
-        verbose (str): Level of verbosity.
-            If None, the verbosity level is set to WARNING. Options are: DEBUG, INFO, WARNING, ERROR, CRITICAL.
-        baseline (bool): Whether to include a baseline inference in the benchmark.
+            If False, the lower the score, the better the inference. Defaults to True.
+        allow_self_loops (bool): whether self-loops are allowed or not. 
+            This setting modifies the creation of the Universe. Defaults to False.
+        cutoff (float | False): cutoff to use to compute the evaluation metrics.
+            If False, the evaluation metrics are computed for every score in the inference. Defaults to False.
+        optimal_cutoff (bool): whether or not to calculate optimal cutoff that maximizes the F-1 score for every inference. Defaults to False.
+        f1_score (bool): whether or not to calculate the F-1 score for every inference. Defaults to False.
+        mcc (bool): whether or not to calculate the Matthewss Correlation Coefficient for every inference. Defaults to False.
+        return_auc_coords_dicts (bool): whether or not to return the PR and ROC curves coordinates for every inference. Defaults to False.
+        comments (str): character used to indicate comments in the network files. Defaults to '#'.
+        delimiter (str): character used to separate the columns in the network files. Defaults to '\t'.
+        score (bool): whether the inference networks have a score attribute or not.
+            If score is False, the ranking of the edges is used as score (e.g., the first edge has a score of 0, the second a score of 1, etc.). Defaults to True.
+        verbose (str): level of verbosity. Defaults to None.
+        baseline (bool): whether to include a baseline inference in the benchmark. Defaults to False.
+
+    Raises:
+        ValueError: happens when user provides an invalid path to a directory containing inferences.
+        ValueError: happens when user provides and invalid path to a file containing the Gold Standard.
+        TypeError: happens when user provides invalid network object to the gold_standard parameter.
+        TypeError: happens when user provides an invalid option to the inferences or gold_standard parameters.
 
     Returns:
-        If return_auc_coords_dicts is True, a tuple containing the AUPRs, AUROCs, and (precision, recall, and FPR) for every inference in the benchmark.
-        If return_auc_coords_dicts is False, a tuple containing the figure axis for the AUPR and AUROC plots.
-    """
-
+        Union[Tuple, dict]: either a dict of plots or a dict of metrics and coordinates."""
     if verbose is not None:
         current_level = stats_logger.getEffectiveLevel()
         set_log_level(stats_logger, verbose)
@@ -291,7 +308,6 @@ def benchmarking(
     stats_logger.info('Beginning benchmarking of inference(s)')
 
     if isinstance(networks, str):
-
         # valid networks dir and gold standard path
         stats_logger.debug('Parsing networks from directory...')
         if not os.path.isdir(networks):
@@ -361,28 +377,26 @@ class Benchmark:
         inferences: dict[str, Graph | DiGraph],
         greater_score_is_better: bool = True,
         allow_self_loops: bool = False,
-        cutoff: float | False = False,
-        baseline: bool = True,
+        cutoff: float | bool = False,
+        baseline: bool = False,
     ):
-        """_summary_
+        """Class for benchmarking multiple inferences to the same Gold Standard
 
-        _extended summary_[#_unique ID_]_
-
-        .. math:: _LaTeX formula_
+        This class stores info necessary for performing the statistical assessment of a set of inferences
+        to the same Gold Standard. It can be updated to recalculate metrics if wanted, otherwise, once
+        calculated results are stored in a cache for future repurposing. 
+        The class is also capable of plotting results.
 
         Arguments:
-            gold_standard (Graph | DiGraph): _description_
-            inferences (dict[str, Graph  |  DiGraph]): _description_
-            greater_score_is_better (bool): _description_. Defaults to True.
-            allow_self_loops (bool): _description_. Defaults to False.
-            cutoff (float | False): _description_. Defaults to False.
-            include_optimal_cutoff (bool): _description_. Defaults to False.
-            baseline (bool): _description_. Defaults to True.
-
-        References:
-            .. [#_unique ID_] *_pubmed abbr journal title_* _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
-            .. [#_unique ID_] _first-author first-name last-name_ *_book title_* (_year_) ISBN:_ISBN_ _http link_
-            .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
+            gold_standard (Graph | DiGraph): networkx object to use as ground truth.
+            inferences (dict[str, Graph  |  DiGraph]): dict containing networkx objects to use as inferences along with identifiers to each.
+            greater_score_is_better (bool):  whether the inference score is better when it is higher or lower.
+                If True, the higher the score, the better the inference.
+                If False, the lower the score, the better the inference. Defaults to True.
+            allow_self_loops (bool): whether self-loops are allowed in the assessment. Defaults to False.
+            cutoff (float | bool): cutoff to use to compute the evaluation metrics.
+                If False, the evaluation metrics are computed for every score in the inference. Defaults to False. Defaults to False.
+            baseline (bool): whether to include a baseline inference in the benchmark. Defaults to False."""
         self.__repr_str = f"Benchmark({gold_standard}, {inferences}, greater_is_better={greater_score_is_better}, allow_self_loops={allow_self_loops}, cutoff={cutoff})"
         
         if baseline: # include empty inference
@@ -429,19 +443,15 @@ class Benchmark:
     def __eq__(self, other: Benchmark) -> bool:
         raise NotImplementedError
     
-    def plot_roc_curves(self, ax=None, **kwargs):
+    def plot_roc_curves(self, ax: plt.Axes = None, **kwargs) -> plt.Axes:
         """Plots the ROC curves for every inference in the benchmark.
 
-        Args:
-        ax (matplotlib.axes.Axes): Axes object to plot the curve.
-            If None, a new figure and axes are created.
-        **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
+        Arguments:
+            ax (plt.Axes): Axes object to plot the curve.
+                If None, a new figure and axes are created. Defaults to None.
 
         Returns:
-        -------
-        ax: matplotlib.axes.Axes
-            Axes object containing the plot.
-        """
+            plt.Axes: Axes object containing the plot."""
         stats_logger.info('Plotting ROC curves for every inference in the benchmark')
         ax = _build_ax(ax, figsize=(3,3))
         best_name, _ = self.best_auroc
@@ -450,19 +460,15 @@ class Benchmark:
         ax.legend()
         return ax
     
-    def plot_precision_recall_curves(self, ax=None, **kwargs):
-        """Plots the precision-recall curves for every inference in the benchmark.
+    def plot_precision_recall_curves(self, ax: plt.Axes = None, **kwargs) -> plt.Axes:
+        """Plots the PR curves for every inference in the benchmark.
 
-        Args:
-        ax (matplotlib.axes.Axes): Axes object to plot the curve.
-            If None, a new figure and axes are created.
-        **kwargs: Keyword arguments to pass to matplotlib.pyplot.plot.
+        Arguments:
+            ax (plt.Axes): Axes object to plot the curve.
+                If None, a new figure and axes are created. Defaults to None.
 
         Returns:
-        -------
-        ax: matplotlib.axes.Axes
-            Axes object containing the plot.
-        """
+            plt.Axes: Axes object containing the plot."""
         stats_logger.info('Plotting PR curves for every inference in the benchmark')
         ax = _build_ax(ax, figsize=(3,3))
         best_name, _ = self.best_aupr
@@ -472,14 +478,14 @@ class Benchmark:
         ax.legend()
         return ax
     
-    def optimal_cutoffs(self) -> dict[str, float]:
+    def optimal_cutoffs(self,) -> dict[str, float]:
         """Computes the optimal cutoff for every inference in the benchmark.
 
+        The optimal cutoff is defined as the cutoff that maximizes the F-1 score.
+        The entire distribution of F-1 scores must be computed.
+
         Returns:
-        -------
-        optimal_cutoff: dict[str, float]
-            Dictionary containing the optimal cutoff for every inference in the benchmark.
-        """
+            dict[str, float]:Dictionary containing the optimal cutoff for every inference in the benchmark."""
         return {net_id: nis.optimal_cutoff() for net_id, nis in self.nis_instances.items()}
     
     def plot_optimal_cutoffs(self, ax=None, **kwargs):
