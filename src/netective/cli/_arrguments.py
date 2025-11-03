@@ -530,7 +530,6 @@ def _parse_arguments():
         default= 4
     )
         # Required named arguments (also mutually exclusive)
-    # Usar textwrap para formatear la descripción del grupo
     group_description = ('''\
         ----------------------------------------------------------------------------------------------------------------
         This argument group includes the input for classify.
