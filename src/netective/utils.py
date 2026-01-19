@@ -20,7 +20,10 @@ from typing import Union, Callable, Iterable, Tuple
 
 from netective.logging_info import get_logger, set_log_level
 from netective.stats.stats import BenchmarkPlotter
-from netective.structure.dataviz import create_comp_heatmap, create_scalar_dist_plot
+from netective.structure.dataviz import create_comp_heatmap, create_scalar_dist_plot, plot_representative_features
+
+import shap
+import xgboost
 
 import matplotlib
 import matplotlib.figure
@@ -895,6 +898,98 @@ def process_netective_properties_files(
         set_log_level(utils_logger, current_level)
     
     return results
+
+def get_representative_features(
+        results_dir: str, 
+        group: pd.DataFrame, 
+        algorithm = xgboost.XGBRegressor(), 
+        return_shap_values: bool = False,
+        title: bool = True) -> Union[Tuple[matplotlib.figure.Figure, list], shap.Explanation]:
+    """Computes the SHAP values of the features used to classify networks into groups/domains.
+
+    Computes the SHAP values of the features used to classify networks into groups/domains,
+    using a specified algorithm (default is XGBoost Regressor). Returns a DataFrame with the SHAP values or a plot
+    showing the shap values for each feature and the mean absolute SHAP value across all networks for each property.
+
+    .. math:: _LaTeX formula_
+
+    Arguments:
+        results_dir (str): Results directory path.
+        group (pd.DataFrame): Dataframe indicating the group/domain of each network.
+        algorithm: Algorithm to use for training. Defaults to xgboost.XGBRegressor().
+        return_shap_values (bool): Whether to return the SHAP values instead of the plot. Defaults to False.
+        title (bool): Whether to include a title in the plot. Defaults to True.
+
+
+    Returns:
+        Union[Tuple[matplotlib.figure.Figure, list], shap.Explanation]: Either a tuple containing the plot and a list of non-influential properties,
+                                                                        or the shap.Explanation object if return_shap_values is True.
+
+    References:
+        .. [#_unique ID_] *_pubmed abbr journal title_* _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
+        .. [#_unique ID_] _first-author first-name last-name_ *_book title_* (_year_) ISBN:_ISBN_ _http link_
+        .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
+    
+    properties_df = pd.DataFrame(process_netective_properties_files(results_dir= results_dir, return_props_dict= True)).T
+
+    properties_df = properties_df.sort_index(axis=0).sort_index(axis=1) # order net names and props
+
+    group_col = group.columns.tolist()[0] # get group column name
+    combined = pd.concat([properties_df,group],axis=1)
+
+    def change_group_to_numerical(df,group_col):
+        group_id = {group : i for i, group in enumerate(df[group_col].unique())}
+        id_of_group = {i: group for group, i in group_id.items()}
+
+        df[group_col] = df[group_col].map(group_id)
+        return id_of_group, df
+    
+    # Changes labels from categorical to numerical so we can use any model
+    if group[group_col].dtypes == 'O':
+        id_of_group, combined = change_group_to_numerical(combined, group_col)
+        utils_logger.info('Changing group/domains names from categorical to numerical for model fitting')
+
+    utils_logger.info('Separating properties and groups/domains for model fitting')
+    groups = combined[group_col]
+    y = combined[group_col].reset_index(drop=True).to_numpy()
+    X = combined.drop(columns=[group_col]).reset_index(drop=True)
+
+    utils_logger.info('Fitting model and computing SHAP values')
+    # Aplies model
+    model = algorithm.fit(X, y)
+
+    # Gets it´s shaps values
+    explainer = shap.Explainer(model)
+    shap_values = explainer(X)
+
+    if return_shap_values:
+        return shap_values
+    
+    utils_logger.warning('Creating plot for representative features using SHAP values')
+
+    # Turn shap values into df so they can be plotted
+    values = pd.DataFrame(shap_values.values)
+    values = values.rename(columns=dict(zip(range(19),shap_values.feature_names)))
+    values = values.rename(index=dict(zip(range(25),groups.index)))
+    values = pd.concat([values,groups],axis=1)
+
+    # Maps numbers to label
+    values['domain'] = values['domain'].map(id_of_group)
+
+    # Separates values from labels
+    labels = values['domain']
+    values = values.drop(columns='domain')
+
+    # Ranks/organices properties by its values
+    order = values.abs().mean().sort_values()
+    values = values[order.index]
+
+    # Merge non influencial props in a single column
+    no_influence_props = list(order[order == 0].index)
+    values = values.drop(columns=no_influence_props)
+    values.insert(0, f'Sum of other {len(no_influence_props)} properties', 0)
+
+    return plot_representative_features(values, labels, title), no_influence_props
 
 def get_datapoints_from_files(results_dir: str, delimiter: str = '\t')-> dict[dict [str, np.array]]:
     coords = {
