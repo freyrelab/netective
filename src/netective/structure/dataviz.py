@@ -569,128 +569,72 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
     return g
 
 
-def plot_representative_features(values:pd.DataFrame, labels:pd.Series, add_title=True):
-    """Plots the shap values obteines from get_representative_features function.
+def plot_representative_features(df_long: pd.DataFrame, total_props:int, total_groups:int, norm: str, title: str = None):
+    """Plot representative features barplot.
 
-    Creates a scatter plot of the properties which shap value is greater than zero.
+    Plots mean absolute shap values obtained from utils function get_representative_features.
 
     .. math:: _LaTeX formula_
 
     Arguments:
-        values (pd.DataFrame): Shap values for each property in eahc network. 
-        labels (pd.Series): Group/Domain were each network belongs to.
-        add_title (bool): Whether to add a title to the plot. Defaults to True.
+        df_long (pd.DataFrame): _description_
+        total_props (int): _description_
+        total_groups (int): _description_
+        norm (str): _description_
+        title (str): _description_. Defaults to None.
 
     Returns:
-        matplotlib.figure.Figure: figure with two axes one with all the SHAP values for all properties and one with the absolute mean.
+        _type_: _description_
 
     References:
         .. [#_unique ID_] *_pubmed abbr journal title_* _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
         .. [#_unique ID_] _first-author first-name last-name_ *_book title_* (_year_) ISBN:_ISBN_ _http link_
         .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
-    # Set seed for reproducibility
-    np.random.seed(42)
-
-    # Prepare color map for plotting
-    unique_labels = sorted(labels.unique())
-    colors = plt.cm.tab10(range(len(unique_labels)))
-    color_dict = dict(zip(unique_labels, colors))
-
-    # Get sizes for plotting
-    height = round(values.shape[1] / 2)
-    figsize = (16, height)
-
-    # Create figure with two subplots
-    fig, (ax1, ax2) = plt.subplots(
-        ncols=2,
-        figsize=figsize
+    # Order props by their importance across groups 
+    order = (
+        df_long
+        .groupby("Property")["value"]
+        .mean()
+        .sort_values(ascending=False)
+        .index
     )
 
-    # ======================================================================== #
-    #                              SHAP Scatter                                #
-    # ======================================================================== #
+    # Get Figure size
+    height = total_props * (0.20 * total_groups)
+    fig, ax = plt.subplots(figsize=(9, height))
 
-    # Plot figure
-    for i, prop in enumerate(values.columns):
-        y = np.full(len(values), i)
-        y_jitter = y + np.random.uniform(-0.15, 0.15, size=len(y)) # Ajust y position so values don't overlap
-
-        ax1.scatter(
-            values[prop],
-            y_jitter,
-            c=[color_dict[label] for label in labels],
-            alpha=0.6,
-            s=40
-        )
-
-    # Add vertical line in value 0
-    ax1.axvline(0, color='gray', linewidth=1)
-
-    # Add dashed lines between properties
-    for y in range(len(values.columns)-1):
-        ax1.axhline(y + 0.5, color='gray', linestyle='--', linewidth=0.5)
-
-    # Set y-ticks and labels
-    ax1.set_yticks(range(len(values.columns)))
-    ax1.set_yticklabels(values.columns)
-
-    # Set bigger font for axis labels
-    ax1.set_xlabel('SHAP value (impact on model output)', fontsize=12)
-    ax1.set_ylabel('Property', fontsize=14)
-
-    # Add title if provided
-    ax1.set_title("Effects of Properties on Model output" if add_title else "", fontsize=16)
-
-    # Add labels legend
-    handles = [
-        plt.Line2D(
-            [0], [0],
-            marker='o',
-            linestyle='',
-            color=color_dict[d],
-            label=d
-        )
-        for d in unique_labels
-    ]
-
-    ax1.legend(
-        handles=handles,
-        title='Groups',
-        loc='best' #,bbox_to_anchor=(1.02, 0.5)
+    # Generates barplot
+    sns.barplot(
+        data=df_long,
+        x="value",
+        y="Property",
+        hue="Group",
+        order=order,
+        ax=ax
     )
 
-    # ======================================================================== #
-    #                               Absolute Mean                              #
-    # ======================================================================== #
+    # Set title and x-label
+    if title is not None:
+        ax.set_title(title)
 
-    s = values.abs().mean().sort_values(ascending=False)  # Sorted descending for more intuitive top values
+    ax.set_xlabel(f"Mean Aboslute SHAP Values {norm}")
 
-    ax2 = sns.barplot(
-        x=s.values,
-        y=s.index,
-        orient="h",
-        ax=ax2,
-        color="#FFD700"
+    # Color legend for groups
+    ax.legend(
+        title="Group",
+        loc="center left",
+        bbox_to_anchor=(1, 0.5),
+        frameon=False
     )
 
-    ax2.bar_label(ax2.containers[0], fmt="%.4f", fontsize=10)
+    # Lines for shap values
+    ax.grid(axis='x', linestyle=':')
+    ax.set_axisbelow(True)
 
-    # Add title and labels
-    ax2.set_title("Mean Absolute SHAP Values" if add_title else "", fontsize=16)
-    ax2.set_xlabel("Mean Absolute Value", fontsize=12)
+    # Lines for props separation
+    for y in range(total_props - 1):
+        ax.axhline(y + 0.5, color='gray', linestyle='-', linewidth=0.5)
 
-    # Hide y ticks
-    ax2.set_yticks([])
-    ax2.set_ylabel("")
-
-    # Add gridlines for better readability
-    ax2.grid(True, axis='x', linestyle='--', alpha=0.7)
-
-    # Expand x-axis limits to add space for labels
-    xlim = ax2.get_xlim()
-    ax2.set_xlim(xlim[0], xlim[1] + 0.06)  # Adjust 0.06 as needed for spacing
-
-    # Improve layout
     fig.tight_layout()
 
     return fig

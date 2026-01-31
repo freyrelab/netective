@@ -902,40 +902,67 @@ def process_netective_properties_files(
 def get_representative_features(
         results_dir: str, 
         group: pd.DataFrame, 
-        algorithm = xgboost.XGBRegressor(), 
+        algorithm,
+        prop_norm: bool = False, 
+        group_norm: bool = False, 
+        return_shap_ob: bool = False, 
         return_shap_values: bool = False,
-        title: bool = True) -> Union[Tuple[matplotlib.figure.Figure, list], shap.Explanation]:
+        title: str = None,
+        verbose: str = None)-> Union[Tuple[matplotlib.figure.Figure, list], dict, shap.Explanation]:
     """Computes the SHAP values of the features used to classify networks into groups/domains.
 
-    Computes the SHAP values of the features used to classify networks into groups/domains,
-    using a specified algorithm (default is XGBoost Regressor). Returns a DataFrame with the SHAP values or a plot
-    showing the shap values for each feature and the mean absolute SHAP value across all networks for each property.
+    Computes SHAP values for the features used to classify networks into groups/domains using a 
+    specified tree-based classifier. This function supports tree-based multiclass classification
+    models such as Decision Trees, Random Forests, and XGBoostClassifier. Depending on user input, 
+    it can return the SHAP explainer object, a DataFrame of SHAP values, or a plot showing the 
+    most representative features according to SHAP values with a list of non-influential properties.
+
+    This functions is for multi-class classification problems, as consecuence a separate classification
+    model is created per class resulting in diferent SHAP values for each class.
 
     .. math:: _LaTeX formula_
 
     Arguments:
-        results_dir (str): Results directory path.
-        group (pd.DataFrame): Dataframe indicating the group/domain of each network.
-        algorithm: Algorithm to use for training. Defaults to xgboost.XGBRegressor().
-        return_shap_values (bool): Whether to return the SHAP values instead of the plot. Defaults to False.
-        title (bool): Whether to include a title in the plot. Defaults to True.
-
+        results_dir (str): directory path with output properties files created by Netective.
+        group (pd.DataFrame): input group/domain Dataframe. 
+        algorithm (tree-multiclass-clasifier): Tree-based multiclass classification
+        models such as Decision Trees, Random Forests, and XGBoostClassifier.
+        prop_norm (bool): If True, normalizes SHAP values by property. Defaults to False.
+        group_norm (bool): If True, normalizes SHAP values by group. Defaults to False.
+        return_shap_ob (bool): If True, returns the SHAP explainer object. Defaults to False.
+        return_shap_values (bool): If True, returns a dictionary of DataFrames with SHAP values. Defaults to False.
+        title (str): Title for the plot. Defaults to None.
+        verbose (str): verbosity level of the logger. Defaults to None.
+    Raises:
+        ValueError: Cannot normalize by both property and group at the same time.
 
     Returns:
-        Union[Tuple[matplotlib.figure.Figure, list], shap.Explanation]: Either a tuple containing the plot and a list of non-influential properties,
-                                                                        or the shap.Explanation object if return_shap_values is True.
+        Union[Tuple[matplotlib.figure.Figure, list], dict, shap.Explanation]: Depending on user input, 
+                                                                              returns one of the following:
+            - Tuple containing a plot of representative features and a list of non-influential properties.
+            - Dictionary of DataFrames with SHAP values for each group.
+            - SHAP explainer object.
 
     References:
         .. [#_unique ID_] *_pubmed abbr journal title_* _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
         .. [#_unique ID_] _first-author first-name last-name_ *_book title_* (_year_) ISBN:_ISBN_ _http link_
         .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
     
-    properties_df = pd.DataFrame(process_netective_properties_files(results_dir= results_dir, return_props_dict= True)).T
+    # Set logger 
+    if verbose != None:
+        current_level = utils_logger.getEffectiveLevel()
+        set_log_level(utils_logger, verbose)
 
-    properties_df = properties_df.sort_index(axis=0).sort_index(axis=1) # order net names and props
 
-    group_col = group.columns.tolist()[0] # get group column name
-    combined = pd.concat([properties_df,group],axis=1)
+    if prop_norm:
+      if group_norm:
+        utils_logger.critical('Cannot normalize by both property and group at the same time')
+        raise ValueError('Cannot normalize by both property and group at the same time')
+      norm = 'normalized by property'
+    elif group_norm:
+      norm = 'normalized by group'
+    else:
+      norm = ''
 
     def change_group_to_numerical(df,group_col):
         group_id = {group : i for i, group in enumerate(df[group_col].unique())}
@@ -944,6 +971,27 @@ def get_representative_features(
         df[group_col] = df[group_col].map(group_id)
         return id_of_group, df
     
+    def clean_shap_values(df):
+        prop_2_drop = df.T.abs().mean().sort_values()
+        no_influence_props = list(prop_2_drop[prop_2_drop == 0].index)
+        df = df.drop(index=no_influence_props)
+
+        return df, no_influence_props
+
+    # Creates df from properties files
+    properties_df = pd.DataFrame(process_netective_properties_files(results_dir= results_dir, 
+                                                                    return_props_dict= True,
+                                                                    verbose=verbose)).T
+
+    properties_df = properties_df.sort_index(axis=0).sort_index(axis=1) # order net names and props
+
+    group_col = group.columns.tolist()[0] # get group column name
+    combined = pd.concat([properties_df,group],axis=1)
+
+    # Obtain number of groups/domains and properties
+    num_nets, num_props = properties_df.shape
+    num_of_groups = len(combined[group_col].unique())
+
     # Changes labels from categorical to numerical so we can use any model
     if group[group_col].dtypes == 'O':
         id_of_group, combined = change_group_to_numerical(combined, group_col)
@@ -962,34 +1010,64 @@ def get_representative_features(
     explainer = shap.Explainer(model)
     shap_values = explainer(X)
 
-    if return_shap_values:
+    if return_shap_ob:
+        utils_logger.warning('Returning SHAP explainer object')
+        if verbose != None:
+            set_log_level(utils_logger, current_level)
         return shap_values
     
-    utils_logger.warning('Creating plot for representative features using SHAP values')
-
+    utils_logger.info('Obtaining representative features from SHAP values')
     # Turn shap values into df so they can be plotted
-    values = pd.DataFrame(shap_values.values)
-    values = values.rename(columns=dict(zip(range(19),shap_values.feature_names)))
-    values = values.rename(index=dict(zip(range(25),groups.index)))
-    values = pd.concat([values,groups],axis=1)
+    values_dicts =  {i: {} for i in range(num_of_groups)}
+    values_df = {}
 
-    # Maps numbers to label
-    values['domain'] = values['domain'].map(id_of_group)
+    for group in range(num_of_groups):
+        # Separates shapley values from shap object into diferent dictionaries
+        for net, shap_of_props in enumerate(shap_values.values):
+            values_dicts[group][net] = [prop[group] for prop in shap_of_props]
+        # Transform the dict into a df with the corresponding props and groups names
+        values_df[id_of_group[group]] = pd.DataFrame(values_dicts[group]).T
+        values_df[id_of_group[group]] = values_df[id_of_group[group]].rename(columns=dict(zip(range(num_props),shap_values.feature_names)))
+        values_df[id_of_group[group]] = values_df[id_of_group[group]].rename(index=dict(zip(range(num_nets),groups.index)))
 
-    # Separates values from labels
-    labels = values['domain']
-    values = values.drop(columns='domain')
+    mean_df = pd.DataFrame()
 
-    # Ranks/organices properties by its values
-    order = values.abs().mean().sort_values()
-    values = values[order.index]
+    for i in range(num_of_groups):
+      # Getting the mean value of every prop
+      temp_df = values_df[id_of_group[i]].abs().mean()
+      if group_norm: temp_df = temp_df / temp_df.max() # Normalize by group if necessary
+      mean_df = pd.concat([mean_df,
+                           temp_df.to_frame(name=id_of_group[i])], axis=1)
+      # Filter out non important props from every df
+      values_df[id_of_group[i]], _ = clean_shap_values(values_df[id_of_group[i]].T)
 
-    # Merge non influencial props in a single column
-    no_influence_props = list(order[order == 0].index)
-    values = values.drop(columns=no_influence_props)
-    values.insert(0, f'Sum of other {len(no_influence_props)} properties', 0)
+    if return_shap_values:
+        if verbose != None:
+            set_log_level(utils_logger, current_level)
+        utils_logger.warning('Returning SHAP values DataFrames dictionary')
+        return values_df
+    
+    mean_df, no_influence_props  = clean_shap_values(mean_df)
 
-    return plot_representative_features(values, labels, title), no_influence_props
+    if prop_norm: # Normalize by props if necessary
+      mean_df = mean_df.div(mean_df.max(axis=1), axis=0).fillna(0)
+
+    # Turn mean_df into a long_df for plotting
+    df_long = (
+        mean_df
+        .reset_index()
+        .melt(id_vars="index", var_name="Group", value_name="value")
+        .rename(columns={"index": "Property"})
+    )
+
+    num_props = num_props - len(no_influence_props)
+    
+    utils_logger.info('Plotting representative features')
+
+    if verbose != None:
+        set_log_level(utils_logger, current_level)
+
+    return plot_representative_features(df_long, num_props, num_of_groups, norm, title), no_influence_props
 
 def get_datapoints_from_files(results_dir: str, delimiter: str = '\t')-> dict[dict [str, np.array]]:
     coords = {
