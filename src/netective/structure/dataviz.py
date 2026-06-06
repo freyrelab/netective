@@ -21,9 +21,11 @@ NUMERICAL = "rocket_r"
 
 dataviz_logger = get_logger(__name__)
 
+## Function to round up to the next power of 10 for better visualization of scalar properties when using log scale
 def ceil_to_next_power_of_10(number: int):
     return 10 ** math.ceil(math.log10(number))
 
+## Function to format distribution properties plots titles
 def format_title(input_str: str):
     # Check if the length of the string is greater than 22
     if len(input_str) > 22:
@@ -53,11 +55,26 @@ def format_title(input_str: str):
         return input_str
 
 # Plotting fxns
-def plot_distributions(dist_values: dict, verbose: str = None, title: str = None):
+def plot_distributions(dist_values: dict, 
+                       verbose: str = None, 
+                       title: str = None):
+    """Plot node-level properties distributions of characterized networks.
+
+    Arguments:
+        dist_values (dict): Dictionary with node-level properties as keys and their corresponding values as values. 
+                            This dict can be computed throght netectives characterize module.
+        verbose (str): verbosity level of the logger. Defaults to None.
+        title (str): Image title. Defaults to None.
+
+    Returns:
+        matplotlib.figure.Figure, matplotlib.axes.Axes: Node-level properties distributions and figure axes."""
+    
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
+    
     dataviz_logger.info('Plotting node-level properties...')
+
     # Determine the grid shape based on the number of items
     num_items = len(dist_values)
     if num_items == 0:
@@ -106,29 +123,25 @@ def plot_distributions(dist_values: dict, verbose: str = None, title: str = None
 
     return fig, axs
 
-def plot_scalars(data_dict: dict, verbose: str= None, title: str = None):
-    """_summary_
-
-    _extended summary_[#_unique ID_]_
-
-    .. math:: _LaTeX formula_
+def plot_scalars(data_dict: dict, 
+                 verbose: str= None, 
+                 title: str = None):
+    """Plot scalar properties barplot of characterized networks.
 
     Arguments:
-        data_dict (dict): _description_
-        verbose (str): _description_. Defaults to None.
-        title (str): _description_. Defaults to None.
+        data_dict (dict): A dictionary containing the scalar property names as keys and their corresponding values as values.
+                          This dict can be computed throght netectives characterize module.
+        verbose (str): verbosity level of the logger. Defaults to None.
+        title (str): Image title. Defaults to None.
 
     Returns:
-        _type_: _description_
-
-    References:
-        .. [#_unique ID_] _pubmed abbr journal title_ _vol_:_page or e-article id_ (_year_) https://doi.org/_doi_
-        .. [#_unique ID_] _first-author first-name last-name_ _book title_ (_year_) ISBN:_ISBN_ _http link_
-        .. [#_unique ID_] _article title_ _conference_ (_year_) _http link_"""
+        matplotlib.figure.Figure, matplotlib.axes.Axes: Scalar properties barplot and figure axes."""
+    
     num_ticks = 4
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
+
     # Extract keys (strings) and values (floats) from the dictionary
     labels = list(data_dict.keys())
     values = list(data_dict.values())
@@ -136,10 +149,12 @@ def plot_scalars(data_dict: dict, verbose: str= None, title: str = None):
     # Count the number of values below the threshold
     threshold = 0.05 * max(values)
     num_below_threshold = sum(value < threshold for value in values)
+
     # use log scale if more than 30% of the values are below the threshold
     use_log_scale = num_below_threshold > (len(values) / 3) and max(values) > 1
     
     dataviz_logger.info('Plotting global properties...')
+
     with sns.axes_style("darkgrid"):
         # Create the figure and axes
         fig, axs = plt.subplots(figsize=(2, 0.3 * len(labels)))
@@ -181,7 +196,11 @@ def plot_scalars(data_dict: dict, verbose: str= None, title: str = None):
     
     return fig, axs
 
-def create_scalar_dist_plot(scalars_df: pd.DataFrame, scale: str = 'linear', add_box_plot: bool = False, title: str = None, verbose: str = None) -> matplotlib.figure.Figure:
+def create_scalar_dist_plot(scalars_df: pd.DataFrame, 
+                            scale: str = 'linear', 
+                            add_box_plot: bool = False, 
+                            title: str = None, 
+                            verbose: str = None) -> matplotlib.figure.Figure:
     """Creates a plot of scalar properties, adapting its format based on the structure of the input DataFrame.
 
     This function generates a scatter or strip plot depending on the DataFrame type (either 'Groups' or 'Other').
@@ -360,7 +379,17 @@ def create_scalar_dist_plot(scalars_df: pd.DataFrame, scale: str = 'linear', add
     return fig
 
 
-def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: str= 'euclidean', method:str = "ward", features: pd.DataFrame= None, data_type: dict= None, verbose: str= None, compare_to_models: bool= None, **clustermap_kwargs) -> matplotlib.figure.Figure:
+def create_comp_heatmap(
+        distances_df: pd.DataFrame, 
+        title: str = None, 
+        metric: str= 'euclidean', 
+        method:str = "ward", 
+        features: pd.DataFrame= None, 
+        data_type: dict= None, 
+        verbose: str= None, 
+        compare_to_models: bool= None, 
+        tree_kws: dict= None, 
+        **clustermap_kwargs) -> matplotlib.figure.Figure:
     """Create a comparison heatmap of the input dataframe.
 
     Arguments:
@@ -372,6 +401,9 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
         data_type (dict): data type of each feature. Defaults to None.
         verbose (str): verbosity level of the logger. Defaults to None.
         compare_to_models (bool): whether the heatmap is comparing input networks to model analogs. Defaults to None.
+        tree_kws (dict): Parameters for the matplotlib.collections.LineCollection that is used to plot the 
+                         lines of the dendrogram tree. Example: tree_kws={'kwargs': value}. Defaults to None.
+        **clustermap_kwargs: All other keyword arguments modify the heatmap's appearance.
 
     Raises:
         TypeError: if either features or data_type is provided and not the other.
@@ -380,10 +412,12 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
 
     Returns:
         matplotlib.figure.Figure: figure containing the heatmap."""
+
     if verbose != None:
         current_level = dataviz_logger.getEffectiveLevel()
         set_log_level(dataviz_logger, verbose)
     
+
     # Linkage
     dataviz_logger.debug('Calculating linkage matrix for row_linkage')
     row_linkage = linkage(distances_df, metric= metric, method= method)
@@ -391,41 +425,51 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
     color_map = LinearSegmentedColormap.from_list('BlueWhiteRed', ['blue', 'white', 'red']) if compare_to_models else 'bone_r'
     
     dataviz_logger.info('Creating comparison heatmap...')
-    
-    def add_features(features: pd.DataFrame, data_type: dict):   
+
+    # Set ticks
+    xticks_default = False if title else True
+    xticks_final = clustermap_kwargs.get("xticklabels", xticks_default)
+    yticks_default = True
+    yticks_final = clustermap_kwargs.get("yticklabels", yticks_default)
+    clustermap_kwargs["xticklabels"] = xticks_final
+    clustermap_kwargs["yticklabels"] = yticks_final
+
+    def add_features(features: pd.DataFrame, data_type: dict):
+
         dataviz_logger.info('Adding features to comparison heatmap')
+
         color_mappings = {}
         norms = {}
 
-        dataviz_logger.debug('Getting cmaps for features')
+        # Verify the number of features added and convert uppercase to lowercase to avoid mistakes
+        data_type = {col: data_type[col].lower() for col in features.columns}
+        total_features = len(features.columns)
+
+        if total_features > 3:
+            dataviz_logger.warning(
+                "Using more than 3 features may distort the heatmap’s shape,"
+                "and more than 6 may affect figure size and readability. " 
+                "Consider reducing the number of features."
+
+            )
+
         for col in features.columns:
             if data_type[col] == 'categorical':
+                # Continue handling categorical columns as before
                 unique_values = features[col].unique()
-                palette = CATEGORICAL[:len(unique_values)]
-                mapping = dict(zip(unique_values, palette))
-                color_mappings[col] = features[col].map(lambda val: to_rgb(mapping[val]))
+                mapping = dict(zip(unique_values, CATEGORICAL[:len(unique_values)]))
+                color_mappings[col] = features[col].map(mapping)
             else:
+                # Normalize and map each numerical column individually
                 norm = Normalize(vmin=features[col].min(), vmax=features[col].max())
-                norms[col] = norm
+                norms[col] = norm  # Store the normalization
                 cmap = sns.color_palette(NUMERICAL, as_cmap=True)
                 mappable = ScalarMappable(norm=norm, cmap=cmap)
-                color_mappings[col] = features[col].apply(lambda x: mappable.to_rgba(x)[:3])
-
+                color_mappings[col] = features[col].apply(lambda x: mappable.to_rgba(x))
 
         # Convert color mappings to DataFrame for row_colors
-        row_colors = pd.DataFrame({
-            col: [tuple(val) for val in color_mappings[col]]
-            for col in color_mappings
-        }, index=features.index)
-
-
-        xticks_default = False if title else True
-        xticks_final = clustermap_kwargs.get("xticklabels", xticks_default)
-        yticks_default = True
-        yticks_final = clustermap_kwargs.get("yticklabels", yticks_default)
-        clustermap_kwargs["xticklabels"] = xticks_final
-        clustermap_kwargs["yticklabels"] = yticks_final
-
+        row_colors = pd.DataFrame(color_mappings)
+        
         # Generate clustermap
         g = sns.clustermap(
             distances_df,
@@ -434,95 +478,104 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
             row_colors= row_colors,
             col_cluster= False if compare_to_models else True,
             cmap= color_map,
+            figsize= (8, 8),
             annot= True if distances_df.shape[0] < 10 else False,
             fmt= '.2f',
+            tree_kws= tree_kws,
             **clustermap_kwargs
             )
-        
-        # Ensure heatmap remains square, extend width for legend
-        square_size = 10  # base square
-        categorical_lengths = [
-            len(features[col].unique())
-            for col in features.columns
-            if data_type[col] == 'categorical'
-        ]
-        max_num_legend_items = max(categorical_lengths) if categorical_lengths else 0
 
-        # Estimate extra space needed for legends
-        extra_legend_space = max(2.5, 0.25 * max_num_legend_items)
-
-        # 🔄 Resize before layout elements are added
-        g.figure.set_size_inches(square_size + extra_legend_space + 1.5, square_size)
+        # Ensure heatmap remains square
+        #g.figure.set_size_inches(8 + total_features * 0.2, 8) # Funciona hasta 6 Features
         
-        # Add colorbars for numerical columns
+        # Initializes color bar counter and y new ubication variable
         colorbar_counter = 0
+        current_y_position = 0
+
+        # Get the positions of figure elements
+        heatmap_bbox = g.ax_heatmap.get_position()
+        dendrogram_bbox = g.ax_row_dendrogram.get_position()
+        row_colors_bbox = g.ax_row_colors.get_position()
+
+        # Set spacing parameters
+        labels_bboxs = [len(label.get_text()) for label in g.ax_heatmap.get_yticklabels()]
+        max_len_name = max(labels_bboxs) * 16 / 1000 # Max width of nets names
+        colorbar_width = 0.50  # Width of each horizontal colorbar
+        colorbar_height = 0.02  # Height of each colorbar
+        spacing = 0.07 # Space between colorbars
+
+        if max(labels_bboxs) > 20:
+            dataviz_logger.warning(f'Maximum length of network names is {max(labels_bboxs)} characters. Consider reducing the length of network names to avoid affecting figure size and readability.')
+        
+        # Set x and y starting position
+        start_x_position = dendrogram_bbox.width + row_colors_bbox.width + heatmap_bbox.width + max_len_name
+        if total_features >= 6:
+            start_y_position = heatmap_bbox.height + max_len_name
+        elif total_features > 3:
+            start_y_position = heatmap_bbox.height + max_len_name/2
+        elif total_features > 1:
+            start_y_position = heatmap_bbox.height + max_len_name/4
+        else:
+            start_y_position = heatmap_bbox.height
+
         if 'numerical' in list(data_type.values()):
-            dataviz_logger.debug('Adding colorbar(s) for numerical features')
-            heatmap_bbox = g.ax_heatmap.get_position()
-            dendrogram_bbox = g.ax_row_dendrogram.get_position()
-            row_colors_bbox = g.ax_row_colors.get_position()
-            colorbar_width = 0.02 # each colorbar width 
-            colorbar_spacing = 0.12  # Space between colorbars
-            start_x_position = dendrogram_bbox.width + row_colors_bbox.width + heatmap_bbox.width + 0.025
+
             for col, norm in norms.items():
                 cmap = sns.color_palette(NUMERICAL, as_cmap=True)
-                mappable = ScalarMappable(norm=norm, cmap= cmap)
-                current_x_position = start_x_position + colorbar_counter * (colorbar_width + colorbar_spacing)
-                cbar_ax = g.figure.add_axes([current_x_position, heatmap_bbox.y0, colorbar_width, heatmap_bbox.height])
-                cbar = g.figure.colorbar(mappable, cax= cbar_ax, label= col)
+                mappable = ScalarMappable(norm=norm, cmap=cmap)
+                # For each colorbar, decrement y to stack
+                current_y_position = start_y_position - (colorbar_height + spacing) * colorbar_counter
+                cbar_ax = g.figure.add_axes([start_x_position, current_y_position, colorbar_width, colorbar_height])
+                cbar = g.figure.colorbar(mappable, cax=cbar_ax, label=col, orientation='horizontal')
                 cbar.outline.set_visible(False)
+                cbar.set_label(col)
+                cbar.ax.set_xlabel(col)
+                cbar.ax.xaxis.set_ticks_position('bottom')
                 colorbar_counter += 1
-                cbar_ax.set_ylabel(col, rotation=90, labelpad=2)
 
-        # Add legends for categorical columns
-        if 'categorical' in list(data_type.values()):
-            dataviz_logger.debug('Adding categorical legends with individual axes')
-            heatmap_bbox = g.ax_heatmap.get_position()
-            colorbar_right = heatmap_bbox.x1 + (colorbar_counter * 0.14)  # estimate space used by colorbars
+        # Add legends for categorical columns if numerical features were added
+        if 'categorical' in list(data_type.values()) and current_y_position != 0:
 
-            legend_width = 0.12
-            extra_space = 0.02
-            current_x = colorbar_right + extra_space
-            current_y = 0.5  # vertical center
-            legend_height = 0.3
-
+            # Initializes color bar counter and x,y new ubication variables
             legend_counter = 0
-            for col in features.columns:
+            current_x_position = start_x_position
+            current_y_position -= spacing + colorbar_height * 2
+
+            categorical_cols = [col for col in color_mappings if data_type[col] == 'categorical']
+
+            for i, col in enumerate(categorical_cols):
+                unique_values = features[col].unique()
+                max_legend = max([len(value) for value in unique_values]) * 16 / 1000
+                handles = [Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val) for i, val in enumerate(unique_values)]
+                g.figure.legend(handles=handles,title=col,ncol=1, bbox_to_anchor=(current_x_position, current_y_position, 0.2, 0.05),
+                                mode='expand', frameon=False, alignment='left')
+                current_x_position += max(max_legend,spacing * 2)
+                legend_counter = len(unique_values) + 1 if (len(unique_values) + 1 > legend_counter) else legend_counter
+                if (i % 2 != 0):
+                    current_y_position -= (legend_counter * 16 / 1000) * 2
+                    current_x_position = start_x_position
+                    legend_counter = 0
+        
+        else:
+            
+            current_y_position = start_y_position
+    
+            legend_counter = 0
+            
+            for col, mapping in color_mappings.items():
                 if data_type[col] != 'categorical':
                     continue
-
                 unique_values = features[col].unique()
-                handles = [
-                    Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val)
-                    for i, val in enumerate(unique_values)
-                ]
-
-                legend_ax = g.figure.add_axes([
-                    current_x + legend_counter * (legend_width + extra_space),
-                    current_y,
-                    legend_width,
-                    legend_height
-                ])
-                legend_ax.axis("off")
-                legend_ax.legend(
-                    handles=handles,
-                    title=col,
-                    loc='center left',
-                    frameon=False,
-                )
-                legend_counter += 1
-
-            # Resize figure to fit new legend space
-            g.figure.set_size_inches(square_size + (legend_counter * (legend_width + extra_space)) + colorbar_counter * 0.14, square_size)
-
-
-
-
-   
+                handles = [Patch(color=CATEGORICAL[i % len(CATEGORICAL)], label=val) for i, val in enumerate(unique_values)]
+                current_y_position -= (legend_counter * 16 / 1000) * 2
+                legend_counter = len(unique_values) + 1
+                g.figure.legend(handles=handles, title=col, ncol=1, loc= 'upper center',
+                                bbox_to_anchor= (start_x_position, current_y_position, 0.2, 0.05), 
+                                mode= 'expand', frameon= False, alignment= 'left')
+        
         return g
 
     if (features is not None and data_type is None) or (features is None and data_type is not None):
-        dataviz_logger.critical('Both features DataFrame and data_type dictionary must be provided. Please provide a features DataFrame and the data type of each feature as a dictionary.')
         raise TypeError('Both features DataFrame and data_type dictionary must be provided. Please provide a features DataFrame and the data type of each feature as a dictionary.')
 
     elif features is not None and data_type is not None:
@@ -534,30 +587,23 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
 
     else:
         try:
-            xticks_default = False if title else True
-            xticks_final = clustermap_kwargs.get("xticklabels", xticks_default)
-            yticks_default = True
-            yticks_final = clustermap_kwargs.get("yticklabels", yticks_default)
-            clustermap_kwargs["xticklabels"] = xticks_final
-            clustermap_kwargs["yticklabels"] = yticks_final
-
             g = sns.clustermap(
                 distances_df,
                 row_linkage= row_linkage,
                 col_linkage= row_linkage,
                 cmap= color_map,
-                # vmax= 1,
                 annot= True if distances_df.shape[0] < 10 else False,
                 fmt= '.2f',
                 cbar= True,
                 col_cluster= False if compare_to_models else True,
+                tree_kws= tree_kws,
                 **clustermap_kwargs
             )
         except ValueError:
-            dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties fro analysis...')
+            dataviz_logger.critical('For one or more networks the properties array is constant. Correlation coefficient is not defined. Maybe adding more properties for analysis...')
             raise ValueError('For one or more networks the properties array is constant. Correlation coefficient is not defined.')
-
-    # Set the title
+    
+     # Set the title
     if title:
         dataviz_logger.warning('Adding title to plot')
         g.ax_heatmap.set_title(title, y=0, pad=-25, verticalalignment="top")
@@ -566,7 +612,7 @@ def create_comp_heatmap(distances_df: pd.DataFrame, title: str = None, metric: s
         set_log_level(dataviz_logger, current_level)
     
     # Return the figure
-    return g
+    return g.figure
 
 
 def plot_representative_features(df_long: pd.DataFrame, total_props:int, total_groups:int, norm: str, title: str = None):
