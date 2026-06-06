@@ -29,11 +29,11 @@ Use structural and standard performance metrics to assess network inference
 
         conda activate netective
 
-* From the home directory of the project, as administrator, run the following command to install the package:
+* Run the following command to install the package:
 
     .. code-block:: bash
 
-        pip install .
+        pip install netective
 
 * Run the following command to check that the package is correctly installed:
 
