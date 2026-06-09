@@ -190,6 +190,7 @@ def _anonymize_edges(
     inference: Graph | DiGraph | dict,
     greater_score_is_better: bool = True,
     allow_self_loops: bool = False,
+    inference_id: str = None
     ) -> Tuple[set, list, int]:
     """Anonymization of Gold Standard and inference's edges
     
@@ -205,6 +206,8 @@ def _anonymize_edges(
             If True, the higher the score, the better the inference.
             If False, the lower the score, the better the inference. Defaults to True.
         allow_self_loops (bool): whether self-loops are allowed or not. Defaults to False.
+        inference_id (str): ID of the inference. If inferences are contained within a dictionary this parameter is 
+            not necessary. Defaults to None.
 
     Returns:
         Tuple[set, list, int]: tuple containing the set of edges in the gold standard, inference edges and the size of the universe."""
@@ -232,7 +235,7 @@ def _anonymize_edges(
             ) for inf_id, inf in zip(inferences_ids, inferences)]
     else: # inference is a single network
         inference_edges = _anonymize_inference_edges(
-            inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed
+            inference_id, inference, gold_standard_geneset, greater_score_is_better, edge_to_id, directed
             )
 
     # erase universe, mapping and gold standard geneset
@@ -680,7 +683,8 @@ class LinkEval:
         self.__inference = inference
         self.__greater_is_better = greater_score_is_better
         self.__allow_self_loops = allow_self_loops
-        self.__inference_id = inference_id
+        self.__inference_id = inference_id if inference_id is not None else 'Inference' # used for logging and plotting purposes
+                                                                                        # if not provided, it will be set to 'Inference'
 
         if all([x is not None for x in [gold_standard_edges, inference_edges, size_universe]]):
             self.__gold_standard_edges = gold_standard_edges
@@ -705,6 +709,7 @@ class LinkEval:
                 self.inference,
                 self.greater_is_better,
                 self.allow_self_loops,
+                self.inference_id
             )
 
             self.__repr = f"LinkEval(gold_standard={self.__gold_standard}, inference={self.__inference}, greater_is_better={self.__greater_is_better}, directed={self.__directed})"
