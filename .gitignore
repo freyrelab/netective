@@ -19,3 +19,4 @@ requirements-dev.txt
 *.tsv
 *.csv
 *.R*
+*.egg*
