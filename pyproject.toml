@@ -4,7 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "netective"
-version = "0.9.5rc1"
+version = "0.9.6"
+
+authors = [
+  { name = "Juan Miguel Escorcia-Rodríguez, José Antonio Sánchez-Villicaña, Jocelyn Trujillo-Guitérrez, Julio Augusto Freyre-González", email = "jfreyreg@gmail.com" }
+]
 
 description = "Use structural and standard performance metrics to assess network inference"
 readme = "README.rst"
