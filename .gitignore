@@ -20,3 +20,4 @@ requirements-dev.txt
 *.csv
 *.R*
 *.egg*
+*gitleaks_report.json
