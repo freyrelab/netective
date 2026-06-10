@@ -6,6 +6,8 @@
 /Applications/
 /netective_old_code/
 /results_dummy/
+/.conda/
+/.ipynb_checkpoints/
 *.pyc
 *.ini
 *.pkl
