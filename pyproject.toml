@@ -1,45 +1,45 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "netective"
-version = "0.9.1"
-authors = [
-  { name="Juan Miguel Escorcia-Rodríguez", email="juanesscorcia@gmail.com" },
-  { name="José Antonio Sánchez-Villicaña", email="josesv@lcg.unam.mx" },
-  { name="Jocelyn Trujillo-Guitérrez", email= "jocelynt@lcg.unam.mx" },
-  { name="Julio Augusto Freyre-González", email="jfreyreg@gmail.com" }
-]
+version = "0.9.5rc1"
+
 description = "Use structural and standard performance metrics to assess network inference"
-readme = "README.md"
+readme = "README.rst"
 requires-python = ">=3.8"
+license = "GPL-3.0-only"
+
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: GPL-3.0-only",
     "Operating System :: OS Independent",
 ]
 
 dependencies = [
-  "igraph==0.10.4",
+  "igraph>=0.10.4",
   "networkx>=2.8.4",
   "numpy>=1.24.3",
   "pandas>=1.5.3",
   "scipy>=1.10.1",
   "seaborn>=0.12.2",
-  "tqdm==4.65.0",
+  "tqdm>=4.65.0",
   "mpmath>=1.2.1",
   "psutil>=5.9.0",
-  "bitarray>=2.9.2"
+  "bitarray>=2.9.2",
+  "shap>=0.44.1",
+  "xgboost>=2.1.4"
 ]
 
 [project.optional-dependencies]
 test = ["pytest"]
-lint = [ "black"]
-cov = ["pytest < 5.0.0", "pytest-cov[all]"]
+lint = ["black"]
+cov = ["pytest<5.0.0", "pytest-cov[all]"]
 
 [project.urls]
-"Homepage" = "https://github.com/freyrelab/netective.git"
+Homepage = "https://github.com/freyrelab/netective"
+Source = "https://github.com/freyrelab/netective"
+Issues = "https://github.com/freyrelab/netective/issues"
 
 [project.scripts]
 netective = "netective.cli.netective:main"
