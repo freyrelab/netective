@@ -611,6 +611,12 @@ def create_comp_heatmap(
     if verbose != None:
         set_log_level(dataviz_logger, current_level)
     
+    
+    # TODO: This adjustmet is just a patch, must check why the labels of compare to models are rotated.
+    if compare_to_models: 
+        for label in g.ax_heatmap.get_yticklabels():
+            label.set_rotation(0)
+
     # Return the figure
     return g.figure
 
