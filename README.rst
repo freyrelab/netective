@@ -1,4 +1,4 @@
-.. image:: docs/assets/on_black.png
+.. image:: https://github.com/freyrelab/netective/blob/main/docs/assets/on_black.png
     :height: 100px
     :width: 97.379 px
     :alt: netective logo
