@@ -49,7 +49,7 @@ Module tutorial: |module-colab|
 Command-line tutorial: |cli-tutorial|
 
 .. |module-colab| image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/drive/1i7iY3GR--Tr-4YHcScSBov8Iu-uSwlvu?usp=sharing
+   :target: https://colab.research.google.com/drive/1y76HxoqblkPXwFgI5bagwyQCIZol7f90?usp=sharing
    :alt: Open module tutorial in Google Colab
 
 .. |cli-tutorial| image:: https://img.shields.io/badge/CLI-tutorial-2C2C2C?logo=gnubash&logoColor=white
