@@ -19,5 +19,5 @@ requirements-dev.txt
 *.tsv
 *.csv
 *.R*
-src/netective*
+src/netective.egg-info/
 *gitleaks_report.json

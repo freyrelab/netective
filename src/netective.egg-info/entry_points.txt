@@ -1,2 +1,0 @@
-[console_scripts]
-netective = netective.cli.netective:main
